@@ -15,13 +15,11 @@ const runtime = require('./lib/runtime');
 const updater = require('./lib/updater');
 const { Server, freePort } = require('./lib/server');
 
-const BG = '#0e0e0d';
+const BG = '#0f0f0e';
 const server = new Server();
 let win = null;
 let booting = false;
 let quitting = false;
-let skipModels = false;
-let skipHook = null;
 let lastSetup = [];
 
 const isLocal = (url) => /^http:\/\/(127\.0\.0\.1|localhost):\d+(\/|$)/.test(url || '') || (url || '').startsWith('file://');
@@ -49,7 +47,7 @@ function createWindow() {
   win = new BrowserWindow({
     ...b, minWidth: 1024, minHeight: 640, show: false, backgroundColor: BG, title: 'DubKanka',
     icon: path.join(__dirname, 'build', 'icon.ico'),
-    titleBarStyle: 'hidden', titleBarOverlay: { color: BG, symbolColor: '#b4b1a7', height: 44 },
+    titleBarStyle: 'hidden', titleBarOverlay: { color: BG, symbolColor: '#b4b1a7', height: 48 },
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, sandbox: true, spellcheck: false, backgroundThrottling: false },
   });
   if (b.maximized) win.maximize();
@@ -98,10 +96,7 @@ async function boot() {
   booting = true;
   try {
     send({ type: 'phase', phase: 'starting' });
-    const python = process.env.DUBKANKA_PYTHON || (await runtime.ensure(send, {
-      skipped: () => skipModels,
-      onSkip: (fn) => ((skipHook = fn), () => (skipHook = null)),
-    }));
+    const python = process.env.DUBKANKA_PYTHON || (await runtime.ensure(send));
     send({ type: 'phase', phase: 'server' });
     const port = await freePort(8765);
     server.start(python, port);
@@ -135,10 +130,6 @@ ipcMain.handle('dk:setup:retry', () => {
   server.stop();
   boot();
 });
-ipcMain.handle('dk:setup:skip-models', () => {
-  skipModels = true;
-  if (skipHook) skipHook();
-});
 ipcMain.handle('dk:setup:logs', () => shell.openPath(P.LOGS));
 ipcMain.handle('dk:setup:quit', () => app.quit());
 ipcMain.handle('dk:update:get', () => updater.getState());
@@ -159,7 +150,7 @@ ipcMain.handle('dk:relaunch', () => {
   app.relaunch();
   app.exit(0);
 });
-ipcMain.handle('dk:titlebar', (_e, o) => win && win.setTitleBarOverlay({ color: o.color || BG, symbolColor: o.symbolColor || '#b4b1a7', height: 44 }));
+ipcMain.handle('dk:titlebar', (_e, o) => win && win.setTitleBarOverlay({ color: o.color || BG, symbolColor: o.symbolColor || '#b4b1a7', height: 48 }));
 ipcMain.handle('dk:runtime:info', () => runtime.info());
 ipcMain.handle('dk:runtime:repair', () => {
   runtime.resetForRepair();

@@ -2,7 +2,8 @@ import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-
 import { api, fileUrl, P } from '../api.js';
 import { Btn, Field, Icon, JobPanel, Lamp, Modal, PlayButton, Popover, Select, TimeReadout, Toggle, usePlaying, VideoPane } from '../components.js';
 import { engine, player, stemUrls } from '../engine.js';
-import { go, jobOf, patchLocal, toast, toastError, useStore } from '../state.js';
+import { FeatureOffer } from '../feature-ui.js';
+import { featureReady, go, jobOf, patchLocal, toast, toastError, useStore } from '../state.js';
 import { fitZoom, Timeline } from '../timeline.js';
 import { cls, copyText, debounce, fmtTime, syllables } from '../util.js';
 
@@ -285,7 +286,10 @@ export function ScriptView({ p }) {
           <${Btn} small kind="ghost" icon="copy" onClick=${() => setModal('share')} title="Senaryoyu WhatsApp'tan göndermek için kopyala">Paylaş</${Btn}>
           <${Btn} small kind="primary" icon="mic" onClick=${() => go(`p/${p.id}/record`)}>Kayda geç</${Btn}></div>
         ${empty
-          ? html`<div class="empty"><h3>Bu sahnede konuşma bulunamadı</h3><p class="muted">Videoyu oynatıp "Satır ekle" ile replikleri kendin ekleyebilirsin.</p></div>`
+          ? featureReady('speech')
+            ? html`<div class="empty"><h3>Bu sahnede konuşma bulunamadı</h3><p class="muted">Videoyu oynatıp “Satır ekle” ile replikleri kendin ekleyebilirsin.</p></div>`
+            : html`<div class="empty"><h3>Satırları sen yaz</h3><p class="muted">Videoyu oynat, bir replik başlayınca “Satır ekle”ye bas ve metni yaz. Kenarlarından sürükleyip süresini ayarlarsın.</p>
+                <${FeatureOffer} id="speech" text="Ekleyip sahneyi yeniden hazırlarsan satırlar kendiliğinden yazılır ve çevrilir." class="empty-offer" /></div>`
           : html`<div class="pane-scroll lines">${p.lines.map(
               (l, i) => html`<${LineRow} key=${l.id} p=${p} line=${l} idx=${i} selected=${l.id === sel} chars=${chars} onSelect=${select} onPlay=${playLine} />`
             )}</div>`}

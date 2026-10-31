@@ -1,0 +1,41 @@
+/* ---------- first run: one question and a checklist of what to download ---------- */
+.onboard { min-height: var(--page-h); display: grid; place-items: center; padding: 12px 24px 64px; }
+.onboard-inner { width: min(640px, 100%); }
+.onboard-mark { display: block; width: 58px; height: 58px; margin: 0 0 26px; filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55));
+  animation: modal-in calc(600ms * var(--m)) var(--ease-out) both; }
+.onboard h1 { font-size: 32px; letter-spacing: -0.025em; line-height: 1.15; margin-bottom: 12px; }
+.onboard-lead { color: var(--text-2); font-size: 15px; max-width: 54ch; margin-bottom: 28px; }
+
+.picklist { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 6px; display: flex; flex-direction: column; gap: 2px;
+  box-shadow: var(--shadow-card); }
+.pick { display: grid; grid-template-columns: 40px minmax(0, 1fr) auto 22px; align-items: center; gap: 14px; padding: 14px 14px 14px 12px; border: 0; border-radius: 16px;
+  background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--t), transform calc(160ms * var(--m)) var(--ease-out);
+  animation: rise calc(420ms * var(--m)) var(--ease-out) both; animation-delay: calc(var(--i, 0) * 60ms * var(--mv)); }
+.pick:hover:not(:disabled):not(.locked) { background: rgba(255, 250, 235, 0.035); }
+.pick:active:not(:disabled):not(.locked) { transform: scale(0.99); }
+.pick.on:not(.locked) { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.pick.locked { cursor: default; }
+.pick:disabled { color: var(--text); }
+.pick-ico { width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center; background: rgba(255, 250, 235, 0.06); color: var(--text-2);
+  transition: background-color var(--t), color var(--t); }
+.pick.on .pick-ico { background: var(--accent); color: var(--accent-ink); }
+.pick-text { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pick-text b { font-size: 14.5px; font-weight: 600; }
+.pick-text small { font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
+.pick-size { font: 500 12px var(--mono); color: var(--text-3); white-space: nowrap; }
+.pick.on .pick-size { color: var(--text-2); }
+.pick-check { width: 22px; height: 22px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line-3); transition: background-color var(--t), box-shadow var(--t); }
+.pick.on .pick-check { box-shadow: none; background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2317150d' stroke-width='3.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 12.5 4 4 8-9'/%3E%3C/svg%3E") center / 13px no-repeat; }
+.pick.locked .pick-check { opacity: 0.55; }
+
+.onboard-foot { display: flex; align-items: center; gap: 16px; margin-top: 18px; padding: 0 4px; }
+.onboard-sum { flex: 1; min-width: 0; }
+.onboard-sum b { font-weight: 600; }
+.onboard-go { height: 42px; min-width: 150px; padding: 0 30px; border-radius: var(--r-pill); font-size: 14px; }
+
+@media (max-width: 640px) {
+  .onboard h1 { font-size: 26px; }
+  .pick { grid-template-columns: 36px minmax(0, 1fr) 22px; }
+  .pick-size { grid-column: 2; grid-row: 2; }
+  .onboard-foot { flex-direction: column; align-items: stretch; }
+}

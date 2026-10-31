@@ -1,28 +1,24 @@
-// The runtime DubKanka needs on this PC: Python, PyTorch for its GPU, the AI packages, ffmpeg, the room tool and the
-// models. Installed on first run, topped up after updates (only what changed), every step resumable.
+// The runtime the studio needs on this PC: Python, the studio's own packages and ffmpeg (about 200 MB). Installed on
+// first run, topped up after updates (only what changed), every step resumable. The AI features (speech to text, voice
+// separation with PyTorch, the room tool, recording cleanup) are not part of it: the studio adds them when someone
+// picks them (dubkanka/features.py), and this file only brings installed ones to new pins after an update.
 const crypto = require('node:crypto');
 const fs = require('node:fs');
 const path = require('node:path');
-const { execFile, spawn } = require('node:child_process');
+const { spawn } = require('node:child_process');
 const { app, net } = require('electron');
 const P = require('./paths');
 
 const PYTHON = '3.14';
-const TORCH = '2.11.0';
 const FFMPEG_URLS = [
   'https://github.com/GyanD/codexffmpeg/releases/download/9.0.2/ffmpeg-9.0.2-essentials_build.zip',
   'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip',
 ];
-const CLOUDFLARED_URL = 'https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe';
-const VARIANTS = { cu128: 'CUDA 12.8', cu126: 'CUDA 12.6', cpu: 'işlemci' };
 
 const STEPS = [
-  { id: 'python', label: 'Python 3.14', size: '35 MB', weight: 3 },
-  { id: 'torch', label: 'PyTorch', size: '2.5 GB', weight: 40 },
-  { id: 'packages', label: 'Yapay zeka paketleri', size: '700 MB', weight: 17 },
-  { id: 'ffmpeg', label: 'ffmpeg', size: '115 MB', weight: 6 },
-  { id: 'cloudflared', label: 'Oda bağlantı aracı (cloudflared)', size: '55 MB', weight: 3 },
-  { id: 'models', label: 'Yapay zeka modelleri', size: '2 GB', weight: 31 },
+  { id: 'python', label: 'Python 3.14', size: '30 MB', weight: 3 },
+  { id: 'packages', label: 'Stüdyo', size: '80 MB', weight: 6 },
+  { id: 'ffmpeg', label: 'Video araçları (ffmpeg)', size: '100 MB', weight: 6 },
 ];
 
 const exists = (f) => fs.existsSync(f);
@@ -38,14 +34,16 @@ function writeState(s) {
   fs.writeFileSync(P.STATE + '.tmp', JSON.stringify(s, null, 2));
   fs.renameSync(P.STATE + '.tmp', P.STATE);
 }
-const lockHash = () => crypto.createHash('sha256').update(fs.readFileSync(path.join(P.APP_DIR, 'requirements.lock'))).digest('hex').slice(0, 16);
+const CORE = () => path.join(P.APP_DIR, 'requirements-core.txt');
+const LOCK = () => path.join(P.APP_DIR, 'requirements.lock');
+const lockHash = () => crypto.createHash('sha256').update(fs.readFileSync(LOCK())).update(fs.readFileSync(CORE())).digest('hex').slice(0, 16);
 
 /** Environment of every Python process: data folders, tools on PATH, UTF-8 output. */
 function pythonEnv() {
   return {
     ...process.env,
     DUBKANKA_HOME: P.HOME, DUBKANKA_BIN: P.BIN, DUBKANKA_MODELS: P.MODELS, DUBKANKA_EXPORTS: P.exportsDir(),
-    DUBKANKA_DESKTOP: '1', DUBKANKA_VERSION: app.getVersion(),
+    DUBKANKA_DESKTOP: '1', DUBKANKA_VERSION: app.getVersion(), DUBKANKA_UV: P.UV, DUBKANKA_UV_CACHE: P.UV_CACHE,
     PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8', PYTHONUTF8: '1', HF_HUB_DISABLE_SYMLINKS_WARNING: '1',
     PATH: `${P.BIN};${process.env.PATH || ''}`,
   };
@@ -60,11 +58,8 @@ const uvEnv = () => ({
 function pending(s = readState()) {
   const out = [];
   if (!exists(P.VENV_PY) || s.python !== PYTHON) out.push('python');
-  if (!s.torch || s.torch.version !== TORCH || out.includes('python')) out.push('torch');
   if (s.lockHash !== lockHash() || out.includes('python')) out.push('packages');
   if (!exists(path.join(P.BIN, 'ffmpeg.exe')) || !exists(path.join(P.BIN, 'ffprobe.exe'))) out.push('ffmpeg');
-  if (!exists(path.join(P.BIN, 'cloudflared.exe'))) out.push('cloudflared');
-  if (!s.models && !s.modelsSkipped) out.push('models');
   return out;
 }
 
@@ -93,21 +88,6 @@ function run(cmd, args, { env, cwd, onLine, onChild } = {}) {
         e.killed = signal != null;
         reject(e);
       }
-    });
-  });
-}
-
-function detectGpu() {
-  const forced = process.env.DUBKANKA_TORCH_VARIANT;
-  if (forced && VARIANTS[forced]) return Promise.resolve({ variant: forced, name: 'elle seçildi' });
-  return new Promise((resolve) => {
-    execFile('nvidia-smi', ['--query-gpu=name,compute_cap', '--format=csv,noheader'], { windowsHide: true, timeout: 20000 }, (err, out) => {
-      const line = !err && String(out).trim().split(/\r?\n/)[0];
-      if (!line) return resolve({ variant: 'cpu', name: null });
-      const [name, cc] = line.split(',').map((x) => x.trim());
-      const v = parseFloat(cc);
-      // CUDA 12.8 builds start at Turing (7.5); Maxwell/Pascal/Volta still run the CUDA 12.6 build
-      resolve({ variant: v >= 7.5 ? 'cu128' : v >= 5.0 ? 'cu126' : 'cpu', name });
     });
   });
 }
@@ -159,9 +139,9 @@ const mb = (b) => (b / 2 ** 20).toFixed(0);
 
 /**
  * Bring the runtime up to date. emit({type: 'plan' | 'step' | 'progress' | 'log', ...}) drives the setup screen.
- * Returns the venv's python.exe. control.skipModels() can cut the model download short (models then come on first use).
+ * Returns the venv's python.exe.
  */
-async function ensure(emit, control = {}) {
+async function ensure(emit) {
   const state = readState();
   const todo = pending(state);
   if (!todo.length) return P.VENV_PY;
@@ -170,8 +150,8 @@ async function ensure(emit, control = {}) {
   emit({ type: 'plan', firstRun, steps });
   fs.mkdirSync(P.BIN, { recursive: true });
   const free = freeBytes(P.HOME);
-  if (firstRun && free != null && free < 8 * 2 ** 30)
-    emit({ type: 'log', line: `Uyarı: diskte ${mb(free)} MB boş yer var, kurulum yaklaşık 8 GB ister.`, warn: true });
+  if (firstRun && free != null && free < 2 * 2 ** 30)
+    emit({ type: 'log', line: `Uyarı: diskte ${mb(free)} MB boş yer var, stüdyo yaklaşık 1 GB ister.`, warn: true });
 
   const total = steps.filter((s) => s.state === 'pending').reduce((a, s) => a + s.weight, 0) || 1;
   let base = 0;
@@ -180,12 +160,6 @@ async function ensure(emit, control = {}) {
 
   for (const step of steps) {
     if (step.state !== 'pending') continue;
-    if (step.id === 'models' && control.skipped && control.skipped()) {
-      emit({ type: 'step', id: step.id, state: 'skipped' });
-      state.modelsSkipped = true;
-      writeState(state);
-      continue;
-    }
     emit({ type: 'step', id: step.id, state: 'running' });
     try {
       if (step.id === 'python') {
@@ -194,31 +168,28 @@ async function ensure(emit, control = {}) {
         progress(step, 0.7, 'uv venv');
         await run(P.UV, ['venv', P.VENV, '--python', PYTHON, '--clear'], { env: uvEnv(), onLine: log });
         state.python = PYTHON;
-      } else if (step.id === 'torch') {
-        const gpu = await detectGpu();
-        const label = `PyTorch ${TORCH} · ${VARIANTS[gpu.variant]}${gpu.name && gpu.variant !== 'cpu' ? ` (${gpu.name})` : ''}`;
-        emit({ type: 'step', id: step.id, state: 'running', label, size: gpu.variant === 'cpu' ? '250 MB' : '2.5 GB' });
-        const expected = (gpu.variant === 'cpu' ? 0.9 : 5.2) * 2 ** 30; // installed size on disk
-        const start = freeBytes(P.HOME);
-        const timer = setInterval(() => {
-          const now = freeBytes(P.HOME);
-          if (start != null && now != null) progress(step, Math.min(0.97, (start - now) / expected), `${mb(Math.max(0, start - now))} MB yazıldı`);
-        }, 1500);
-        try {
-          await run(P.UV, ['pip', 'install', '--python', P.VENV_PY, `torch==${TORCH}`, '--index-url', `https://download.pytorch.org/whl/${gpu.variant}`],
-            { env: uvEnv(), onLine: log });
-        } finally {
-          clearInterval(timer);
-        }
-        state.torch = { version: TORCH, variant: gpu.variant, gpu: gpu.name };
       } else if (step.id === 'packages') {
-        progress(step, 0.05, 'uv pip install -r requirements.lock');
+        progress(step, 0.05, 'uv pip install -r requirements-core.txt');
         let n = 0;
-        await run(P.UV, ['pip', 'install', '--python', P.VENV_PY, '-r', path.join(P.APP_DIR, 'requirements.lock')], {
+        await run(P.UV, ['pip', 'install', '--python', P.VENV_PY, '-r', CORE(), '-c', LOCK()], {
           env: uvEnv(),
           onLine: (l) => {
             log(l);
-            if (/^(Downloading|Downloaded|Installed|Prepared|\+)/.test(l)) progress(step, Math.min(0.95, 0.05 + ++n / 120), l);
+            if (/^(Downloading|Downloaded|Installed|Prepared|\+)/.test(l)) progress(step, Math.min(0.8, 0.05 + ++n / 60), l);
+          },
+        });
+        // features the studio added (speech, separation...) follow new pins after an update, and come back after a
+        // repair rebuilt Python; on a first run there are none and this takes a second
+        await run(P.VENV_PY, ['-m', 'dubkanka.features', 'refresh', '--json'], {
+          cwd: P.APP_DIR, env: pythonEnv(),
+          onLine: (l) => {
+            if (!l.startsWith('{')) return log(l);
+            try {
+              const m = JSON.parse(l);
+              progress(step, 0.8 + 0.2 * m.progress, m.message);
+            } catch {
+              log(l);
+            }
           },
         });
         state.lockHash = lockHash();
@@ -249,36 +220,6 @@ async function ensure(emit, control = {}) {
         fs.rmSync(tmp, { recursive: true, force: true });
         fs.rmSync(zip, { force: true });
         await run(path.join(P.BIN, 'ffmpeg.exe'), ['-hide_banner', '-version']);
-      } else if (step.id === 'cloudflared') {
-        const part = path.join(P.BIN, 'cloudflared.exe.part');
-        await download(CLOUDFLARED_URL, part, (got, all) => progress(step, all ? got / all : 0.5, `${mb(got)}${all ? ' / ' + mb(all) : ''} MB`));
-        fs.renameSync(part, path.join(P.BIN, 'cloudflared.exe'));
-      } else if (step.id === 'models') {
-        let child = null;
-        const stop = control.onSkip ? control.onSkip(() => child && child.kill()) : null;
-        try {
-          await run(P.VENV_PY, ['-m', 'dubkanka.prefetch', '--json'], {
-            cwd: P.APP_DIR, env: pythonEnv(), onChild: (c) => (child = c),
-            onLine: (l) => {
-              if (!l.startsWith('{')) return log(l);
-              try {
-                const m = JSON.parse(l);
-                progress(step, m.progress, m.message);
-              } catch {
-                log(l);
-              }
-            },
-          });
-          state.models = true;
-        } catch (e) {
-          if (!(control.skipped && control.skipped())) throw e;
-          state.modelsSkipped = true; // they download on first use instead
-          emit({ type: 'step', id: step.id, state: 'skipped' });
-          writeState(state);
-          continue;
-        } finally {
-          stop && stop();
-        }
       }
       writeState(state);
       base += step.weight;
@@ -300,16 +241,14 @@ function friendly(e) {
   return m.split('\n').slice(-3).join(' ').slice(0, 400);
 }
 
-/** Forget what was installed so the next start checks and repairs everything (projects and models stay). */
+/** Forget what was installed so the next start checks and repairs everything (projects, features and models stay). */
 function resetForRepair() {
-  const s = readState();
-  writeState({ models: s.models, modelsSkipped: s.modelsSkipped });
+  writeState({});
 }
 
 function info() {
   const s = readState();
-  return { home: P.HOME, python: s.python || null, torch: s.torch ? `${s.torch.version} · ${VARIANTS[s.torch.variant] || s.torch.variant}` : null,
-    gpu: s.torch && s.torch.gpu, ffmpeg: path.join(P.BIN, 'ffmpeg.exe'), logs: P.LOGS };
+  return { home: P.HOME, python: s.python || null, ffmpeg: path.join(P.BIN, 'ffmpeg.exe'), logs: P.LOGS };
 }
 
 module.exports = { ensure, pending, pythonEnv, resetForRepair, info, STEPS };

@@ -1,11 +1,11 @@
 /* ---------- timeline: sunk lanes, clips in the character's highlighter colour, a white playhead with a yellow cap ---------- */
-.tl { display: flex; background: var(--panel); overflow: hidden; user-select: none; }
+.tl { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; user-select: none; }
 .tl-heads { width: var(--head-w); flex: none; border-right: 1px solid var(--line); background: var(--panel); }
 .tl-corner { display: flex; align-items: center; justify-content: center; gap: 2px; border-bottom: 1px solid var(--line); }
 .tl-corner .iconbtn { width: 26px; height: 20px; }
 .tl-head { position: relative; border-bottom: 1px solid var(--line); padding: 5px 8px 5px 10px; display: flex; flex-direction: column; justify-content: center; gap: 4px;
   overflow: hidden; transition: opacity var(--t); }
-.tl-head::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--c, transparent); opacity: 0.85; }
+.tl-head::before { content: ''; position: absolute; left: 3px; top: 7px; bottom: 7px; width: 3px; border-radius: 99px; background: var(--c, transparent); opacity: 0.85; }
 .tl-head:last-child { border-bottom: 0; }
 .tl-head.muted { opacity: 0.5; }
 .tl-head-title { font-size: 12px; font-weight: 600; font-stretch: var(--cond); letter-spacing: 0.02em; display: flex; align-items: center; gap: 7px; white-space: nowrap;
@@ -23,7 +23,7 @@
 .tl-lane { position: relative; border-bottom: 1px solid var(--line); overflow: hidden; cursor: crosshair; background: var(--sunk); transition: opacity var(--t); }
 .tl-lane:last-of-type { border-bottom: 0; }
 .tl-lane.muted { opacity: 0.4; }
-.tl-clip { position: absolute; top: 4px; bottom: 4px; border-radius: var(--r-sm); background: color-mix(in srgb, var(--c) 30%, #10100e);
+.tl-clip { position: absolute; top: 4px; bottom: 4px; border-radius: 7px; background: color-mix(in srgb, var(--c) 30%, #10100e);
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 70%, transparent); overflow: hidden; cursor: pointer; touch-action: none;
   transition: box-shadow var(--t-fast), opacity var(--t), filter var(--t-fast); animation: clip-in var(--t-slow) var(--ease-out) both; transform-origin: left center; }
 .tl-clip:hover { box-shadow: inset 0 0 0 1px var(--c); filter: brightness(1.12); }
@@ -43,7 +43,7 @@
 .tl-clip.ghost .tl-clip-label { color: var(--text-2); text-shadow: none; }
 .tl-clip.ghost.sel { box-shadow: inset 0 0 0 2px var(--accent); }
 .tl-h { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; display: grid; place-items: center; z-index: 3; }
-.tl-h::after { content: ''; width: 3px; height: 60%; max-height: 24px; border-radius: 1px; background: #fff; opacity: 0; transition: opacity var(--t-fast), background-color var(--t-fast); }
+.tl-h::after { content: ''; width: 3px; height: 60%; max-height: 24px; border-radius: 99px; background: #fff; opacity: 0; transition: opacity var(--t-fast), background-color var(--t-fast); }
 .tl-h.l { left: 0; }
 .tl-h.r { right: 0; }
 .tl-h:hover::after { background: var(--accent); }
@@ -56,7 +56,7 @@
 .gain { display: flex; align-items: center; gap: 10px; width: 100%; }
 .gain-label { font-size: 12px; color: var(--text-2); min-width: 72px; font-weight: 500; }
 .gain-val { font: 12px var(--mono); font-variant-numeric: tabular-nums; color: var(--text-2); min-width: 62px; text-align: right; }
-.mutebtn, .solobtn { width: 20px; height: 18px; border-radius: var(--r-xs); border: 1px solid var(--line-2); background: var(--raised); color: var(--text-2); font: 600 10px var(--mono);
+.mutebtn, .solobtn { width: 22px; height: 20px; border-radius: 6px; border: 1px solid var(--line-2); background: var(--raised); color: var(--text-2); font: 600 10px var(--mono);
   cursor: pointer; flex: none; padding: 0; transition: background-color var(--t-fast), color var(--t-fast), border-color var(--t-fast); }
 .mutebtn:hover { color: var(--text); }
 .mutebtn:active { transform: translateY(1px); }

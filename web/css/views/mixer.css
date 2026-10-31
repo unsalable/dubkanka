@@ -1,8 +1,9 @@
 /* ---------- mixer: picture and inspector on top, the multitrack below ---------- */
-.mixer { display: flex; flex-direction: column; min-height: calc(100dvh - var(--topbar-h) - 1px); background: var(--line); gap: 1px; }
+.mixer { display: flex; flex-direction: column; min-height: var(--page-h); gap: var(--gap); padding: 0 var(--gap) var(--gap); }
+.mixer > .ws { padding: 0; }
 .mixer-ws { grid-template-columns: minmax(0, 1fr) 360px; align-items: stretch; }
 .mixer-ws .viewer-pane .videopane { max-height: 44vh; aspect-ratio: 16 / 9; }
-.mixer-side { max-height: calc(44vh + 45px); }
+.mixer-side { max-height: calc(44vh + 49px); }
 .mixer .tl { flex: 1; }
 .inspector-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .inspector-head .hl { font-stretch: var(--cond); text-transform: uppercase; letter-spacing: 0.03em; font-size: 12px; }
@@ -10,6 +11,10 @@
 .inspector-empty { color: var(--text-2); font-size: 12.5px; display: flex; gap: 10px; align-items: flex-start; }
 .inspector-empty .icon { color: var(--text-3); margin-top: 1px; }
 .mixer-side .seclabel { margin-top: 12px; }
+.unsep { display: flex; flex-direction: column; gap: 10px; align-items: flex-start; margin-bottom: 14px; }
+.unsep p { margin: 0; }
+.unsep .offer { align-self: stretch; flex-wrap: wrap; }
+.unsep .offer-act { margin-left: 46px; max-width: none; }
 .mixer-side .pane-body > .seclabel:first-child { margin-top: 0; }
 .nudges { gap: 4px; margin: 4px 0 8px; }
 .nudges .btn { min-width: 44px; font-family: var(--mono); font-variant-numeric: tabular-nums; }

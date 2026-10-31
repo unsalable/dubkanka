@@ -1,4 +1,8 @@
-"""Split a scene's audio into dialogue (voices) and everything else (music + effects) with Demucs."""
+"""Split a scene's audio into dialogue (voices) and everything else (music + effects) with Demucs.
+
+Part of the "separate" feature (features.py). Demucs models live on the HuggingFace hub (adefossez/HTDemucs-ft:
+a bag yaml and one safetensors file per member) and are cached under MODELS_DIR/hf.
+"""
 import threading
 
 import numpy as np
@@ -6,23 +10,66 @@ import numpy as np
 from .config import SAMPLE_RATE
 from .gpu import torch_device, free_gpu
 
+SOURCES = ["drums", "bass", "other", "vocals"]  # stem order of every htdemucs model
 _lock = threading.Lock()
 _cache = {}
 
 
+def hf_repo(name):
+    """demucs.hf.hf_repo_name without importing torch: htdemucs_ft -> adefossez/HTDemucs-ft."""
+    if name == "htdemucs":
+        return "adefossez/HTDemucs"
+    return "adefossez/" + ("HTDemucs-" + name[len("htdemucs_"):] if name.startswith("htdemucs_") else "Demucs-" + name)
+
+
+def vocals_member(bag):
+    """The bag member that alone makes the vocals stem (htdemucs_ft has one specialist per stem), else None."""
+    models, weights = bag.get("models") or [], bag.get("weights")
+    if not weights or len(weights) != len(models):
+        return None
+    vi = SOURCES.index("vocals")
+    best = max(range(len(models)), key=lambda i: weights[i][vi])
+    w = weights[best]
+    return models[best] if w[vi] > 0 and sum(1 for x in w if x > 0) == 1 else None
+
+
+def model_files(name):
+    """Files of the hub repo this model needs: the bag yaml, then the vocals specialist or every member."""
+    import yaml
+    from huggingface_hub import hf_hub_download
+    repo = hf_repo(name)
+    with open(hf_hub_download(repo, f"{name}.yaml")) as f:
+        bag = yaml.safe_load(f)
+    sig = vocals_member(bag)
+    return repo, [f"{s}.safetensors" for s in ([sig] if sig else bag["models"])]
+
+
 def _vocals_model(name):
-    """For fine-tuned bags (htdemucs_ft) only the vocals specialist is needed: 4x faster, same quality."""
+    """For fine-tuned bags (htdemucs_ft) only the vocals specialist is needed: 4x faster, a quarter of the download,
+    same quality."""
     if name in _cache:
         return _cache[name]
-    from demucs.apply import BagOfModels
-    from demucs.pretrained import get_model
-    model = get_model(name)
-    if isinstance(model, BagOfModels):
-        vi = model.sources.index("vocals")
-        best = max(range(len(model.models)), key=lambda i: model.weights[i][vi])
-        specialised = model.weights[best][vi] > 0 and sum(1 for w in model.weights[best] if w > 0) == 1
-        if specialised:
-            model = model.models[best]
+    model = None
+    try:
+        from demucs.hf import load_safetensors_model
+        from huggingface_hub import hf_hub_download
+        repo, files = model_files(name)
+        if len(files) == 1:
+            m = load_safetensors_model(hf_hub_download(repo, files[0]))
+            if "vocals" in getattr(m, "sources", []):
+                model = m
+    except Exception:
+        model = None  # hub layout changed or offline with an old cache: the whole bag below still works
+    if model is None:
+        from demucs.apply import BagOfModels
+        from demucs.pretrained import get_model
+        model = get_model(name)
+        if isinstance(model, BagOfModels):
+            vi = model.sources.index("vocals")
+            best = max(range(len(model.models)), key=lambda i: model.weights[i][vi])
+            specialised = model.weights[best][vi] > 0 and sum(1 for w in model.weights[best] if w > 0) == 1
+            if specialised:
+                model = model.models[best]
     model.eval()
     _cache.clear()
     _cache[name] = model
@@ -37,7 +84,7 @@ def separate(mix, sr, model_name="htdemucs_ft", progress=None, shifts=None):
 
     with _lock:
         if progress:
-            progress(0.0, "Ses ayırma modeli yükleniyor (ilk seferde indirilir, ~80-300 MB)...")
+            progress(0.0, "Ses ayırma modeli yükleniyor...")
         model = _vocals_model(model_name)
         device = torch_device()
         if shifts is None:

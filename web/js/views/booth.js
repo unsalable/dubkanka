@@ -5,7 +5,8 @@ import { api, fileUrl, P, upload } from '../api.js';
 import { Btn, Field, Icon, Kbd, Lamp, LevelMeter, Modal, Range, Segmented, Select, Toggle, VideoPane } from '../components.js';
 import { buildMix, engine, loadMixBuffers, player, stemUrls, takeUrl } from '../engine.js';
 import { listMics, micPrefs, recorder, setMicPref } from '../recorder.js';
-import { toast, toastError, useStore } from '../state.js';
+import { FeatureOffer } from '../feature-ui.js';
+import { featureReady, toast, toastError, useStore } from '../state.js';
 import { clamp, cls, db2gain, drawWave, encodeWav, LS, selectedTake, sleep, syllables, timeAgo } from '../util.js';
 
 const DEFAULTS = { preroll: 2, beeps: true, streamer: true, bg: true, guide: 0, autoStop: true, tail: 1.0, autoReview: true, align: 'auto' };
@@ -160,7 +161,9 @@ function BoothSettings({ settings, set, guest, name, setName, onTestRec, testing
       <${Toggle} disabled=${pr.raw} checked=${!pr.raw && pr.autoGainControl} onChange=${(v) => change('agc', v)} label="Otomatik kazanç" />
     </div>
     <${Toggle} checked=${pr.hpf} onChange=${(v) => change('hpf', v, false)} label=${html`<span class="toggle-text">Alçak kesme 80 Hz<small>Masa vuruşu, uğultu ve "p" patlamalarını alır, sesi boğmaz.</small></span>`} />
-    <${Toggle} checked=${pr.denoise} onChange=${(v) => change('denoise', v, false)} label=${html`<span class="toggle-text">Yapay zeka gürültü temizleme<small>Kayıttan sonra DPDFNet ile oda gürültüsü ve fan sesi silinir.</small></span>`} />
+    ${guest || featureReady('cleanup') || featureReady('separate')
+      ? html`<${Toggle} checked=${pr.denoise} onChange=${(v) => change('denoise', v, false)} label=${html`<span class="toggle-text">Yapay zeka gürültü temizleme<small>Kayıttan sonra DPDFNet ile oda gürültüsü ve fan sesi silinir.</small></span>`} />`
+      : html`<${FeatureOffer} id="cleanup" text="Kayıttan sonra oda gürültüsü ve fan sesi yapay zekayla silinir." />`}
 
     <div class="seclabel">Kayıt</div>
     <div class="row2">

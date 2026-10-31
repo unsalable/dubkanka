@@ -1,74 +1,154 @@
-"""Download every AI model DubKanka uses, so the first scene does not wait for them.
+"""AI model downloads, one function per model, each with progress. Features (features.py) fetch theirs when they are
+added; checking what is on disk never imports the AI packages themselves.
 
-python -m dubkanka.prefetch [--json]   (the desktop installer runs it with --json and reads one progress line at a time)
+python -m dubkanka.prefetch [--json] [whisper demucs diarize denoise]   (by hand: all models, or the ones named)
 """
 import json
+import os
+import re
 import sys
 import threading
+from pathlib import Path
 
 from .config import MODELS_DIR, load_settings
+from .transcribe import MODEL_MB as WHISPER_MB, WHISPER_DIR, _dir_size_mb
 
-JSON = "--json" in sys.argv
-STEPS = [("whisper", "Konuşma tanıma modeli (Whisper)", 0.62), ("demucs", "Ses ayırma modeli (Demucs)", 0.28),
-         ("diarize", "Konuşmacı modeli", 0.04), ("denoise", "Gürültü / ortam modeli (DPDFNet)", 0.06)]
-
-
-def report(step, progress, message):
-    if JSON:
-        print(json.dumps({"step": step, "progress": round(progress, 4), "message": message}, ensure_ascii=False), flush=True)
-    else:
-        print(f"[{progress * 100:5.1f}%] {message}", flush=True)
+HF_HUB = Path(os.environ.get("HF_HUB_CACHE") or Path(os.environ.get("HF_HOME") or MODELS_DIR / "hf") / "hub")
+WHISPER_REPOS = {"small": "Systran/faster-whisper-small", "medium": "Systran/faster-whisper-medium",
+                 "large-v3": "Systran/faster-whisper-large-v3",
+                 "large-v3-turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo",
+                 "turbo": "mobiuslabsgmbh/faster-whisper-large-v3-turbo"}
+DEMUCS_MB = {"htdemucs_ft": 81, "htdemucs": 84}
+DIARIZE_MB, DENOISE_MB = 33, 11
 
 
-def _whisper(prog):
-    from faster_whisper.utils import download_model
-
-    from .transcribe import MODEL_MB, WHISPER_DIR, _dir_size_mb
-    name = load_settings().get("whisperModel", "large-v3-turbo")
-    expected = MODEL_MB.get(name, 1600)
-    before = _dir_size_mb(WHISPER_DIR) if WHISPER_DIR.exists() else 0
+def _grow(path, expected_mb, prog, label):
+    """Turn a download folder that fills up in place into progress; returns the function that stops watching."""
+    path.mkdir(parents=True, exist_ok=True)
+    before = _dir_size_mb(path)
     stop = threading.Event()
 
-    def watch():  # the hub downloads in place: the growing folder is the progress bar
+    def watch():
         while not stop.wait(0.8):
-            got = (_dir_size_mb(WHISPER_DIR) - before) if WHISPER_DIR.exists() else 0
-            prog(min(0.99, got / expected), f"Whisper {name} indiriliyor: {got:.0f} / ~{expected} MB")
+            got = max(0.0, _dir_size_mb(path) - before)
+            prog(min(0.99, got / expected_mb), f"{label}: {got:.0f} / ~{expected_mb} MB")
 
-    t = threading.Thread(target=watch, daemon=True)
-    t.start()
+    threading.Thread(target=watch, daemon=True).start()
+    return stop.set
+
+
+def _hub_dir(repo):
+    return HF_HUB / ("models--" + repo.replace("/", "--"))
+
+
+def _snapshot_file(repo, name):
+    hits = list(_hub_dir(repo).glob(f"snapshots/*/{name}"))
+    return hits[0] if hits else None
+
+
+# ---------------------------------------------------------------- whisper (speech)
+def whisper_name():
+    return load_settings().get("whisperModel", "large-v3-turbo")
+
+
+def whisper_present(name=None):
+    repo = WHISPER_REPOS.get(name or whisper_name())
+    return bool(repo) and any((WHISPER_DIR / ("models--" + repo.replace("/", "--"))).glob("snapshots/*/model.bin"))
+
+
+def whisper(prog, name=None):
+    from faster_whisper.utils import download_model
+    name = name or whisper_name()
+    done = _grow(WHISPER_DIR, WHISPER_MB.get(name, 1600), prog, f"Konuşma tanıma modeli ({name})")
     try:
         download_model(name, cache_dir=str(WHISPER_DIR))
     finally:
-        stop.set()
+        done()
 
 
-def _demucs(prog):
-    from demucs.pretrained import get_model
-    name = load_settings().get("separationModel", "htdemucs_ft")
-    prog(0.05, f"Demucs {name} indiriliyor (~320 MB)...")
-    get_model(name)
+# ---------------------------------------------------------------- demucs (separate)
+def demucs_name():
+    return load_settings().get("separationModel", "htdemucs_ft")
 
 
-def _diarize(prog):
+def demucs_present(name=None):
+    """The bag yaml and the members separation will load (separate.vocals_member, read without PyYAML)."""
+    from .separate import hf_repo
+    name = name or demucs_name()
+    repo = hf_repo(name)
+    y = _snapshot_file(repo, f"{name}.yaml")
+    if not y:
+        return False
+    text = y.read_text(encoding="utf-8", errors="replace")
+    m = re.search(r"models:\s*\[([^\]]*)\]", text)
+    sigs = re.findall(r"[0-9a-f]{8}", m.group(1)) if m else []
+    rows = [[float(v) for v in re.findall(r"[-\d.]+", r)] for r in re.findall(r"\[([-\d.,\s]+)\]", text.split("weights", 1)[-1])]
+    need = sigs
+    if len(rows) == len(sigs) and sigs:
+        best = max(range(len(sigs)), key=lambda i: rows[i][3] if len(rows[i]) > 3 else 0)
+        if len(rows[best]) > 3 and rows[best][3] > 0 and sum(1 for x in rows[best] if x > 0) == 1:
+            need = [sigs[best]]
+    return bool(need) and all(_snapshot_file(repo, f"{s}.safetensors") for s in need)
+
+
+def demucs(prog, name=None):
+    from huggingface_hub import hf_hub_download
+
+    from .separate import model_files
+    name = name or demucs_name()
+    done = _grow(MODELS_DIR / "hf", DEMUCS_MB.get(name, 84), prog, "Ses ayırma modeli")
+    try:
+        repo, files = model_files(name)
+        for f in files:
+            hf_hub_download(repo, f)
+    finally:
+        done()
+
+
+# ---------------------------------------------------------------- speakers + DPDFNet
+def diarize_present():
+    from .diarize import DIAR_DIR, EMB_NAME
+    return (DIAR_DIR / "sherpa-onnx-pyannote-segmentation-3-0" / "model.onnx").exists() and (DIAR_DIR / EMB_NAME).exists()
+
+
+def diarize(prog):
     from .diarize import ensure_models
-    ensure_models(prog)
+    ensure_models(lambda f: prog(f, "Konuşmacı modelleri"))
 
 
-def _denoise(prog):
+def denoise_present():
+    from .ambience import MODEL_DIR, MODEL_NAME
+    return (MODEL_DIR / MODEL_NAME).exists()
+
+
+def denoise(prog):
     from .ambience import ensure_model
-    ensure_model(prog)
+    ensure_model(lambda f: prog(f, "Gürültü / ortam modeli (DPDFNet)"))
+
+
+FETCH = {"whisper": whisper, "demucs": demucs, "diarize": diarize, "denoise": denoise}
+PRESENT = {"whisper": whisper_present, "demucs": demucs_present, "diarize": diarize_present, "denoise": denoise_present}
+
+
+def size_mb(model):
+    return {"whisper": lambda: WHISPER_MB.get(whisper_name(), 1600), "demucs": lambda: DEMUCS_MB.get(demucs_name(), 84),
+            "diarize": lambda: DIARIZE_MB, "denoise": lambda: DENOISE_MB}[model]()
 
 
 def main():
+    as_json = "--json" in sys.argv
+    names = [a for a in sys.argv[1:] if a in FETCH] or list(FETCH)
     MODELS_DIR.mkdir(parents=True, exist_ok=True)
-    funcs = {"whisper": _whisper, "demucs": _demucs, "diarize": _diarize, "denoise": _denoise}
-    base = 0.0
-    for key, label, weight in STEPS:
-        report(key, base, label + "...")
-        funcs[key](lambda f, msg=None, b=base, w=weight, lb=label: report(key, b + w * max(0.0, min(1.0, f)), msg or lb))
-        base += weight
-        report(key, base, label + " hazır")
-    report("done", 1.0, "Modeller hazır")
+
+    def report(progress, message):
+        if as_json:
+            print(json.dumps({"progress": round(progress, 4), "message": message}, ensure_ascii=False), flush=True)
+        else:
+            print(f"[{progress * 100:5.1f}%] {message}", flush=True)
+
+    for i, n in enumerate(names):
+        FETCH[n](lambda f, msg=None, i=i: report((i + max(0.0, min(1.0, f))) / len(names), msg or n))
+        report((i + 1) / len(names), f"{n} hazır")
 
 
 if __name__ == "__main__":

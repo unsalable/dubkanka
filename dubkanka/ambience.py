@@ -100,7 +100,7 @@ def split(voices, sr, progress=None, gamma=GAMMA):
     from scipy.ndimage import uniform_filter
     from scipy.signal import istft, stft
 
-    from .transcribe import speech_regions
+    from .vad import speech_regions
 
     mono = voices.mean(axis=1)
     with _lock:

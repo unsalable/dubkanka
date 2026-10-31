@@ -58,6 +58,10 @@
         "to": "app/requirements.lock"
       },
       {
+        "from": "../requirements-core.txt",
+        "to": "app/requirements-core.txt"
+      },
+      {
         "from": "resources/uv.exe",
         "to": "bin/uv.exe"
       }

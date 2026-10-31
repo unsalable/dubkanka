@@ -222,12 +222,3 @@ class Room:
 
 
 room = Room()
-
-
-def download_cloudflared(job):
-    from .diarize import download
-    BIN_DIR.mkdir(parents=True, exist_ok=True)
-    job.update(0.0, "Bağlantı aracı (cloudflared) indiriliyor, ~60 MB...")
-    download(CLOUDFLARED_URL, BIN_DIR / "cloudflared.exe", lambda f: job.update(f))
-    bus.notify()
-    return {"path": str(BIN_DIR / "cloudflared.exe")}

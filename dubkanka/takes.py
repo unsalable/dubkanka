@@ -1,5 +1,6 @@
 """Dub takes: store raw recordings, then trim / align / fit / effects / level-match them to their line."""
 import asyncio
+import importlib.util
 import tempfile
 import time
 from pathlib import Path
@@ -142,14 +143,14 @@ def process_take(pid, lid, tid):
     raw, sr = media.read_audio(d / take["raw"], mono=True)
     if sr != SAMPLE_RATE:
         raw, sr = media.resample(raw, sr, SAMPLE_RATE), SAMPLE_RATE
-    if take.get("denoise") and len(raw):
+    if take.get("denoise") and len(raw) and importlib.util.find_spec("sherpa_onnx"):  # the "cleanup" feature
         from .ambience import denoise
         raw = denoise(raw, sr)
     if take.get("hpf") and len(raw):
         raw = _highpass(raw, sr)
     total = len(raw) / sr
 
-    from .transcribe import speech_regions
+    from .vad import speech_regions
     regions = speech_regions(media.resample(raw, sr, 16000), min_silence_ms=350, pad_ms=30, threshold=0.45)
     silent = not regions
     v0, v1 = (0.0, total) if silent else (regions[0][0], regions[-1][1])

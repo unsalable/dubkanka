@@ -1,10 +1,8 @@
-"""Speech to text with word timestamps (faster-whisper) + Silero VAD helpers."""
+"""Speech to text with word timestamps (faster-whisper). Part of the "speech" feature (features.py)."""
 import threading
 
-import numpy as np
-
 from .config import MODELS_DIR, load_settings
-from .gpu import gpu_info, setup_cuda_dlls
+from .gpu import setup_cuda_dlls, use_gpu
 
 WHISPER_DIR = MODELS_DIR / "whisper"
 MODEL_MB = {"small": 484, "medium": 1530, "large-v3-turbo": 1620, "turbo": 1620, "large-v3": 3090}
@@ -27,8 +25,7 @@ def _dir_size_mb(path):
 
 def _load(name, progress=None):
     global _model, _key
-    want_gpu = load_settings().get("device") != "cpu" and gpu_info().get("available")
-    device = "cuda" if want_gpu else "cpu"
+    device = "cuda" if use_gpu() else "cpu"
     if _model is not None and _key == (name, device):
         return _model
     _model = None
@@ -105,14 +102,3 @@ def transcribe(audio16k, language=None, model_name=None, progress=None):
         words.sort(key=lambda w: w["start"])
         return {"language": info.language, "languageProb": round(float(info.language_probability), 3),
                 "words": words, "segments": segs, "model": model_name}
-
-
-def speech_regions(audio16k, min_silence_ms=200, pad_ms=30, threshold=0.5):
-    """Silero VAD speech regions [(start_s, end_s)] for mono 16 kHz float32 audio."""
-    from faster_whisper.vad import VadOptions, get_speech_timestamps
-    if len(audio16k) < 1600:
-        return []
-    opts = VadOptions(threshold=threshold, min_silence_duration_ms=min_silence_ms, speech_pad_ms=pad_ms,
-                      min_speech_duration_ms=60)
-    ts = get_speech_timestamps(np.ascontiguousarray(audio16k, dtype=np.float32), opts)
-    return [(t["start"] / 16000.0, t["end"] / 16000.0) for t in ts]

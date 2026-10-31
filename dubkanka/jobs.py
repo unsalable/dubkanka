@@ -48,7 +48,7 @@ class JobCancelled(Exception):
 
 
 class Job:
-    def __init__(self, kind, project_id, title, steps=None):
+    def __init__(self, kind, project_id, title, steps=None, meta=None):
         self.id = uuid.uuid4().hex[:10]
         self.kind = kind
         self.project_id = project_id
@@ -61,6 +61,7 @@ class Job:
         self.created = time.time()
         self.finished = None
         self.steps = [{"key": k, "label": l, "status": "pending"} for k, l in (steps or [])]
+        self.meta = meta or {}
         self.cancel_requested = False
         self._last_notify = 0.0
 
@@ -86,7 +87,7 @@ class Job:
         return {
             "id": self.id, "kind": self.kind, "projectId": self.project_id, "title": self.title,
             "status": self.status, "progress": round(self.progress, 4), "message": self.message,
-            "error": self.error, "result": self.result, "steps": self.steps,
+            "error": self.error, "result": self.result, "steps": self.steps, "meta": self.meta,
             "created": self.created, "finished": self.finished,
         }
 
@@ -96,9 +97,11 @@ class JobManager:
         self.jobs = {}
         self._heavy = ThreadPoolExecutor(max_workers=1, thread_name_prefix="heavy")
         self._light = ThreadPoolExecutor(max_workers=4, thread_name_prefix="light")
+        # feature installs: one at a time, and never behind a scene that is waiting for one of them
+        self._setup = ThreadPoolExecutor(max_workers=1, thread_name_prefix="setup")
 
-    def submit(self, kind, project_id, title, fn, heavy=True, steps=None):
-        job = Job(kind, project_id, title, steps)
+    def submit(self, kind, project_id, title, fn, heavy=True, steps=None, meta=None, pool=None):
+        job = Job(kind, project_id, title, steps, meta)
         self.jobs[job.id] = job
         self._gc()
 
@@ -125,7 +128,7 @@ class JobManager:
             job.finished = time.time()
             bus.notify()
 
-        (self._heavy if heavy else self._light).submit(run)
+        {"setup": self._setup}.get(pool, self._heavy if heavy else self._light).submit(run)
         bus.notify()
         return job
 

@@ -1,5 +1,6 @@
-// Setup screen: "starting" for normal launches, the step list for the first install and after updates, the log and
-// retry when something fails. Events come from lib/runtime.js through main.js.
+// Setup screen: "starting" for normal launches, the step list for the first install (the studio only, about 200 MB;
+// AI features are picked inside the studio later) and after updates, the log and retry when something fails. Events
+// come from lib/runtime.js through main.js.
 const $ = (id) => document.getElementById(id);
 const setup = window.dkSetup;
 const show = (id) => ['starting', 'install', 'error'].forEach((s) => ($(s).hidden = s !== id));
@@ -24,11 +25,10 @@ function renderSteps() {
     li.id = 'st-' + s.id;
     li.innerHTML = '<span class="name"></span><span class="size"></span><span class="detail"></span>';
     li.querySelector('.name').textContent = s.label;
-    li.querySelector('.size').textContent = s.state === 'done' && !s.ran ? 'hazır' : s.state === 'skipped' ? 'sonra' : s.size || '';
+    li.querySelector('.size').textContent = s.state === 'done' ? 'hazır' : s.size || '';
     li.querySelector('.detail').textContent = s.detail || '';
     $('steps').appendChild(li);
   }
-  $('skip').hidden = !steps.some((s) => s.id === 'models' && (s.state === 'running' || s.state === 'pending'));
 }
 
 function tick() {
@@ -38,15 +38,18 @@ function tick() {
 
 function handle(ev) {
   if (ev.type === 'phase') {
-    if (ev.phase === 'server' && !$('install').hidden) $('title').textContent = 'Stüdyo açılıyor';
+    if (ev.phase === 'server' && !$('install').hidden) {
+      $('title').textContent = 'Stüdyo açılıyor';
+      $('footText').textContent = 'Birkaç saniye…';
+    }
     else if (ev.phase === 'server') $('startText').textContent = 'Stüdyo açılıyor…';
     else if (ev.phase === 'starting' && $('install').hidden) show('starting');
   } else if (ev.type === 'plan') {
     steps = ev.steps.map((s) => ({ ...s }));
-    $('title').textContent = ev.firstRun ? 'İlk kurulum' : 'Güncelleme uygulanıyor';
+    $('title').textContent = ev.firstRun ? 'DubKanka hazırlanıyor' : 'Güncelleme uygulanıyor';
     $('lead').textContent = ev.firstRun
-      ? 'Bir kereye mahsus: Python, ekran kartına uygun PyTorch, yapay zeka paketleri, video araçları ve modeller indiriliyor. Toplam 5 GB kadar; internet hızına göre 10-30 dakika sürer. Bilgisayarı açık bırakman yeterli.'
-      : 'Yeni sürüm ek paketler istiyor, sadece eksikler indiriliyor.';
+      ? 'Bir kereye mahsus, stüdyonun kendisi iniyor: yaklaşık 200 MB, birkaç dakika. Yazıya dökme, müzik ayırma gibi yapay zeka özelliklerini açılınca sen seçeceksin.'
+      : 'Yeni sürüm birkaç paketi güncelliyor; sadece değişenler indiriliyor.';
     t0 = Date.now();
     clearInterval(timer);
     timer = setInterval(tick, 1000);
@@ -97,7 +100,3 @@ $('retry').onclick = () => {
 };
 $('logs').onclick = () => setup.openLogs();
 $('quit').onclick = () => setup.quit();
-$('skip').onclick = () => {
-  $('skip').hidden = true;
-  setup.skipModels();
-};

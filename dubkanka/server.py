@@ -20,7 +20,7 @@ from .gpu import gpu_info
 from .access import GUEST_COOKIE, body_json, host_only, is_remote, member, mutate, project_or_404, save_body, who
 from .jobs import bus, jobs
 from .projects import add_character, find_char, find_line, find_take, new_id, sort_lines, store
-from .room import download_cloudflared, room
+from .room import room
 
 VERSION = __version__
 _SPLIT_TEXT = re.compile(r"\s+")
@@ -76,20 +76,54 @@ async def whoami(request: Request):
 @app.get("/api/system")
 def system(request: Request):
     host_only(request)
-    from . import export, takes, translate
+    from . import export, features, takes, translate
     ok = media.has_ffmpeg()
-    whisper_dir = MODELS_DIR / "whisper"
     return {
         "version": VERSION, "ffmpeg": ok, "caps": media.ffmpeg_caps() if ok else {}, "gpu": gpu_info(),
         "settings": public_settings(), **translate.system_info(), **takes.system_info(), **export.system_info(),
         "desktop": DESKTOP, "dirs": {"home": str(HOME), "projects": str(PROJECTS_DIR), "exports": str(EXPORTS_DIR),
                                      "models": str(MODELS_DIR)},
-        "whisperModels": [["small", "Hızlı (küçük model, ~0.5 GB)"],
-                          ["large-v3-turbo", "Dengeli - önerilen (~1.6 GB)"],
-                          ["large-v3", "En iyi doğruluk (~3 GB, daha yavaş)"]],
-        "downloaded": {"whisper": [p.name for p in whisper_dir.glob("models--*")] if whisper_dir.exists() else []},
+        "whisperModels": [["small", "Hızlı · 0.5 GB"], ["large-v3-turbo", "Dengeli · 1.6 GB (önerilen)"],
+                          ["large-v3", "En doğru · 3 GB, daha yavaş"]],
+        "features": features.all_status(),
         "exportsDir": str(EXPORTS_DIR),
     }
+
+
+# ---------------------------------------------------------------- features (Ayarlar → Özellikler)
+@app.get("/api/features")
+def features_get(request: Request):
+    host_only(request)
+    from . import features
+    return {"features": features.all_status()}
+
+
+@app.post("/api/features/install")
+async def features_install(request: Request):
+    host_only(request)
+    from . import features
+    ids = [i for i in (await body_json(request)).get("ids") or [] if i in features.FEATURES]
+    features.install(ids)
+    return {"features": features.all_status()}
+
+
+@app.post("/api/features/{fid}/{action}")
+def features_action(fid: str, action: str, request: Request):
+    host_only(request)
+    from . import features
+    if fid not in features.FEATURES or action not in ("remove", "keep", "cancel"):
+        raise HTTPException(404, "Böyle bir özellik yok.")
+    out = {}
+    try:
+        if action == "remove":
+            out = features.remove(fid)
+        elif action == "keep":
+            features.keep(fid)
+        else:
+            features.cancel(fid)
+    except features.FeatureError as e:
+        raise HTTPException(400, str(e))
+    return {**out, "features": features.all_status()}
 
 
 @app.post("/api/settings")
@@ -192,6 +226,17 @@ async def project_prepare(pid: str, request: Request):
     opts = await body_json(request)
     from .pipeline import PREP_STEPS, run_prepare
     job = jobs.submit("prepare", pid, "Sahne hazırlanıyor", lambda j: run_prepare(j, pid, opts), steps=PREP_STEPS)
+    return job.to_dict()
+
+
+@app.post("/api/projects/{pid}/separate")
+async def project_separate(pid: str, request: Request):
+    host_only(request)
+    project_or_404(pid)
+    if jobs.active(pid):
+        raise HTTPException(409, "Bu proje şu an işleniyor.")
+    from .pipeline import run_separate
+    job = jobs.submit("separate", pid, "Konuşmalar ayrılıyor", lambda j: run_separate(j, pid))
     return job.to_dict()
 
 
@@ -770,7 +815,9 @@ def room_stop(request: Request):
 @app.post("/api/room/cloudflared")
 def room_cloudflared(request: Request):
     host_only(request)
-    return jobs.submit("download", None, "Bağlantı aracı indiriliyor", download_cloudflared, heavy=False).to_dict()
+    from . import features
+    started = features.install(["room"])
+    return started[0].to_dict() if started else {}
 
 
 @app.get("/api/room/qr.svg")

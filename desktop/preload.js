@@ -34,7 +34,6 @@ contextBridge.exposeInMainWorld('dkSetup', {
   onEvent: (cb) => on('dk:setup', cb),
   replay: call('dk:setup:replay'),
   retry: call('dk:setup:retry'),
-  skipModels: call('dk:setup:skip-models'),
   openLogs: call('dk:setup:logs'),
   quit: call('dk:setup:quit'),
 });

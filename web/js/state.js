@@ -40,7 +40,7 @@ export function parseRoute() {
   return location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
 }
 
-// Motion level (Ayarlar → Görünüm), applied as <html data-motion>: CSS scales durations and distances from it.
+// Motion level (Ayarlar → Genel), applied as <html data-motion>: CSS scales durations and distances from it.
 export const MOTION_LEVELS = [['full', 'Tam'], ['reduced', 'Azaltılmış'], ['off', 'Kapalı']];
 export const motion = () => document.documentElement.dataset.motion || 'full';
 export function setMotion(level) {
@@ -52,6 +52,16 @@ document.documentElement.dataset.motion = LS.get('motion', matchMedia('(prefers-
 // Where a route sits in the workflow, so page changes slide forwards or backwards.
 const PLACE = { prepare: 1, script: 2, record: 3, mix: 4, export: 5, room: 6 };
 const place = (r) => (r[0] === 'p' ? PLACE[r[2]] || 1 : r[0] === 'settings' ? 9 : 0);
+
+// Settings and the room are places you visit and leave: their buttons take you back to where you were.
+let before = { settings: [], room: {} };
+function remember(from, to) {
+  if (from[0] !== 'settings' && to[0] === 'settings') before.settings = from;
+  if (from[0] === 'p' && from[2] !== 'room' && to[0] === 'p' && to[2] === 'room') before.room[from[1]] = from;
+}
+/** Hash of the page to return to when leaving settings / a project's room. */
+export const backFromSettings = () => '#/' + before.settings.join('/');
+export const backFromRoom = (pid) => '#/' + (before.room[pid] || ['p', pid]).join('/');
 const calm = () => document.hidden || !document.startViewTransition || motion() === 'off';
 
 /** Apply a route change inside a view transition: the page slides, the video picture glides to its new spot. */
@@ -82,6 +92,7 @@ export function transition(update, dir = 1) {
 
 window.addEventListener('hashchange', () => {
   const route = parseRoute();
+  remember(store.route, route);
   transition(() => setState({ route }), place(route) >= place(store.route) ? 1 : -1);
 });
 export const go = (path) => (location.hash = '#/' + path);
@@ -120,6 +131,7 @@ export function startWatch() {
         const r = await api.get(`/api/watch?project=${pid}&v=${v}`, { signal: ctl.signal });
         v = r.v;
         const patch = { jobs: r.jobs || [], room: r.room || null, online: true };
+        featureJobsSettled(store.jobs, patch.jobs);
         if (pid && r.rev != null && r.rev >= 0 && (!store.project || store.project.id !== pid || store.project.rev !== r.rev)) {
           patch.project = await api.get(P(pid), { signal: ctl.signal });
         }
@@ -156,6 +168,51 @@ export function closeProject() {
   if (!store.projectId) return;
   setState({ projectId: null, project: null, jobs: [] });
   startWatch();
+}
+
+// ---- features (Ayarlar → Özellikler) -------------------------------------------
+const live = (j) => j.status === 'running' || j.status === 'queued';
+
+export async function refreshFeatures() {
+  try {
+    const r = await api.get('/api/features');
+    setState((s) => ({ system: s.system && { ...s.system, features: r.features } }));
+  } catch {}
+}
+
+/** Add features in the background; the top bar and Ayarlar → Özellikler show the progress. */
+export async function installFeatures(ids) {
+  try {
+    const r = await api.post('/api/features/install', { ids });
+    setState((s) => ({ system: s.system && { ...s.system, features: r.features } }));
+  } catch (e) {
+    toastError(e);
+  }
+}
+
+/** A feature as it is right now: its last known state, with a running install's progress on top. */
+export function featureOf(id) {
+  const f = ((store.system && store.system.features) || []).find((x) => x.id === id);
+  if (!f) return null;
+  const j = store.jobs.find((x) => x.meta && x.meta.feature === id && live(x));
+  if (!j) return f;
+  return { ...f, job: j, state: j.kind === 'feature-remove' ? 'removing' : j.status === 'running' ? 'installing' : 'queued' };
+}
+export const featureReady = (id) => {
+  const f = featureOf(id);
+  return !!f && (f.state === 'ready' || f.state === 'partial');
+};
+
+// a feature job just ended: refresh what is installed and say so
+function featureJobsSettled(prev, next) {
+  for (const j of next) {
+    if (!j.meta || !j.meta.feature || live(j)) continue;
+    const was = prev.find((x) => x.id === j.id);
+    if (!was || !live(was)) continue;
+    refreshFeatures();
+    if (j.status === 'done') toast(j.message || 'Hazır', 'ok');
+    else if (j.status === 'error') toast(j.error || 'Eklenemedi', 'error', 8000);
+  }
 }
 
 /** Latest job of a kind for the open project (running ones first). */

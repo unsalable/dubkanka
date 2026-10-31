@@ -31,6 +31,12 @@ export function fmtBytes(n) {
   return (n / 2 ** 20).toFixed(n > 100 * 2 ** 20 ? 0 : 1) + ' MB';
 }
 
+/** A download size given in MB: "60 MB", "1.7 GB". */
+export function fmtSize(mb) {
+  if (!mb) return '0 MB';
+  return mb >= 1000 ? (mb / 1024).toFixed(1).replace(/\.0$/, '') + ' GB' : Math.round(mb) + ' MB';
+}
+
 export function timeAgo(ts) {
   const d = Date.now() / 1000 - ts;
   if (d < 60) return 'az önce';

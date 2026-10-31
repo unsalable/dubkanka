@@ -1,5 +1,6 @@
-// Share: presets, the technical encode options (or a bit-exact copy of the source picture) and a playable preview of
-// the framing, the subtitles and the real mix.
+// Share: four steps in the order they are decided (shape, sound, subtitles, quality), the technical encode options
+// (or a bit-exact copy of the source picture) closed behind one button, and a playable preview of the framing, the
+// subtitles and the real mix.
 import { html, useEffect, useLayoutEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P } from '../api.js';
 import { Btn, Field, Icon, JobPanel, Lamp, PlayButton, Range, Segmented, Select, TimeReadout, Toggle, usePlaying } from '../components.js';
@@ -247,6 +248,23 @@ function SourceInfo({ info }) {
   </div>`;
 }
 
+// Plain words for the presets; their technical summary stays in the tooltip and in "Teknik ayarlar".
+const PRESET_TEXT = {
+  tiktok: 'Telefonda net, hızlı yüklenir',
+  high: 'En temiz görüntü, daha büyük dosya',
+  small: "WhatsApp'tan göndermeye uygun",
+  copy: 'Görüntü hiç değişmez, sadece ses eklenir',
+};
+const SUB_CHOICES = [['none', 'Yok'], ['dub', 'Dublaj'], ['orig', 'Orijinal'], ['both', 'İkisi']];
+
+/** One numbered step of the share recipe: first the shape, then the sound, then the subtitles, then the quality. */
+function Step({ n, title, hint, children }) {
+  return html`<section class="xstep" style=${{ '--i': n }}>
+    <div class="xstep-head"><span class="xstep-n">${n}</span><h3>${title}</h3>${hint && html`<span class="xstep-hint">${hint}</span>`}</div>
+    <div class="xstep-body">${children}</div>
+  </section>`;
+}
+
 export function ExportView({ p }) {
   const s = useStore();
   const sys = s.system || {};
@@ -256,14 +274,19 @@ export function ExportView({ p }) {
   const job = jobOf('export');
   const running = job && (job.status === 'running' || job.status === 'queued');
   const [info, setInfo] = useState(null);
-  const [adv, setAdv] = useState(() => ex.preset === 'custom');
+  const [adv, setAdv] = useState(false); // technical settings stay closed until asked for
+  const [style, setStyle] = useState(false);
   const encoders = (sys.encoders || []).filter((e) => e.codec === v.codec);
   const qr = (sys.qualityRange || {})[v.codec] || [10, 40, 20];
   const copying = v.mode === 'copy';
+  const unseparated = p.stems && p.stems.separated === false;
 
   useEffect(() => {
     api.get(P(p.id, '/export/info')).then(setInfo).catch(() => {});
   }, [p.id, ex.container, ex.subs, ex.subMode]);
+  useEffect(() => {
+    if (unseparated && ex.mix === 'clean') patch({ mix: 'dub' }); // a scene without separation has no voice-free sound
+  }, [unseparated]);
 
   const patch = (body) => {
     patchLocal((pp) => {
@@ -291,115 +314,131 @@ export function ExportView({ p }) {
   const est = v.rc !== 'crf' && !copying ? ((v.bitrate * 1e6 + a.bitrate * 1000) * p.clip.duration) / 8 : null;
   const fpsOpts = (sys.fpsOptions || ['source']).map((f) => [String(f), f === 'source' ? `Kaynak (${Math.min(60, p.clip.fps || 30)} fps)` : `${f} fps`]);
   const hOpts = (sys.heightOptions || ['source']).map((h) => [String(h), h === 'source' ? (ex.format === 'original' ? `Kaynak (${Math.min(p.clip.width || 0, p.clip.height || 0)}p)` : 'Standart (1080p)') : `${h}p`]);
+  const presets = sys.exportPresets || {};
+  const burn = ex.subMode === 'burn' && !copying;
+  const techLine = `${copying ? 'Görüntü: kaynaktan kopya' : `${(CODECS.find((c) => c[0] === v.codec) || [])[1]} · ${v.rc === 'crf' ? 'CRF ' + v.quality : v.bitrate + ' Mb/s ' + v.rc.toUpperCase()} · ${v.preset}`}`
+    + ` · ${(sys.audioCodecs || {})[a.codec] || a.codec}${['aac', 'libopus'].includes(a.codec) ? ' ' + a.bitrate + 'k' : ''} · ${ex.container.toUpperCase()}${est ? ` · ~${fmtBytes(est)}` : ''}`;
+  const plainLine = [FORMAT_NAMES[ex.format] ? `${FORMAT_NAMES[ex.format][0]} ${FORMAT_NAMES[ex.format][1].toLowerCase()}` : ex.format,
+    { dub: 'dublaj sesi', clean: 'konuşmasız', original: 'orijinal ses' }[ex.mix],
+    ex.subs === 'none' ? 'altyazısız' : `altyazı: ${(SUB_CHOICES.find((c) => c[0] === ex.subs) || [])[1].toLowerCase()}`,
+    ex.preset === 'custom' ? 'özel ayar' : (presets[ex.preset] || {}).label].filter(Boolean).join(' · ');
 
   return html`<div class="page export">
     <div class="ws export-grid">
       <section class="pane export-settings">
-        <div class="pane-head"><h3>Hazır ayar</h3></div>
-        <div class="presets" role="radiogroup">
-          ${Object.entries(sys.exportPresets || {}).map(([id, pr]) => html`<button key=${id} role="radio" aria-checked=${ex.preset === id}
-            class=${cls('preset', ex.preset === id && 'on')} onClick=${() => applyPreset(id)}>
-            <span class="preset-name">${pr.label}${id === 'tiktok' ? html` <span class="dim">· önerilen</span>` : ''}</span>
-            <span class="preset-sum mono">${pr.summary}</span></button>`)}
-          <button role="radio" aria-checked=${ex.preset === 'custom'} class=${cls('preset', ex.preset === 'custom' && 'on')} onClick=${() => { setAdv(true); patch({ preset: 'custom' }); }}>
-            <span class="preset-name">Özel</span><span class="preset-sum mono">Aşağıdaki teknik ayarlarla</span></button>
-        </div>
+        <div class="pane-scroll xsteps">
+          <${Step} n=${1} title="Biçim" hint="Videonun şekli">
+            <div class="choices formats" role="radiogroup">${Object.keys(FORMAT_NAMES).map((k) => html`<button key=${k} role="radio" aria-checked=${ex.format === k}
+              class=${cls('choice formatcard', ex.format === k && 'on')} disabled=${copying && k !== 'original'} title=${copying && k !== 'original' ? 'Kaynak kopyasında görüntü değişmez' : ''}
+              onClick=${() => patch({ format: k })}><span class=${'shape shape-' + k}></span><b>${FORMAT_NAMES[k][0]}</b><small>${FORMAT_NAMES[k][1]}</small></button>`)}</div>
+          </${Step}>
 
-        <div class="pane-body">
-          <div class="seclabel">Biçim</div>
-          <div class="formats" role="radiogroup">${Object.keys(FORMAT_NAMES).map((k) => html`<button key=${k} role="radio" aria-checked=${ex.format === k}
-            class=${cls('formatcard', ex.format === k && 'on')} disabled=${copying && k !== 'original'} title=${copying && k !== 'original' ? 'Kaynak kopyasında görüntü değişmez' : ''}
-            onClick=${() => patch({ format: k })}><span class=${'shape shape-' + k}></span><span><b>${FORMAT_NAMES[k][0]}</b> ${FORMAT_NAMES[k][1]}</span></button>`)}</div>
+          <${Step} n=${2} title="Ses">
+            <${Segmented} value=${ex.mix} onChange=${(m) => patch({ mix: m })}
+              options=${[['dub', 'Dublaj'], ...(unseparated ? [] : [['clean', 'Konuşmasız']]), ['original', 'Orijinal']]} />
+            ${ex.mix === 'clean' && html`<p class="xnote">Sadece müzik, efekt ve ortam sesleri: kendi seslendirmen için.</p>`}
+          </${Step}>
 
-          <div class="seclabel">Ses</div>
-          <${Segmented} value=${ex.mix} onChange=${(m) => patch({ mix: m })} options=${[['dub', 'Dublaj'], ['clean', 'Konuşmasız (sadece fon)'], ['original', 'Orijinal ses']]} />
+          <${Step} n=${3} title="Altyazı">
+            <${Segmented} value=${ex.subs} onChange=${(x) => patch({ subs: x })} options=${SUB_CHOICES} />
+            ${ex.subs !== 'none' && html`<div class="xsub">
+              <${Toggle} checked=${burn} disabled=${copying} onChange=${(on) => patch({ subMode: on ? 'burn' : 'soft' })}
+                label=${html`<span class="toggle-text">Videonun üstüne yazılsın<small>${burn ? 'TikTok ve her oynatıcıda görünür.' : 'Ayrı iz: oynatıcıda açılıp kapanır, TikTok göstermez.'}</small></span>`} />
+              ${burn && html`<button class=${cls('xdisclose', style && 'open')} aria-expanded=${style} onClick=${() => setStyle(!style)}>
+                <${Icon} name="chevron" size=${13} />Yazı stili <span class="dim">${ex.subFont} · %${Math.round((ex.subSize || 1) * 100)}</span></button>
+                ${style && html`<div class="xstyle">
+                  <div class="row2">
+                    <${Field} label="Yazı tipi"><${Select} value=${ex.subFont} onChange=${(x) => patch({ subFont: x })} options=${FONTS.map((f) => [f, f])} /></${Field}>
+                    <${Field} label="Renk"><${Select} value=${ex.subColor || 'white'} onChange=${(x) => patch({ subColor: x })} options=${[['white', 'Beyaz'], ['character', 'Karakter renginde']]} /></${Field}>
+                  </div>
+                  <${Field} label=${html`Boyut <span class="tc">%${Math.round((ex.subSize || 1) * 100)}</span>`}>
+                    <${Range} min=${0.6} max=${1.8} step=${0.05} value=${ex.subSize || 1} onInput=${(x) => patch({ subSize: x })} />
+                  </${Field}>
+                  <${Toggle} checked=${ex.subPos == null} onChange=${(on) => patch({ subPos: on ? null : 0.8 })} label="Yüksekliği otomatik ayarla" />
+                  ${ex.subPos != null && html`<${Field} label="Yükseklik"><${Range} min=${0.3} max=${0.97} step=${0.01} value=${ex.subPos} onInput=${(x) => patch({ subPos: x })} /></${Field}>`}
+                </div>`}`}
+            </div>`}
+            ${burn && html`<div class="xsub"><${Toggle} checked=${ex.credits} onChange=${(x) => patch({ credits: x })} label="Sonda seslendirenler yazsın" />
+              ${ex.credits && html`<input class="input" value=${ex.creditsText || ''} placeholder="Boş bırakırsan kayıtlardan yazılır (ör. Cengo: Melih)" onChange=${(e) => patch({ creditsText: e.target.value })} />`}</div>`}
+          </${Step}>
 
-          <div class="seclabel">Altyazı</div>
-          <div class="row2">
-            <${Select} value=${ex.subs} onChange=${(x) => patch({ subs: x })} options=${Object.entries(sys.subs || {})} />
-            <${Segmented} value=${copying ? 'soft' : ex.subMode} onChange=${(m) => patch({ subMode: m })} options=${[['burn', 'Görüntüye yak'], ['soft', 'Ayrı iz']]} />
-          </div>
-          ${ex.subs !== 'none' && ex.subMode === 'burn' && !copying && html`
-            <div class="row2" style=${{ marginTop: '10px' }}>
-              <${Field} label="Yazı tipi"><${Select} value=${ex.subFont} onChange=${(x) => patch({ subFont: x })} options=${FONTS.map((f) => [f, f])} /></${Field}>
-              <${Field} label="Renk"><${Select} value=${ex.subColor || 'white'} onChange=${(x) => patch({ subColor: x })} options=${[['white', 'Beyaz'], ['character', 'Karakter renginde']]} /></${Field}>
+          <${Step} n=${4} title="Kalite">
+            <div class="choices presets" role="radiogroup">
+              ${Object.entries(presets).map(([id, pr]) => html`<button key=${id} role="radio" aria-checked=${ex.preset === id} title=${pr.summary}
+                class=${cls('choice', ex.preset === id && 'on')} onClick=${() => applyPreset(id)}>
+                <b>${pr.label}${id === 'tiktok' ? html` <span class="xrec">önerilen</span>` : ''}</b><small>${PRESET_TEXT[id] || pr.summary}</small></button>`)}
             </div>
-            <${Field} label=${html`Boyut <span class="tc">%${Math.round((ex.subSize || 1) * 100)}</span>`}>
-              <${Range} min=${0.6} max=${1.8} step=${0.05} value=${ex.subSize || 1} onInput=${(x) => patch({ subSize: x })} />
-            </${Field}>
-            <${Toggle} checked=${ex.subPos == null} onChange=${(on) => patch({ subPos: on ? null : 0.8 })} label="Yüksekliği otomatik ayarla" />
-            ${ex.subPos != null && html`<${Field} label="Yükseklik"><${Range} min=${0.3} max=${0.97} step=${0.01} value=${ex.subPos} onInput=${(x) => patch({ subPos: x })} /></${Field}>`}`}
-          ${ex.subMode === 'soft' || copying ? html`<span class="field-hint">Ayrı iz: altyazı videoya gömülmez, oynatıcıda açılıp kapanır (MP4: mov_text, MKV: SRT). TikTok ayrı izi göstermez.</span>` : null}
-          ${!copying && ex.subMode === 'burn' && html`<${Toggle} checked=${ex.credits} onChange=${(x) => patch({ credits: x })} label="Sonda seslendirenler yazsın" />`}
-          ${ex.credits && !copying && ex.subMode === 'burn' && html`<input class="input" value=${ex.creditsText || ''} placeholder="Boş bırakırsan kayıtlardan yazılır (ör. Cengo: Melih)" onChange=${(e) => patch({ creditsText: e.target.value })} />`}
-        </div>
+            ${ex.preset === 'custom' && html`<p class="xnote">Özel: teknik ayarlarda değiştirdiklerin kullanılıyor. Bir hazır ayar seçersen onlar geri gelir.</p>`}
+          </${Step}>
 
-        <details class="adv" open=${adv} onToggle=${(e) => setAdv(e.target.open)}>
-          <summary><span class="seclabel">Teknik ayarlar</span></summary>
-          <div class="pane-body">
-            <${Field} label="Görüntü akışı">
-              <${Segmented} value=${v.mode} onChange=${(m) => tech(m === 'copy' ? { video: { mode: 'copy' }, format: 'original', subMode: 'soft' } : { video: { mode: 'encode' } })}
-                options=${[['encode', 'Yeniden kodla'], ['copy', 'Kaynaktan kopyala (-c:v copy)']]} />
-            </${Field}>
-            ${copying
-              ? html`<p class="field-hint">Görüntü bitlerine dokunulmaz: kaynak videonun kendi kodlaması aynen kalır, sadece yeni ses eklenir. Çözünürlük, kare hızı ve codec kaynaktaki gibidir.</p>`
-              : html`
-              <div class="row2">
-                <${Field} label="Codec"><${Select} value=${v.codec} onChange=${setCodec} options=${CODECS} /></${Field}>
-                <${Field} label="Kodlayıcı"><${Select} value=${v.encoder} onChange=${(x) => tech({ video: { encoder: x } })}
-                  options=${[['auto', 'Otomatik (en iyisi)'], ...encoders.map((e) => [e.id, `${e.label} · ${e.id}`])]} /></${Field}>
-              </div>
-              <${Field} label="Hız kontrolü" hint=${v.rc === 'crf' ? 'Sabit kalite: dosya boyutu sahneye göre değişir.' : v.rc === 'vbr' ? 'Ortalama bit hızı, karmaşık sahnelere daha fazla.' : 'Sabit bit hızı: boyut kesin, kalite değişir.'}>
-                <${Segmented} value=${v.rc} onChange=${(x) => tech({ video: { rc: x } })} options=${[['crf', 'CRF / CQ'], ['vbr', 'VBR'], ['cbr', 'CBR']]} />
+          <section class=${cls('xadv', adv && 'open')}>
+            <button class="xadv-head" aria-expanded=${adv} onClick=${() => setAdv(!adv)}>
+              <${Icon} name="sliders" size=${16} /><span class="grow"><b>Teknik ayarlar</b><span class="small dim">Codec, kodlayıcı, bit hızı, ses yüksekliği, kapsayıcı</span></span>
+              <${Icon} name="chevron" size=${15} class="chev" /></button>
+            ${adv && html`<div class="xadv-body">
+              <${Field} label="Görüntü akışı">
+                <${Segmented} value=${v.mode} onChange=${(m) => tech(m === 'copy' ? { video: { mode: 'copy' }, format: 'original', subMode: 'soft' } : { video: { mode: 'encode' } })}
+                  options=${[['encode', 'Yeniden kodla'], ['copy', 'Kaynaktan kopyala (-c:v copy)']]} />
               </${Field}>
-              ${v.rc === 'crf'
-                ? html`<${Field} label=${html`Kalite <span class="tc">${v.codec === 'h264' ? 'CRF' : 'CRF/CQ'} ${v.quality}</span>`} hint="Düşük değer: daha kaliteli, daha büyük dosya. 18 gözle kayıpsıza yakındır.">
-                    <${Range} min=${qr[0]} max=${qr[1]} step=${1} value=${v.quality} onChange=${(x) => tech({ video: { quality: x } })} />
-                  </${Field}>`
-                : html`<${Field} label="Bit hızı (Mb/s)"><input class="input mono" type="number" min="0.5" max="200" step="0.5" value=${v.bitrate}
-                    onChange=${(e) => tech({ video: { bitrate: Number(e.target.value) } })} /></${Field}>`}
-              <div class="row2">
-                <${Field} label="Hız / verim (preset)" hint="Yavaş: aynı boyutta daha temiz görüntü.">
-                  <${Select} value=${v.preset} onChange=${(x) => tech({ video: { preset: x } })} options=${(sys.encoderPresets || ['medium']).map((x) => [x, x])} />
+              ${copying
+                ? html`<p class="field-hint">Görüntü bitlerine dokunulmaz: kaynak videonun kendi kodlaması aynen kalır, sadece yeni ses eklenir. Çözünürlük, kare hızı ve codec kaynaktaki gibidir.</p>`
+                : html`
+                <div class="row2">
+                  <${Field} label="Codec"><${Select} value=${v.codec} onChange=${setCodec} options=${CODECS} /></${Field}>
+                  <${Field} label="Kodlayıcı"><${Select} value=${v.encoder} onChange=${(x) => tech({ video: { encoder: x } })}
+                    options=${[['auto', 'Otomatik (en iyisi)'], ...encoders.map((e) => [e.id, `${e.label} · ${e.id}`])]} /></${Field}>
+                </div>
+                <${Field} label="Hız kontrolü" hint=${v.rc === 'crf' ? 'Sabit kalite: dosya boyutu sahneye göre değişir.' : v.rc === 'vbr' ? 'Ortalama bit hızı, karmaşık sahnelere daha fazla.' : 'Sabit bit hızı: boyut kesin, kalite değişir.'}>
+                  <${Segmented} value=${v.rc} onChange=${(x) => tech({ video: { rc: x } })} options=${[['crf', 'CRF / CQ'], ['vbr', 'VBR'], ['cbr', 'CBR']]} />
                 </${Field}>
-                <${Field} label="Kare hızı"><${Select} value=${String(v.fps)} onChange=${(x) => tech({ video: { fps: x === 'source' ? 'source' : Number(x) } })} options=${fpsOpts} /></${Field}>
-              </div>
+                ${v.rc === 'crf'
+                  ? html`<${Field} label=${html`Kalite <span class="tc">${v.codec === 'h264' ? 'CRF' : 'CRF/CQ'} ${v.quality}</span>`} hint="Düşük değer: daha kaliteli, daha büyük dosya. 18 gözle kayıpsıza yakındır.">
+                      <${Range} min=${qr[0]} max=${qr[1]} step=${1} value=${v.quality} onChange=${(x) => tech({ video: { quality: x } })} />
+                    </${Field}>`
+                  : html`<${Field} label="Bit hızı (Mb/s)"><input class="input mono" type="number" min="0.5" max="200" step="0.5" value=${v.bitrate}
+                      onChange=${(e) => tech({ video: { bitrate: Number(e.target.value) } })} /></${Field}>`}
+                <div class="row2">
+                  <${Field} label="Hız / verim (preset)" hint="Yavaş: aynı boyutta daha temiz görüntü.">
+                    <${Select} value=${v.preset} onChange=${(x) => tech({ video: { preset: x } })} options=${(sys.encoderPresets || ['medium']).map((x) => [x, x])} />
+                  </${Field}>
+                  <${Field} label="Kare hızı"><${Select} value=${String(v.fps)} onChange=${(x) => tech({ video: { fps: x === 'source' ? 'source' : Number(x) } })} options=${fpsOpts} /></${Field}>
+                </div>
+                <div class="row2">
+                  <${Field} label="Çözünürlük"><${Select} value=${String(v.height)} onChange=${(x) => tech({ video: { height: x === 'source' ? 'source' : Number(x) } })} options=${hOpts} /></${Field}>
+                  <${Field} label="Renk derinliği"><${Select} value=${v.pixfmt} onChange=${(x) => tech({ video: { pixfmt: x } })}
+                    options=${[['yuv420p', '8-bit · yuv420p'], ...(v.codec === 'h264' ? [] : [['yuv420p10le', '10-bit · yuv420p10le']])]} /></${Field}>
+                </div>
+                <${Field} label=${html`Anahtar kare aralığı (GOP) <span class="tc">${v.gop} sn</span>`} hint="Kısa aralık: videoda ileri sarma daha akıcı, dosya biraz büyür.">
+                  <${Range} min=${0.5} max=${10} step=${0.5} value=${v.gop} onChange=${(x) => tech({ video: { gop: x } })} />
+                </${Field}>`}
+              <div class="seclabel">Ses kodlama</div>
               <div class="row2">
-                <${Field} label="Çözünürlük"><${Select} value=${String(v.height)} onChange=${(x) => tech({ video: { height: x === 'source' ? 'source' : Number(x) } })} options=${hOpts} /></${Field}>
-                <${Field} label="Renk derinliği"><${Select} value=${v.pixfmt} onChange=${(x) => tech({ video: { pixfmt: x } })}
-                  options=${[['yuv420p', '8-bit · yuv420p'], ...(v.codec === 'h264' ? [] : [['yuv420p10le', '10-bit · yuv420p10le']])]} /></${Field}>
+                <${Field} label="Codec"><${Select} value=${a.codec} onChange=${(x) => tech({ audio: { codec: x } })} options=${Object.entries(sys.audioCodecs || {})} /></${Field}>
+                ${['aac', 'libopus'].includes(a.codec)
+                  ? html`<${Field} label="Bit hızı"><${Select} value=${String(a.bitrate)} onChange=${(x) => tech({ audio: { bitrate: Number(x) } })} options=${ABITRATES.map((b) => [String(b), b + ' kb/s'])} /></${Field}>`
+                  : html`<${Field} label="Örnekleme"><${Select} value=${String(a.sampleRate)} onChange=${(x) => tech({ audio: { sampleRate: Number(x) } })} options=${[['48000', '48 kHz'], ['44100', '44.1 kHz']]} /></${Field}>`}
               </div>
-              <${Field} label=${html`Anahtar kare aralığı (GOP) <span class="tc">${v.gop} sn</span>`} hint="Kısa aralık: videoda ileri sarma daha akıcı, dosya biraz büyür.">
-                <${Range} min=${0.5} max=${10} step=${0.5} value=${v.gop} onChange=${(x) => tech({ video: { gop: x } })} />
-              </${Field}>`}
-            <div class="seclabel">Ses kodlama</div>
-            <div class="row2">
-              <${Field} label="Codec"><${Select} value=${a.codec} onChange=${(x) => tech({ audio: { codec: x } })} options=${Object.entries(sys.audioCodecs || {})} /></${Field}>
-              ${['aac', 'libopus'].includes(a.codec)
-                ? html`<${Field} label="Bit hızı"><${Select} value=${String(a.bitrate)} onChange=${(x) => tech({ audio: { bitrate: Number(x) } })} options=${ABITRATES.map((b) => [String(b), b + ' kb/s'])} /></${Field}>`
-                : html`<${Field} label="Örnekleme"><${Select} value=${String(a.sampleRate)} onChange=${(x) => tech({ audio: { sampleRate: Number(x) } })} options=${[['48000', '48 kHz'], ['44100', '44.1 kHz']]} /></${Field}>`}
-            </div>
-            <${Toggle} checked=${a.loudnorm} onChange=${(x) => tech({ audio: { loudnorm: x } })} label="Ses yüksekliğini normalize et (EBU R128, iki geçiş)" />
-            ${a.loudnorm && html`<${Select} value=${String(a.lufs)} onChange=${(x) => tech({ audio: { lufs: Number(x) } })} options=${LUFS} />`}
-            <div class="seclabel">Kapsayıcı</div>
-            <${Segmented} value=${ex.container} onChange=${(x) => tech({ container: x })} options=${Object.keys(sys.containers || { mp4: 1 }).map((k) => [k, k.toUpperCase()])} />
-            <span class="field-hint">${(sys.containers || {})[ex.container]}</span>
-          </div>
-        </details>
-        <div class="pane-body"><${SourceInfo} info=${info} /></div>
+              <${Toggle} checked=${a.loudnorm} onChange=${(x) => tech({ audio: { loudnorm: x } })} label="Ses yüksekliğini normalize et (EBU R128, iki geçiş)" />
+              ${a.loudnorm && html`<${Select} value=${String(a.lufs)} onChange=${(x) => tech({ audio: { lufs: Number(x) } })} options=${LUFS} />`}
+              <div class="seclabel">Kapsayıcı</div>
+              <${Segmented} value=${ex.container} onChange=${(x) => tech({ container: x })} options=${Object.keys(sys.containers || { mp4: 1 }).map((k) => [k, k.toUpperCase()])} />
+              <p class="field-hint">${(sys.containers || {})[ex.container]}</p>
+              <${SourceInfo} info=${info} />
+            </div>`}
+          </section>
+        </div>
       </section>
 
       <section class="pane export-side">
         <div class="pane-head"><h3>Önizleme</h3><span class="grow"></span><span class="dim small">${recorded}/${p.lines.length} satır dublajlı</span></div>
         <${FramePlayer} p=${p} ex=${ex} />
-        <div class="pane-body make">
+        <div class="make">
           ${problem && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${problem}</div>`}
-          <div class="row nowrap">
-            <${Btn} kind="primary big" icon="film" onClick=${make} disabled=${running || !!problem}>${running ? 'Oluşturuluyor…' : 'Videoyu oluştur'}</${Btn}>
+          <div class="make-row">
+            <div class="make-sum"><span>${plainLine}</span><span class="mono dim">${techLine}</span></div>
+            <${Btn} kind="primary" class="make-go" icon="film" onClick=${make} disabled=${running || !!problem}>${running ? 'Oluşturuluyor…' : 'Videoyu oluştur'}</${Btn}>
           </div>
-          <div class="make-sum mono small dim">${copying ? 'Görüntü: kaynaktan kopya' : `${(CODECS.find((c) => c[0] === v.codec) || [])[1]} · ${v.rc === 'crf' ? 'CRF ' + v.quality : v.bitrate + ' Mb/s ' + v.rc.toUpperCase()} · ${v.preset}`}
-            · ${(sys.audioCodecs || {})[a.codec] || a.codec}${['aac', 'libopus'].includes(a.codec) ? ' ' + a.bitrate + 'k' : ''} · ${ex.container.toUpperCase()}${est ? ` · ~${fmtBytes(est)}` : ''}</div>
-          ${job && (running || job.status === 'error') && html`<div style=${{ marginTop: '10px' }}><${JobPanel} bare job=${job} /></div>`}
+          ${job && (running || job.status === 'error') && html`<div class="make-job"><${JobPanel} bare job=${job} /></div>`}
         </div>
       </section>
     </div>

@@ -10,16 +10,20 @@
   <header class="bar"><img src="icon.svg" alt=""><span class="word">DubKanka</span><span class="ver" id="ver"></span></header>
   <main id="root">
     <section class="starting" id="starting">
+      <img class="mark" src="icon.svg" alt="">
       <div class="lane"><i></i></div>
       <p id="startText">Başlatılıyor…</p>
     </section>
 
     <section class="install" id="install" hidden>
-      <h1 id="title">İlk kurulum</h1>
+      <img class="mark" src="icon.svg" alt="">
+      <h1 id="title">DubKanka hazırlanıyor</h1>
       <p class="lead" id="lead"></p>
-      <div class="overall"><div class="track"><i id="bar"></i></div><span class="mono" id="pct">0%</span><span class="mono dim" id="elapsed">0:00</span></div>
-      <ol class="steps" id="steps"></ol>
-      <div class="actions"><button class="btn" id="skip" hidden>Modelleri sonra indir</button></div>
+      <div class="card">
+        <div class="overall"><div class="track"><i id="bar"></i></div><span class="mono" id="pct">0%</span></div>
+        <ol class="steps" id="steps"></ol>
+      </div>
+      <p class="foot"><span class="mono dim" id="elapsed">0:00</span><span class="dim" id="footText">Bilgisayarı açık bırakman yeterli.</span></p>
       <details class="log"><summary>Ayrıntılar</summary><pre id="log"></pre></details>
     </section>
 

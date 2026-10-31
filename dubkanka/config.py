@@ -34,6 +34,7 @@ DEFAULT_SETTINGS = {
     "exportsDir": "",
     "defaultDstLang": "en",  # dub language for scenes prepared automatically
     "autoPrepare": True,  # a dropped video is prepared right away with automatic settings
+    "onboarded": None,  # the first-run feature picker was answered (None: not decided yet, see features.boot)
 }
 
 _lock = threading.Lock()

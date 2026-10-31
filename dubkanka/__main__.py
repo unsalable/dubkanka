@@ -98,10 +98,13 @@ def main():
     if settings.get("openBrowser", True) and not args.no_browser:
         threading.Timer(1.5, lambda: webbrowser.open(url)).start()
 
+    from .features import boot
+    boot()  # removals that waited for a restart run before anything can load the feature again
+
     import uvicorn
     from .gpu import gpu_info
     from .server import app
-    threading.Thread(target=gpu_info, daemon=True).start()  # warm up torch/CUDA in the background
+    threading.Thread(target=gpu_info, daemon=True).start()  # ask the driver about the card in the background
     threading.Thread(target=_warm_encoders, daemon=True).start()
     _quiet_dropped_connections()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", timeout_keep_alive=30)

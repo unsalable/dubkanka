@@ -1,0 +1,12 @@
+# What the first run installs: the studio itself (server, audio math, link downloads, AI voice, translation clients).
+# Versions come from requirements.lock (-c). The AI features (speech, separation, cleanup) are added later from
+# Ayarlar → Özellikler; their packages are listed in dubkanka/features.py.
+fastapi
+uvicorn
+numpy
+scipy
+soundfile
+segno
+yt-dlp[default]
+edge-tts
+anthropic

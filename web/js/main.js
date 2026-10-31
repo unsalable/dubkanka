@@ -3,13 +3,14 @@ import { api, P } from './api.js';
 import { Icon, Toasts, useIndicator } from './components.js';
 import { desktop, useUpdate } from './desktop.js';
 import { player } from './engine.js';
-import { go, openProject, setState, startWatch, store, toastError, useStore } from './state.js';
+import { backFromRoom, backFromSettings, go, openProject, setState, startWatch, store, toastError, useStore } from './state.js';
 import { cls } from './util.js';
 import { BoothView } from './views/booth.js';
 import { ExportView } from './views/export.js';
 import { GuestApp } from './views/guest.js';
 import { HomeView } from './views/home.js';
 import { MixerView } from './views/mixer.js';
+import { Onboarding } from './views/onboarding.js';
 import { PrepareView } from './views/prepare.js';
 import { RoomView } from './views/room.js';
 import { ScriptView } from './views/script.js';
@@ -28,10 +29,12 @@ function RoomButton({ project, active }) {
   const r = s.room;
   const on = r && r.status === 'on';
   const online = on ? (r.guests || []).filter((g) => g.online).length : 0;
-  const href = project ? `#/p/${project.id}/room` : r && r.projectId ? `#/p/${r.projectId}/room` : null;
-  if (!href) return null;
+  const pid = project ? project.id : r && r.projectId;
+  if (!pid) return null;
+  // the room is a place you visit: pressing its button again takes you back
+  const href = active ? backFromRoom(pid) : `#/p/${pid}/room`;
   const tone = !r || r.status === 'off' ? null : on ? 'ok' : r.status === 'starting' ? 'busy' : 'bad';
-  return html`<a class=${cls('roombtn', active && 'active')} href=${href} title="Arkadaşlarını odaya çağır">
+  return html`<a class=${cls('roombtn', active && 'active')} href=${href} title=${active ? 'Odadan çık' : 'Arkadaşlarını odaya çağır'}>
     ${tone ? html`<span class=${cls('lamp', tone)}></span>` : html`<${Icon} name="users" size=${16} />`}
     <span class="roombtn-label">${!r || r.status === 'off' ? 'Oda' : on ? 'Oda açık' : r.status === 'starting' ? 'Oda açılıyor' : 'Oda hatası'}</span>
     ${on && html`<span class="count" title="Odadaki arkadaşlar">${online}</span>`}</a>`;
@@ -42,6 +45,19 @@ function UpdateButton() {
   if (!u || u.state !== 'downloaded') return null;
   return html`<button class="updatebtn" title=${`DubKanka ${u.version} indirildi`} onClick=${() => desktop.updates.install()}>
     <${Icon} name="refresh" size=${14} />Güncelle ve yeniden başlat</button>`;
+}
+
+/** Features downloading in the background: one ring for all of them, a click shows the details. */
+function DownloadPill() {
+  const s = useStore();
+  const js = s.jobs.filter((j) => j.kind === 'feature' && (j.status === 'running' || j.status === 'queued'));
+  if (!js.length) return null;
+  const f = js.reduce((a, j) => a + (j.progress || 0), 0) / js.length;
+  const C = 2 * Math.PI * 6;
+  return html`<a class="dlpill" href="#/settings/features" title=${js.map((j) => j.title).join('\n')}>
+    <svg class="ring" viewBox="0 0 16 16"><circle class="ring-bg" cx="8" cy="8" r="6" /><circle class="ring-fg" cx="8" cy="8" r="6"
+      style=${{ strokeDasharray: C, strokeDashoffset: C * (1 - f) }} /></svg>
+    <span>${js.length > 1 ? `${js.length} özellik iniyor` : 'İndiriliyor'}</span><span class="tc">%${Math.round(f * 100)}</span></a>`;
 }
 
 function ProjectName({ p }) {
@@ -74,19 +90,22 @@ function Tabs({ project, tab }) {
   </nav>`;
 }
 
-function Shell({ project, tab, children }) {
+function Shell({ project, tab, children, bare }) {
+  const inSettings = store.route[0] === 'settings';
   return html`<div class="shell">
     <header class="topbar">
       <div class="topbar-left">
         <a class="brand" href="#/" title="Projeler"><img src="/web/icon.svg" alt="" /><span>DubKanka</span></a>
-        ${project && html`<span class="crumb">/</span><${ProjectName} p=${project} />`}
+        ${project && html`<span class="crumb"><${Icon} name="chevron" size=${14} /></span><${ProjectName} p=${project} />`}
       </div>
       ${project ? html`<${Tabs} project=${project} tab=${tab} />` : html`<span class="topbar-spacer"></span>`}
-      <div class="topbar-right">
+      ${!bare && html`<div class="topbar-right">
+        <${DownloadPill} />
         <${UpdateButton} />
         <${RoomButton} project=${project} active=${tab === 'room'} />
-        <a class=${cls('iconbtn', store.route[0] === 'settings' && 'on')} href="#/settings" title="Ayarlar"><${Icon} name="gear" /></a>
-      </div>
+        <a class=${cls('iconbtn', inSettings && 'on')} href=${inSettings ? backFromSettings() : '#/settings'} title=${inSettings ? 'Ayarları kapat (Esc)' : 'Ayarlar'}
+          aria-pressed=${inSettings}><${Icon} name=${inSettings ? 'x' : 'gear'} /></a>
+      </div>`}
     </header>
     <main class="main">${children}</main>
   </div>`;
@@ -95,7 +114,7 @@ function Shell({ project, tab, children }) {
 function Loading() {
   return html`<div class="page" aria-busy="true">
     <div class="ws" style=${{ gridTemplateColumns: 'minmax(0,1.1fr) minmax(320px,1fr)', height: 'min(62vh, 640px)' }}>
-      <div class="skel" style=${{ borderRadius: 0 }}></div><div class="skel" style=${{ borderRadius: 0 }}></div>
+      <div class="skel"></div><div class="skel"></div>
     </div>
   </div>`;
 }
@@ -123,10 +142,13 @@ function App() {
       <button class="btn" onClick=${() => location.reload()}>Tekrar dene</button></div>`;
   if (!s.role) return html`<div class="boot"><img class="boot-mark" src="/web/icon.svg" alt="" />Bağlanıyor…</div>`;
   if (s.role !== 'host') return html`<${GuestApp} /><${Toasts} />`;
+  // nothing until the system info is here: a first start must open on the feature picker, not flash the home page
+  if (!s.system) return html`<div class="boot"><img class="boot-mark" src="/web/icon.svg" alt="" />Açılıyor…</div>`;
   const [a, b, c] = s.route;
   let view;
-  if (a === 'p' && b) view = html`<${ProjectShell} pid=${b} tab=${c} />`;
-  else if (a === 'settings') view = html`<${Shell}><${SettingsView} /></${Shell}>`;
+  if (s.system && s.system.settings.onboarded === false) view = html`<${Shell} bare><${Onboarding} /></${Shell}>`;
+  else if (a === 'p' && b) view = html`<${ProjectShell} pid=${b} tab=${c} />`;
+  else if (a === 'settings') view = html`<${Shell}><${SettingsView} page=${b} /></${Shell}>`;
   else view = html`<${Shell}><${HomeView} /></${Shell}>`;
   return html`${view}<${Toasts} />${!s.online && html`<div class="offline" role="alert"><${Icon} name="alert" size=${16} />
     Uygulamayla bağlantı koptu. DubKanka açık mı?</div>`}`;

@@ -1,7 +1,8 @@
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P } from '../api.js';
 import { Btn, Field, Icon, JobPanel, Select } from '../components.js';
-import { go, jobOf, toast, toastError, useStore } from '../state.js';
+import { FeatureOffer } from '../feature-ui.js';
+import { featureReady, go, jobOf, toast, toastError, useStore } from '../state.js';
 import { clamp, fmtTime, parseTime } from '../util.js';
 
 const running = (j) => j && (j.status === 'running' || j.status === 'queued');
@@ -90,9 +91,11 @@ export function PrepareView({ p }) {
   if (!p.source)
     return html`<div class="page narrow"><${JobPanel} job=${imp} /><${Btn} icon="back" onClick=${() => go('')}>Projelere dön</${Btn}></div>`;
 
+  const speech = featureReady('speech');
+  const separate = featureReady('separate');
   if (running(prep) || p.status === 'preparing')
     return html`<${Processing} p=${p} job=${prep || { title: 'Sahne hazırlanıyor', status: 'queued', progress: 0, message: 'Sırada…' }}
-      title="Sahne hazırlanıyor" note="İlk seferde yapay zeka modelleri indiği için birkaç dakika sürebilir; sonrakiler çok daha hızlı. Bitince senaryo açılır." />`;
+      title="Sahne hazırlanıyor" note=${speech || separate ? 'Yapay zeka ilk kullanımda biraz daha uzun sürer. Bitince senaryo açılır.' : 'Sahne kesiliyor. Bitince senaryo açılır.'} />`;
 
   const src = fileUrl(p.id, p.source.proxy || p.source.file);
   const set = (k) => (v) => setOpts((o) => ({ ...o, [k]: v }));
@@ -153,7 +156,7 @@ export function PrepareView({ p }) {
       </section>
       <section class="pane">
         <div class="pane-head"><h3>Sahne ayarları</h3></div>
-        <div class="pane-body">
+        ${speech ? html`<div class="pane-body">
           <${Field} label="Videodaki dil">
             <${Select} value=${opts.srcLang || 'auto'} onChange=${set('srcLang')} options=${[['auto', 'Otomatik algıla'], ...langs]} />
           </${Field}>
@@ -170,11 +173,15 @@ export function PrepareView({ p }) {
           ${tr.kind === 'llm' && html`<${Field} label="Çeviri tarzı">
             <${Select} value=${opts.style || 'natural'} onChange=${set('style')} options=${Object.entries(sys.styles || {})} />
           </${Field}>`}
-          ${tr.id && !tr.configured && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${tr.name} ayarlanmamış; satırlar çevrilmeden kalır. <a href="#/settings">Ayarlar</a></div>`}
-        </div>
+          ${tr.id && !tr.configured && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${tr.name} ayarlanmamış; satırlar çevrilmeden kalır. <a href="#/settings/translate">Ayarlar</a></div>`}
+        </div>` : null}
+        ${!(speech && separate) && html`<div class="pane-body prep-offers">
+          <${FeatureOffer} id="speech" text="Satırları kendiliğinden yazar ve çevirir. Yoksa satırları Senaryo'da sen eklersin." />
+          <${FeatureOffer} id="separate" text="Fon müziği ve efektler dublajın altında kalır. Yoksa orijinal ses kısılarak çalar." />
+        </div>`}
         <div class="pane-body prep-cta">
           <${Btn} kind="primary big" icon="sparkle" onClick=${start}>${p.status === 'ready' ? 'Yeniden hazırla' : 'Sahneyi hazırla'}</${Btn}>
-          <p>Konuşmalar fondan ayrılır (kuş, rüzgar gibi ortam sesleri korunur), yazıya dökülür, konuşmacılara bölünür ve çevrilir. Bitince senaryo açılır.</p>
+          <p>${separate ? 'Konuşmalar fondan ayrılır, ortam sesleri korunur' : 'Sahne kesilir, orijinal ses dublajın altında kalır'}; ${speech ? 'satırlar yazılır, kişilere bölünür ve çevrilir' : 'satırları Senaryo’da sen yazarsın'}. Bitince senaryo açılır.</p>
         </div>
       </section>
     </div>

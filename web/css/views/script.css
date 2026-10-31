@@ -1,32 +1,31 @@
 /* ---------- script: video and cast on the left, the cue sheet on the right, the dialogue timeline below ---------- */
 .script-ws { grid-template-columns: minmax(0, 1.05fr) minmax(400px, 1fr); grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: 'viewer lines' 'tl tl';
-  height: calc(100dvh - var(--topbar-h) - 1px); }
-.script-ws > .viewer-col { grid-area: viewer; display: grid; grid-template-rows: minmax(220px, 1fr) minmax(120px, auto); gap: 1px; min-height: 0; background: var(--line); }
+  height: var(--page-h); }
+.script-ws > .viewer-col { grid-area: viewer; display: grid; grid-template-rows: minmax(220px, 1fr) minmax(120px, auto); gap: var(--gap); min-height: 0; }
 .script-ws > .lines-pane { grid-area: lines; }
 .script-ws > .tl { grid-area: tl; }
 .cast-pane { max-height: 32vh; }
 
 /* cast: one row per character, its highlighter colour as a chip you can repaint */
 .cast { padding: 4px 0; }
-.castrow { display: grid; grid-template-columns: 22px minmax(90px, 0.9fr) minmax(80px, 1fr) 28px 24px; align-items: center; gap: 6px; padding: 3px 8px 3px 12px;
+.castrow { display: grid; grid-template-columns: 22px minmax(90px, 0.9fr) minmax(80px, 1fr) 28px 28px; align-items: center; gap: 6px; padding: 3px 8px 3px 10px; margin: 0 4px; border-radius: 9px;
   animation: rise var(--t-slow) var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 10) * 24ms * var(--mv)); }
-.castrow:hover { background: rgba(255, 255, 255, 0.02); }
+.castrow:hover { background: rgba(255, 250, 235, 0.03); }
 .castrow .tc { text-align: right; font-size: 12px; }
 .castname { font-size: 13px; }
 .castactor { color: var(--text-2); font-size: 12px; }
-.colorpick { position: relative; width: 16px; height: 16px; border-radius: var(--r-xs); background: var(--c); cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+.colorpick { position: relative; width: 16px; height: 16px; border-radius: 50%; background: var(--c); cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
   transition: transform var(--t-fast) var(--ease-out); }
 .colorpick:hover { transform: scale(1.12); }
 .colorpick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
 
 /* cue sheet */
-.lines { display: flex; flex-direction: column; }
-.linerow { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 2px 8px; padding: 9px 8px 10px 0; border-bottom: 1px solid var(--line);
-  cursor: pointer; transition: background-color var(--t-fast); animation: rise calc(380ms * var(--m)) var(--ease-out) both;
+.lines { display: flex; flex-direction: column; gap: 2px; padding: 6px; }
+.linerow { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 2px 8px; padding: 9px 8px 10px 0; border-radius: 10px;
+  cursor: pointer; transition: background-color var(--t-fast), box-shadow var(--t-fast); animation: rise calc(380ms * var(--m)) var(--ease-out) both;
   animation-delay: calc(min(var(--i, 0), 14) * 20ms * var(--mv)); }
-.linerow:hover { background: rgba(255, 255, 255, 0.018); }
-.linerow.sel { background: rgba(255, 210, 63, 0.05); }
-.linerow.sel::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+.linerow:hover { background: rgba(255, 250, 235, 0.03); }
+.linerow.sel { background: rgba(255, 210, 63, 0.07); box-shadow: inset 0 0 0 1px rgba(255, 210, 63, 0.24); }
 .linerow-num { font: 500 12px var(--mono); color: var(--text-3); text-align: right; padding-top: 4px; font-variant-numeric: tabular-nums; }
 .linerow.sel .linerow-num { color: var(--accent); }
 .linerow-main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
@@ -34,14 +33,14 @@
 .linerow-meta .tc { font-size: 12px; color: var(--text-2); }
 .linerow-meta .tc.dim { color: var(--text-3); }
 .chartag { display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 4px 0 0; border: 0; background: transparent; color: var(--text); font: 600 12px var(--font);
-  font-stretch: var(--cond); letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; border-radius: var(--r-sm); }
+  font-stretch: var(--cond); letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; border-radius: 6px; }
 .chartag .chev { color: var(--text-3); transform: rotate(90deg); transition: transform var(--t) var(--ease-out); }
 .chartag:hover .chev { color: var(--text); }
 .chartag[aria-expanded='true'] .chev { transform: rotate(-90deg); }
 .orig { color: var(--text-2); font-size: 12.5px; line-height: 1.45; }
 .orig em { color: var(--text-3); }
 .dubtext { font-size: 15px; font-weight: 500; line-height: 1.4; min-height: 32px; resize: none; overflow: hidden; background: transparent; border-color: transparent;
-  padding: 4px 8px; margin-left: -8px; width: calc(100% + 8px); }
+  padding: 4px 8px; margin-left: -8px; width: calc(100% + 8px); border-radius: 8px; }
 .dubtext:hover { background: var(--sunk); border-color: var(--line-2); }
 .dubtext:focus { background: var(--sunk); }
 .linerow.flash .dubtext { animation: flash calc(900ms * var(--m)) var(--ease-out); }
@@ -60,3 +59,5 @@
   .linerow-acts { grid-column: 2; flex-direction: row; padding-top: 0; }
   .castrow { grid-template-columns: 22px 1fr 1fr 24px 24px; }
 }
+.empty-offer { margin-top: 14px; width: min(460px, 100%); text-align: left; flex-wrap: wrap; }
+.empty-offer .offer-act { margin-left: 46px; max-width: none; }

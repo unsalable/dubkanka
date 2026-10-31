@@ -79,6 +79,8 @@ def render(p, d, mode="dub"):
     if mode == "original":
         x, _ = media.read_audio(d / p["stems"]["original"])
         return x
+    if mode == "clean" and p["stems"].get("separated") is False:
+        raise media.MediaError("Bu sahnede konuşmalar fondan ayrılmadı, konuşmasız ses yok. Mikser'den konuşmaları ayırabilirsin.")
     bg, sr = media.read_audio(d / p["stems"]["background"])
     n = len(bg)
     mix = p["mix"]

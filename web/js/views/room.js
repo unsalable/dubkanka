@@ -1,7 +1,8 @@
 import { html, useState } from '../../vendor/preact-htm.js';
 import { api } from '../api.js';
-import { Btn, Icon, JobPanel, Lamp } from '../components.js';
-import { jobOf, toast, toastError, useStore } from '../state.js';
+import { Btn, Icon, Lamp } from '../components.js';
+import { FeatureOffer } from '../feature-ui.js';
+import { toast, toastError, useStore } from '../state.js';
 import { copyText, LS, timeAgo } from '../util.js';
 import { scriptText } from './script.js';
 
@@ -20,8 +21,6 @@ export function RoomView({ p }) {
   const s = useStore();
   const r = s.room || { status: 'off' };
   const [busy, setBusy] = useState(false);
-  const dl = s.jobs.find((j) => j.kind === 'download') || jobOf('download');
-  const dlRunning = dl && (dl.status === 'running' || dl.status === 'queued');
   const mine = r.projectId === p.id;
   const open = async () => {
     setBusy(true);
@@ -35,7 +34,7 @@ export function RoomView({ p }) {
   const how = html`<details class="panel how"><summary><strong>Nasıl çalışıyor, ücretli mi?</strong></summary>
     <ul class="how-list">
       <li>Oda bu bilgisayarda açılır. Cloudflare'in <b>ücretsiz geçici tüneli</b> (hesap gerekmez) arkadaşlarına güvenli bir https linki verir. Link sadece DubKanka açıkken çalışır.</li>
-      <li>Ses ayırma, yazıya dökme ve kayıt işleme bu bilgisayarın ekran kartında yapılır. Hiçbir bulut servisi kullanılmaz, ücret çıkmaz.</li>
+      <li>Ses ayırma, yazıya dökme ve kayıt işleme bu bilgisayarda yapılır. Hiçbir bulut servisi kullanılmaz, ücret çıkmaz.</li>
       <li>Google Çeviri ücretsizdir. Ayarlar'a anahtar girdiğin dil modelleri (Claude, OpenAI…) kendi hesabından ücretlendirilir; girmezsen hiç kullanılmaz.</li>
       <li>DubKanka'yı kuran her arkadaş kendi odasını açabilir; senin açık olman gerekmez.</li>
     </ul></details>`;
@@ -44,9 +43,8 @@ export function RoomView({ p }) {
     return html`<div class="page narrow room">
       ${head}
       <section class="panel">
-        <p>Oda için bir kerelik küçük bir bağlantı aracı indirilecek: Cloudflare <span class="mono">cloudflared</span>, ücretsiz, yaklaşık 60 MB.</p>
-        ${dl && html`<${JobPanel} bare job=${dl} />`}
-        <${Btn} kind="primary" icon="download" disabled=${dlRunning} onClick=${() => api.post('/api/room/cloudflared').catch(toastError)}>Bağlantı aracını indir</${Btn}>
+        <p>Oda için bir kerelik küçük bir bağlantı aracı iner: Cloudflare'in ücretsiz <span class="mono">cloudflared</span> aracı. Hesap gerekmez.</p>
+        <${FeatureOffer} id="room" text="Arkadaşların linkle telefondan katılır, kendi rolünü kaydeder." />
       </section>
       ${how}<${OfflineHelp} p=${p} />
     </div>`;

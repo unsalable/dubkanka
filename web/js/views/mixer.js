@@ -2,7 +2,8 @@ import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P, upload } from '../api.js';
 import { Btn, BusMeter, Field, GainSlider, Icon, JobPanel, Lamp, Modal, PlayButton, Range, Segmented, Select, Swatch, TimeReadout, Toggle, usePlaying, VideoPane } from '../components.js';
 import { buildMix, loadMixBuffers, player, takeSpan } from '../engine.js';
-import { go, jobOf, patchLocal, toast, toastError, useStore } from '../state.js';
+import { FeatureOffer } from '../feature-ui.js';
+import { featureReady, go, jobOf, patchLocal, toast, toastError, useStore } from '../state.js';
 import { fitZoom, Timeline } from '../timeline.js';
 import { cls, db2gain, fmtTime, readyTake, selectedTake } from '../util.js';
 
@@ -55,7 +56,8 @@ function TakeInspector({ p, line, onChanged }) {
         <${Toggle} checked=${!!t.fit} onChange=${(v) => patch({ fit: v })} label=${`Satır süresine sığdır${t.fit && t.tempo && t.tempo !== 1 ? ` (x${t.tempo})` : ''}`} />
         <${Toggle} checked=${t.matchLevel !== false} onChange=${(v) => patch({ matchLevel: v })} label="Seviyeyi orijinale eşitle" />
         <${Toggle} checked=${!!t.hpf} onChange=${(v) => patch({ hpf: v })} label="Alçak kesme 80 Hz" />
-        <${Toggle} checked=${!!t.denoise} onChange=${(v) => patch({ denoise: v })} label="Yapay zeka gürültü temizleme" />
+        <${Toggle} checked=${!!t.denoise} disabled=${!t.denoise && !denoiseReady()} onChange=${(v) => patch({ denoise: v })}
+          label=${denoiseReady() ? 'Yapay zeka gürültü temizleme' : html`<span class="toggle-text">Yapay zeka gürültü temizleme<small>Ayarlar → Özellikler'den Kayıt temizleme'yi ekle</small></span>`} />
         <${Field} label="Ses efekti">
           <${Select} value=${t.effect || ''} onChange=${(v) => patch({ effect: v || null })} options=${[['', `Karakterinki (${(s.system?.effects || {})[c.effect || 'none'] || 'yok'})`], ...effects]} />
         </${Field}>
@@ -64,6 +66,9 @@ function TakeInspector({ p, line, onChanged }) {
         </${Field}>`}
   </div>`;
 }
+
+// DPDFNet comes with "Kayıt temizleme" (or with "Müziği koru", which needs it too)
+const denoiseReady = () => featureReady('cleanup') || featureReady('separate');
 
 function SfxInspector({ p, sfx, onChanged }) {
   const patch = (body) => {
@@ -182,15 +187,19 @@ export function MixerView({ p }) {
   const chars = p.characters;
   const dubbed = new Set(p.lines.filter((l) => readyTake(l)).map((l) => l.id));
   const ambJob = jobOf('ambience');
+  // a scene prepared without voice separation: its own audio is the background, the original voices are in it
+  const unsep = p.stems && p.stems.separated === false;
+  const sepJob = jobOf('separate');
+  const sepRunning = sepJob && (sepJob.status === 'running' || sepJob.status === 'queued');
   const ambRunning = ambJob && (ambJob.status === 'running' || ambJob.status === 'queued');
   const lineNo = (l) => p.lines.indexOf(l) + 1;
   const tracks = [
     {
-      id: 'bg', label: trackTitle('#7f9cbb', 'Fon: müzik ve efekt', 'bg'), height: 50, buffer: bufs && bufs.bg, muted: mix.bgMute, waveColor: 'rgba(127,156,187,0.55)',
+      id: 'bg', label: trackTitle('#7f9cbb', unsep ? 'Orijinal ses (ayrılmadı)' : 'Fon: müzik ve efekt', 'bg'), height: 50, buffer: bufs && bufs.bg, muted: mix.bgMute, waveColor: 'rgba(127,156,187,0.55)',
       controls: html`<div class="tl-ctrl"><${MuteBtn} muted=${mix.bgMute} onClick=${() => { patchMix({ bgMute: !mix.bgMute }); restartIfPlaying(); }} />
         <${GainSlider} value=${mix.bgGain} onInput=${(v) => busGain('bg', db2gain(v))} onCommit=${(v) => patchMix({ bgGain: v })} /></div>`,
     },
-    {
+    ...(unsep ? [] : [{
       // birds, wind, crowd: what the voice separation took along with the dialogue, given back on its own fader
       id: 'amb', label: trackTitle('#6bbf4e', 'Ortam: kuş, rüzgar, kalabalık', p.stems.ambience && 'amb'), height: 50, buffer: bufs && bufs.amb, muted: mix.ambMute, waveColor: 'rgba(107,191,78,0.5)',
       controls: p.stems.ambience
@@ -206,7 +215,7 @@ export function MixerView({ p }) {
       clips: p.lines.map((l) => ({ id: 'o' + l.id, start: l.start, end: l.end, color: (chars.find((c) => c.id === l.char) || {}).color,
         label: `${lineNo(l)}`, dim: dubbed.has(l.id) || !mix.fillMissing, className: 'origclip', title: l.orig, resizable: true })),
       controls: html`<div class="tl-ctrl"><${Toggle} checked=${mix.fillMissing} onChange=${(v) => { patchMix({ fillMissing: v }); restartIfPlaying(); }} label="Kaydı olmayan satırlarda çalsın" /></div>`,
-    },
+    }]),
     ...chars.map((c) => ({
       id: 'c' + c.id, label: trackTitle(c.color, c.name, 'char:' + c.id), color: c.color, height: 60, muted: c.mute,
       clips: p.lines.filter((l) => l.char === c.id).map((l) => {
@@ -273,7 +282,7 @@ export function MixerView({ p }) {
           <${PlayButton} playing=${playing} onClick=${toggle} disabled=${!bufs} />
           <${TimeReadout} duration=${dur} />
           <span class="vsep"></span>
-          <${Segmented} value=${mode} onChange=${setMode_} options=${[['dub', 'Dublaj'], ['original', 'Orijinal'], ['clean', 'Konuşmasız']]} />
+          <${Segmented} value=${mode} onChange=${setMode_} options=${[['dub', 'Dublaj'], ['original', 'Orijinal'], ...(unsep ? [] : [['clean', 'Konuşmasız']])]} />
           <span class="grow"></span>
           <div class="master" title="Çıkış seviyesi"><span class="label">Çıkış</span><${BusMeter} bus="master" /></div>
         </div>
@@ -289,7 +298,15 @@ export function MixerView({ p }) {
           </div>
           <div class="pane-body">
             <div class="seclabel">Miks</div>
-            <${Field} label=${html`Konuşurken fonu kıs <span class="tc">${mix.duck || 0} dB</span>`} hint="Dublajı öne çıkarır; ortam sesleri de birlikte kısılır.">
+            ${unsep && html`<div class="unsep">
+              <p class="small muted">Bu sahnede konuşmalar fondan ayrılmadı: orijinal ses dublajın altında kısılarak çalıyor.</p>
+              ${featureReady('separate')
+                ? sepRunning
+                  ? html`<${JobPanel} bare job=${sepJob} />`
+                  : html`<${Btn} small icon="music" onClick=${() => api.post(P(p.id, '/separate')).catch(toastError)}>Konuşmaları fondan ayır</${Btn}>`
+                : html`<${FeatureOffer} id="separate" text="Ekleyince bu sahnede konuşmaları tek tıkla ayırırsın; satırlar ve kayıtlar olduğu gibi kalır." />`}
+            </div>`}
+            <${Field} label=${html`${unsep ? 'Konuşurken orijinali kıs' : 'Konuşurken fonu kıs'} <span class="tc">${mix.duck || 0} dB</span>`} hint=${unsep ? 'Dublaj konuşurken orijinal ses bu kadar kısılır.' : 'Dublajı öne çıkarır; ortam sesleri de birlikte kısılır.'}>
               <${Range} min=${0} max=${15} step=${1} value=${mix.duck || 0} onChange=${(v) => { patchMix({ duck: v }); restartIfPlaying(); }} />
             </${Field}>
             <${GainSlider} label="Tüm dublaj" value=${mix.dubGain || 0} onCommit=${(v) => { patchMix({ dubGain: v }); restartIfPlaying(); }} />
