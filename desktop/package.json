@@ -92,7 +92,7 @@
         "provider": "github",
         "owner": "unsalable",
         "repo": "dubkanka",
-        "releaseType": "release"
+        "releaseType": "draft"
       }
     ]
   }

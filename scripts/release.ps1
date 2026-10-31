@@ -1,7 +1,7 @@
-# Publish a new DubKanka version: .\scripts\release.ps1 1.2.0
-# Sets the version in desktop/package.json, commits, tags v1.2.0 and pushes. GitHub Actions then builds
-# DubKanka-Setup-1.2.0.exe and publishes the release; installed apps update themselves from it.
-param([Parameter(Mandatory = $true)][string]$Version)
+# Publish a new DubKanka version: .\scripts\release.ps1 1.2.0 "Bu sürümde ne değişti"
+# Sets the version in desktop/package.json, commits, tags v1.2.0 (the notes go into the tag) and pushes. GitHub
+# Actions then builds DubKanka-Setup-1.2.0.exe and publishes the release; installed apps update themselves from it.
+param([Parameter(Mandatory = $true)][string]$Version, [string]$Notes = "")
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath (Split-Path -Parent $PSScriptRoot)
 
@@ -19,7 +19,9 @@ npm version $Version --no-git-tag-version --allow-same-version | Out-Null
 Pop-Location
 git add desktop/package.json desktop/package-lock.json
 git commit -m "Release $tag"
-git tag $tag
+# the tag message becomes the release notes on GitHub
+if (-not $Notes) { $Notes = Read-Host "Sürüm notu (bu sürümde ne değişti?)" }
+git tag -a $tag -m "DubKanka $Version`n`n$Notes"
 git push origin $branch
 git push origin $tag
 Write-Host "Gönderildi. Kurulum dosyası birkaç dakika içinde https://github.com/unsalable/dubkanka/releases adresinde." -ForegroundColor Green

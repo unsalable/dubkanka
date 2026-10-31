@@ -85,10 +85,10 @@ Uygulamayı kaldırmak projelere dokunmaz. Her şeyi silmek için kaldırdıktan
 ## Yeni sürüm yayınlamak
 
 ```powershell
-.\scripts\release.ps1 1.2.0
+.\scripts\release.ps1 1.2.0 "Kayıt ekranında yeni kısayollar"
 ```
 
-Sürümü `desktop/package.json`'a yazar, commit'ler, `v1.2.0` etiketini gönderir. GitHub Actions `DubKanka-Setup-1.2.0.exe`'yi derleyip sürüm olarak yayınlar; kurulu uygulamalar kendini günceller.
+Sürümü `desktop/package.json`'a yazar, commit'ler, notu `v1.2.0` etiketine koyup gönderir. GitHub Actions `DubKanka-Setup-1.2.0.exe`'yi derleyip sürüm olarak yayınlar; kurulu uygulamalar kendini günceller.
 
 ## Geliştirme
 
