@@ -178,3 +178,7 @@ def translate_lines(lines, characters, src, dst, engine, style, settings, progre
         return {l["id"]: l["orig"] for l in lines}
     texts = translate_google([l["orig"] for l in lines], src, dst, progress)
     return {l["id"]: t for l, t in zip(lines, texts)}
+
+
+def system_info():
+    return {"languages": LANGUAGES, "styles": STYLES}

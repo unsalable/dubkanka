@@ -1,0 +1,13 @@
+/* ---------- guest ---------- */
+.join { min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 16px; }
+.join-card { width: min(400px, 100%); padding: 28px 24px 22px; animation: modal-in 480ms var(--ease-out); }
+.join-card h1 { margin: 14px 0 6px; font-size: 20px; }
+.join-card > p { color: var(--text-2); }
+.join-logo { width: 44px; height: 44px; display: block; }
+.pin { font: 700 22px var(--mono); letter-spacing: 0.5em; text-align: center; height: 44px; }
+.join-note { display: flex; align-items: center; gap: 8px; color: var(--text-3); font-size: 12px; margin: 12px 0 0; }
+.rolecards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; margin: 16px 0; }
+.rolecard { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 16px; border-radius: 10px; border: 1px solid var(--line-2); background: var(--panel); color: var(--text); font: inherit; font-size: 15px; cursor: pointer; text-align: left; transition: border-color var(--t), background-color var(--t), transform 120ms var(--ease-out); animation: rise 420ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 50ms); }
+.rolecard:hover { border-color: color-mix(in srgb, var(--c) 70%, transparent); background: color-mix(in srgb, var(--c) 8%, var(--panel)); }
+.rolecard:active { transform: scale(0.98); }
+.rolecard .swatch { width: 14px; height: 14px; border-radius: 4px; }

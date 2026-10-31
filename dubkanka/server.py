@@ -13,13 +13,14 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, PlainTex
 from fastapi.staticfiles import StaticFiles
 
 from . import media
-from .config import EXPORTS_DIR, MODELS_DIR, WEB_DIR, load_settings, public_settings, save_settings
+from . import __version__
+from .config import DESKTOP, EXPORTS_DIR, HOME, MODELS_DIR, PROJECTS_DIR, RUNTIME, WEB_DIR, load_settings, public_settings, save_settings
 from .gpu import gpu_info
 from .jobs import bus, jobs
 from .projects import add_character, find_char, find_line, find_take, new_id, sort_lines, store
 from .room import download_cloudflared, room
 
-VERSION = "1.0.0"
+VERSION = __version__
 GUEST_COOKIE = "dk_guest"
 _SPLIT_TEXT = re.compile(r"\s+")
 
@@ -143,15 +144,14 @@ async def whoami(request: Request):
 @app.get("/api/system")
 def system(request: Request):
     host_only(request)
-    from .export import FORMATS, SUBS
-    from .takes import EFFECTS, TTS_VOICES
-    from .translate import LANGUAGES, STYLES
+    from . import export, takes, translate
     ok = media.has_ffmpeg()
     whisper_dir = MODELS_DIR / "whisper"
     return {
         "version": VERSION, "ffmpeg": ok, "caps": media.ffmpeg_caps() if ok else {}, "gpu": gpu_info(),
-        "settings": public_settings(), "languages": LANGUAGES, "styles": STYLES, "effects": EFFECTS,
-        "ttsVoices": TTS_VOICES, "formats": FORMATS, "subs": SUBS,
+        "settings": public_settings(), **translate.system_info(), **takes.system_info(), **export.system_info(),
+        "desktop": DESKTOP, "dirs": {"home": str(HOME), "projects": str(PROJECTS_DIR), "exports": str(EXPORTS_DIR),
+                                     "models": str(MODELS_DIR)},
         "whisperModels": [["small", "Hızlı (küçük model, ~0.5 GB)"],
                           ["large-v3-turbo", "Dengeli - önerilen (~1.6 GB)"],
                           ["large-v3", "En iyi doğruluk (~3 GB, daha yavaş)"]],
@@ -808,7 +808,7 @@ async def room_start(request: Request):
     host_only(request)
     pid = (await body_json(request)).get("projectId")
     project_or_404(pid)
-    await asyncio.to_thread(room.start, pid, load_settings()["port"])
+    await asyncio.to_thread(room.start, pid, RUNTIME["port"] or load_settings()["port"])
     return room.to_dict()
 
 
@@ -869,6 +869,15 @@ def guest_leave(request: Request):
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(GUEST_COOKIE)
     return resp
+
+
+from .api_export import router as export_router  # noqa: E402
+from .api_room import router as room_router  # noqa: E402
+from .api_settings import router as settings_router  # noqa: E402
+
+app.include_router(export_router)
+app.include_router(room_router)
+app.include_router(settings_router)
 
 
 @app.get("/api/ping")

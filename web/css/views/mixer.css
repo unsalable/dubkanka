@@ -1,0 +1,20 @@
+/* ---------- mixer ---------- */
+.mixer-ws { grid-template-columns: minmax(0, 1fr) 340px; align-items: stretch; margin-bottom: 8px; }
+.mixer-ws .viewer-pane .videopane { max-height: 46vh; aspect-ratio: 16 / 9; }
+.mixer-side { overflow: auto; max-height: calc(46vh + 64px); }
+.mixer-side .pane-body + .pane-body { border-top: 1px solid var(--line); }
+.inspector-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.inspector-text { font-size: 14px; font-weight: 600; margin-bottom: 14px; line-height: 1.4; animation: line-in 320ms var(--ease-out) both; }
+.inspector-empty { color: var(--text-2); font-size: 12.5px; display: flex; gap: 10px; align-items: flex-start; }
+.inspector-empty .icon { color: var(--text-3); margin-top: 1px; }
+.nudges { gap: 4px; }
+.nudges .btn { min-width: 46px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.charfx { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.charfx select { width: 170px; }
+.master { display: flex; flex-direction: column; gap: 3px; width: 70px; margin-left: 4px; }
+.master .vu.h { flex: none; height: 3px; width: 100%; }
+
+@media (max-width: 1100px) {
+  .mixer-ws { grid-template-columns: 1fr; }
+  .mixer-side { max-height: none; }
+}

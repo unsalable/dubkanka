@@ -240,3 +240,7 @@ def tts_take(pid, lid, voice):
             raise RuntimeError("Yapay zeka sesi oluşturulamadı (internet bağlantısı gerekli).") from e
         tid = add_take(pid, lid, mp3, by="Yapay zeka", source="tts", fit=True)
     return tid
+
+
+def system_info():
+    return {"effects": EFFECTS, "ttsVoices": TTS_VOICES}

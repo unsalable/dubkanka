@@ -228,3 +228,7 @@ def export_wav(p, d, mode="dub"):
     out = d / "media" / f"download_{mode}.wav"
     media.write_wav(out, render(p, d, mode), SAMPLE_RATE)
     return Path(out)
+
+
+def system_info():
+    return {"formats": FORMATS, "subs": SUBS}
