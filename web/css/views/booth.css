@@ -25,6 +25,8 @@
 .cue { padding: 12px 16px 10px; border-top: 1px solid var(--line); }
 .cue-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
 .cue-head .hl { font-stretch: var(--cond); letter-spacing: 0.03em; text-transform: uppercase; font-size: 13px; }
+/* the highlighter swipes in when the next speaker takes over: the one place the mark itself moves */
+.cue-head .hl::before { animation: swipe calc(380ms * var(--m)) var(--ease-out) both; }
 .cue-text { font: 600 clamp(22px, 2.3vw, 34px)/1.25 var(--font); text-wrap: balance; animation: line-in var(--t-slow) var(--ease-out) both; min-height: 1.25em; }
 .cw { color: var(--text); transition: color calc(120ms * var(--m)), background-color calc(120ms * var(--m)); border-radius: 2px; }
 .cw.on { color: var(--accent-ink); background: var(--accent); }
@@ -64,7 +66,16 @@
 .recbtn.busy .recbtn-core { width: 22px; height: 22px; background: transparent; border: 3px solid rgba(255, 255, 255, 0.2); border-top-color: #fff; animation: spin 0.75s linear infinite; }
 .reclabel { font: 600 12px var(--font); color: var(--text-2); min-height: 16px; }
 .booth.is-rec .reclabel { color: var(--rec); }
-.booth-meter { display: flex; align-items: center; gap: 8px; width: min(360px, 70%); margin: 4px auto 10px; color: var(--text-3); }
+/* what you hear and what records you, in one strip under the controls */
+.booth-mon { display: flex; align-items: center; justify-content: space-between; gap: 10px 22px; flex-wrap: wrap; margin: 8px 14px 12px; padding: 8px 10px 8px 14px;
+  border-radius: var(--r); background: var(--panel-2); border: 1px solid var(--line); }
+.mon { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.mon-mic-row { flex: 1 1 280px; max-width: 470px; color: var(--text-3); }
+.mon-mic-row .meter { min-width: 80px; }
+.mon-mic { width: auto; min-width: 0; max-width: 220px; height: 28px; font-size: 12px; flex: 0 1 auto; }
+.mon-levels { gap: 6px 16px; flex-wrap: wrap; }
+.mon-lvl { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--text-2); cursor: pointer; }
+.mon-lvl input[type='range'] { width: 84px; }
 .booth-hint { text-align: center; padding: 0 8px 12px; color: var(--text-3); display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; font-size: 12px; }
 .booth-hint span { display: inline-flex; align-items: center; gap: 5px; }
 
@@ -72,8 +83,8 @@
 .takes-pane { flex: 1; min-height: 140px; }
 .takes { display: flex; flex-direction: column; gap: 2px; padding: 6px; }
 .takes-empty { padding: 14px; font-size: 12px; }
-.take { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; transition: background-color var(--t);
-  animation: take-in calc(420ms * var(--m)) var(--spring) both; }
+.take { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: 10px; transition: background-color var(--t); }
+.take.fresh { animation: take-in calc(420ms * var(--m)) var(--spring) both; }
 .take.sel { background: rgba(61, 214, 140, 0.08); box-shadow: inset 0 0 0 1px rgba(61, 214, 140, 0.2); }
 .take-n { font-size: 12px; color: var(--text-3); }
 .take-info { flex: 1; display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; min-width: 0; }
@@ -103,7 +114,7 @@
 .lineitem.sel .lineitem-n { color: var(--accent); }
 .lineitem-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 .side-foot { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 12px; border-top: 1px solid var(--line); margin-top: auto; }
-.boothsettings { padding: 12px; animation: rise var(--t-slow) var(--ease-out); }
+.boothsettings { padding: 12px; animation: fade var(--t) var(--ease-out); }
 .boothsettings .seclabel { margin-top: 14px; }
 .boothsettings .seclabel:first-child { margin-top: 0; }
 .mic-pick { margin-bottom: 8px; }

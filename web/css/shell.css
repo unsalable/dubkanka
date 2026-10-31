@@ -41,7 +41,7 @@ html.desktop .topbar a, html.desktop .topbar button, html.desktop .topbar input,
 .roombtn .count { font: 500 12px var(--mono); color: var(--text); }
 .topbar .iconbtn { width: 34px; height: 34px; border-radius: 50%; }
 .updatebtn, .dlpill { display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 13px 0 11px; margin-right: 4px; border-radius: var(--r-pill);
-  font: 600 12px var(--font); cursor: pointer; animation: rise var(--t-slow) var(--ease-out); }
+  font: 600 12px var(--font); cursor: pointer; animation: fade var(--t) var(--ease-out); }
 .updatebtn { border: 1px solid var(--accent-line); background: var(--accent-soft); color: var(--accent); }
 .updatebtn:hover { background: rgba(255, 210, 63, 0.22); }
 /* features downloading in the background: a ring that fills, the percentage next to it */

@@ -1,16 +1,35 @@
 // Web Audio playback synced to a muted <video>. The mix rules mirror dubkanka/mixer.py.
 import { fileUrl } from './api.js';
-import { clamp, db2gain, readyTake } from './util.js';
+import { clamp, db2gain, LS, readyTake } from './util.js';
+
+// Listening volume (the speaker next to every transport): it sits after the mix, so the meters keep showing the mix
+// itself, and it never changes what gets exported.
+const listening = { level: LS.get('volume', 1), muted: LS.get('muted', false) };
+const volSubs = new Set();
+const outGain = () => (listening.muted ? 0 : listening.level * listening.level); // squared: the slider feels even
+export const getVolume = () => ({ ...listening });
+export function setVolume(patch) {
+  Object.assign(listening, patch);
+  LS.set('volume', listening.level);
+  LS.set('muted', listening.muted);
+  if (engine.out) engine.out.gain.setTargetAtTime(outGain(), engine.ctx.currentTime, 0.015);
+  for (const f of volSubs) f(getVolume());
+}
+export const onVolume = (f) => (volSubs.add(f), () => volSubs.delete(f));
 
 export const engine = {
   ctx: null,
   master: null,
+  out: null,
   cache: new Map(),
   ensure() {
     if (!this.ctx) {
       this.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
       this.master = this.ctx.createGain();
-      this.master.connect(this.ctx.destination);
+      this.out = this.ctx.createGain();
+      this.out.gain.value = outGain();
+      this.master.connect(this.out);
+      this.out.connect(this.ctx.destination);
       this.masterTap = tap(this.ctx, this.master);
     }
     if (this.ctx.state === 'suspended') this.ctx.resume();

@@ -93,7 +93,9 @@ export function transition(update, dir = 1) {
 window.addEventListener('hashchange', () => {
   const route = parseRoute();
   remember(store.route, route);
-  transition(() => setState({ route }), place(route) >= place(store.route) ? 1 : -1);
+  // a new place slides in from the side it lies on; another page of the same place (settings) only crossfades
+  const dir = route[0] === 'settings' && store.route[0] === 'settings' ? 0 : place(route) >= place(store.route) ? 1 : -1;
+  transition(() => setState({ route }), dir);
 });
 export const go = (path) => (location.hash = '#/' + path);
 

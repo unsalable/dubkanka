@@ -1,4 +1,4 @@
-import { html, render, useEffect, useRef, useState } from '../vendor/preact-htm.js';
+import { html, render, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { api, P } from './api.js';
 import { Icon, Toasts, useIndicator } from './components.js';
 import { desktop, useUpdate } from './desktop.js';
@@ -92,6 +92,12 @@ function Tabs({ project, tab }) {
 
 function Shell({ project, tab, children, bare }) {
   const inSettings = store.route[0] === 'settings';
+  const main = useRef(null);
+  const where = store.route.join('/');
+  // every page starts at its top (before the page transition takes its picture)
+  useLayoutEffect(() => {
+    if (main.current) main.current.scrollTop = 0;
+  }, [where]);
   return html`<div class="shell">
     <header class="topbar">
       <div class="topbar-left">
@@ -107,7 +113,7 @@ function Shell({ project, tab, children, bare }) {
           aria-pressed=${inSettings}><${Icon} name=${inSettings ? 'x' : 'gear'} /></a>
       </div>`}
     </header>
-    <main class="main">${children}</main>
+    <main class="main" ref=${main}>${children}</main>
   </div>`;
 }
 

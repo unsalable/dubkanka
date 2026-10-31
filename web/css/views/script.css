@@ -8,8 +8,7 @@
 
 /* cast: one row per character, its highlighter colour as a chip you can repaint */
 .cast { padding: 4px 0; }
-.castrow { display: grid; grid-template-columns: 22px minmax(90px, 0.9fr) minmax(80px, 1fr) 28px 28px; align-items: center; gap: 6px; padding: 3px 8px 3px 10px; margin: 0 4px; border-radius: 9px;
-  animation: rise var(--t-slow) var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 10) * 24ms * var(--mv)); }
+.castrow { display: grid; grid-template-columns: 22px minmax(90px, 0.9fr) minmax(80px, 1fr) 28px 28px; align-items: center; gap: 6px; padding: 3px 8px 3px 10px; margin: 0 4px; border-radius: 9px; }
 .castrow:hover { background: rgba(255, 250, 235, 0.03); }
 .castrow .tc { text-align: right; font-size: 12px; }
 .castname { font-size: 13px; }
@@ -22,8 +21,7 @@
 /* cue sheet */
 .lines { display: flex; flex-direction: column; gap: 2px; padding: 6px; }
 .linerow { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 2px 8px; padding: 9px 8px 10px 0; border-radius: 10px;
-  cursor: pointer; transition: background-color var(--t-fast), box-shadow var(--t-fast); animation: rise calc(380ms * var(--m)) var(--ease-out) both;
-  animation-delay: calc(min(var(--i, 0), 14) * 20ms * var(--mv)); }
+  cursor: pointer; transition: background-color var(--t-fast), box-shadow var(--t-fast); }
 .linerow:hover { background: rgba(255, 250, 235, 0.03); }
 .linerow.sel { background: rgba(255, 210, 63, 0.07); box-shadow: inset 0 0 0 1px rgba(255, 210, 63, 0.24); }
 .linerow-num { font: 500 12px var(--mono); color: var(--text-3); text-align: right; padding-top: 4px; font-variant-numeric: tabular-nums; }
@@ -61,3 +59,5 @@
 }
 .empty-offer { margin-top: 14px; width: min(460px, 100%); text-align: left; flex-wrap: wrap; }
 .empty-offer .offer-act { margin-left: 46px; max-width: none; }
+/* the line tools travel as one group: on a narrow viewer they move under the transport together */
+.line-tools { flex-wrap: nowrap; margin-left: auto; gap: 2px; }

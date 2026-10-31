@@ -79,12 +79,23 @@ Tek aile: **IBM Plex** (`web/fonts`, SIL OFL). Türkçe karakterlerin hepsi var.
 
 ## Hareket
 
-Animasyondan vazgeçmiyoruz, ama her animasyon bir durumu ya da yer değişimini anlatır. Süs için dönen, parlayan, nabız atan şey yok; sadece kayıt, iş ve indirme sürerken sürekli hareket var.
+Animasyondan vazgeçmiyoruz, ama her animasyon bir durumu ya da yer değişimini anlatır ve hepsi aynı dilbilgisine uyar (`web/css/motion.css` başındaki not). Kullanıcı 31 Ekim 2026'da "tutarlılık yok, bir yer açılıyormuş gibi oluyor" dedi: sebep, sayfa yana kayarken içindeki her şeyin ayrıca yukarı süzülmesiydi. Kural artık şu:
 
-- **Eğriler:** `--ease-out` (0.16, 1, 0.3, 1) ana eğri, `--ease-in` çıkışlar için, `--spring` hafif taşmalı yay (kayan haplar, açma/kapama).
-- **Süreler:** `--t-fast` 120 ms (basma, üzerine gelme), `--t` 200 ms (durum), `--t-slow` 300 ms (menü, panel), `--t-page` 420 ms (sayfa, yerleşim).
-- **Sayfa geçişi:** View Transitions. Sayfa iş akışı yönünde kayar (`--vt-dir`), video resmi (`view-transition-name: viewer`) yeni yerine süzülür.
-- **Kabin:** geri sayım halkası bip seslerine eş zamanlı, akış çizgisi, kayıt düğmesi daireden yuvarlak köşeli kareye döner, yeni kayıt listeye yayla düşer.
+| Ne oluyor | Nasıl hareket eder |
+|---|---|
+| Yer değişiyor (ana sayfa, bir adım, ayarlar, oda) | Sayfa tek parça halinde, geldiği yönden 20 px kayarak gelir. Üst çubuk hiç kıpırdamaz. Eski ve yeni sayfa aynı süre ve eğriyle karışır, saydamlıkları hep toplam bire eşittir: iki sayfada ortak olan yer (ayarların kenar çubuğu, panel kenarları) yerinde durur, arkadan pencere görünmez. |
+| Aynı yerin içinde sayfa değişiyor (ayar sayfaları, kabindeki Satırlar / Kabin) | Kaymaz; içerik yerinde çapraz geçiş yapar. |
+| Bir şey açılıyor (açılır bölüm, servis satırı, teknik ayarlar, yazı stili) | Hep aynı `drop`: hafif yukarıdan yerine oturur, 200 ms. |
+| Açık sayfaya yeni bir şey geliyor (yeni kayıt, yeni video, bildirim, oda açılınca link ve PIN) | Yayla düşer (`take-in`). Sadece gerçekten yeni olan; sayfa açılınca zaten orada olanlar kıpırdamaz. |
+| Seçim değişiyor (adım çubuğu, segment kontrolü) | Hap yayla kayar. |
+| İş sürüyor (kayıt, indirme, işlem) | Sürekli hareket: sadece bunlar döner, yanıp söner. |
+
+Bir sayfa gelirken içindeki satırlar, kartlar ve klipler kendi başına animasyon yapmaz. Tek istisna ilk karşılama ekranı: uygulamanın tek "an"ı.
+
+- **Eğriler:** `--ease-out` (0.16, 1, 0.3, 1) ana eğri, `--ease-in` çıkışlar için, `--spring` hafif taşmalı yay (kayan haplar, açma/kapama, yeni gelenler).
+- **Süreler:** `--t-fast` 120 ms (basma, üzerine gelme), `--t` 200 ms (durum, açılma), `--t-slow` 300 ms (menü, pencere), `--t-page` 300 ms (sayfa).
+- **Video resmi** (`view-transition-name: viewer`) adımlar arasında yeni yerine sayfayla aynı saatte süzülür.
+- **Kabin:** geri sayım halkası bip seslerine eş zamanlı, akış çizgisi, kayıt düğmesi daireden yuvarlak köşeli kareye döner, yeni kayıt listeye yayla düşer, konuşan karakter değişince kalem izi yeniden çekilir.
 - **Göstergeler:** bütün seviye göstergeleri tek bir animasyon döngüsünden beslenir.
 
 ### Animasyon ayarı

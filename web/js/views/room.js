@@ -1,9 +1,9 @@
-import { html, useState } from '../../vendor/preact-htm.js';
+import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api } from '../api.js';
 import { Btn, Icon, Lamp } from '../components.js';
 import { FeatureOffer } from '../feature-ui.js';
 import { toast, toastError, useStore } from '../state.js';
-import { copyText, LS, timeAgo } from '../util.js';
+import { cls, copyText, LS, timeAgo } from '../util.js';
 import { scriptText } from './script.js';
 
 function Person({ name, me, online, char, line, p }) {
@@ -21,6 +21,13 @@ export function RoomView({ p }) {
   const s = useStore();
   const r = s.room || { status: 'off' };
   const [busy, setBusy] = useState(false);
+  // the link and PIN arrive with a little flourish only when the room opens while you watch
+  const was = useRef(r.status);
+  const [fresh, setFresh] = useState(false);
+  useEffect(() => {
+    if (r.status === 'on' && was.current === 'starting') setFresh(true);
+    was.current = r.status;
+  }, [r.status]);
   const mine = r.projectId === p.id;
   const open = async () => {
     setBusy(true);
@@ -64,7 +71,7 @@ export function RoomView({ p }) {
       : r.status === 'error'
       ? html`<section class="panel"><div class="alert error"><${Icon} name="alert" size=${16} />Oda açılamadı: ${r.error === 'cloudflared-missing' ? 'bağlantı aracı bulunamadı' : r.error}</div>
           <div class="toolbar"><${Btn} onClick=${open}>Tekrar dene</${Btn}><${Btn} kind="ghost" onClick=${close}>Kapat</${Btn}></div></section>`
-      : html`<section class="panel invite">
+      : html`<section class=${cls('panel invite', fresh && 'fresh')}>
           <div class="invite-qr"><img src=${'/api/room/qr.svg?u=' + encodeURIComponent(r.url)} alt="Oda linkinin QR kodu" /></div>
           <div class="invite-info">
             <div class="label">Link</div>

@@ -16,7 +16,13 @@ export const micPrefs = () => ({
   monitor: LS.get('mic.monitor', false),
   monitorGain: LS.get('mic.monitorGain', 0.8),
 });
-export const setMicPref = (k, v) => LS.set('mic.' + k, v);
+const prefSubs = new Set();
+/** Called with (key, value) whenever a microphone preference changes, wherever it was changed from. */
+export const onMicPrefs = (f) => (prefSubs.add(f), () => prefSubs.delete(f));
+export const setMicPref = (k, v) => {
+  LS.set('mic.' + k, v);
+  for (const f of prefSubs) f(k, v);
+};
 
 // Bluetooth headsets switch to the phone-call profile when their microphone is used: 16 kHz, muffled.
 const HEADSET = /hands-?free|headset|bluetooth|airpods|buds|wh-1000|\bbt\b|ag audio/i;

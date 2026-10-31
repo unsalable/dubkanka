@@ -53,10 +53,12 @@ DubKanka'yı kuran her arkadaş kendi projesini ve odasını açabilir, kimsenin
 
 **Kaynak kopyası:** Görüntü yeniden kodlanmaz (`-c:v copy`), sadece yeni ses eklenir; kaynak dosyanın kalitesi bit bit korunur. Kesim bir anahtar kareye denk gelmiyorsa kopya en yakın önceki anahtar kareden başlar ve o birkaç karede orijinal ses çalar; ekran bunu önceden söyler.
 
-**Kısayollar (kayıt):** `Boşluk` kaydet / durdur · `P` orijinali dinle · `L` kaydımı dinle · `Enter` sonraki · `↑` önceki · `Esc` iptal
+**Kısayollar (kayıt):** `Boşluk` kaydet / durdur · `K` sahneyi bu satırdan oynat / durdur · `P` orijinali dinle · `L` kaydımı dinle · `Enter` sonraki · `↑` önceki · `Esc` durdur
 
 ## Kabin ve mikrofon
 
+- **Dinleme şeridi** (kayıt düğmesinin hemen altında): mikrofonu buradan değiştirirsin ve seviyesini görürsün. Yanında **Ses** (dinleme sesi; hoparlöre basınca sessiz), **Fon** (müzik, efekt ve ortam sesi; sıfırlarsan hiç çalmaz) ve **Orijinal** (kayıt sırasında kulağına gelen orijinal konuşma) sürgüleri. Çalarken sürgüyü oynatınca hemen duyulur.
+- **Durdurmak:** her oynat düğmesi basınca **Durdur** olur; videoya tıklamak ve `Esc` de durdurur. Dinleme sesi Senaryo, Mikser ve Paylaş'taki oynatıcılarda da aynı; çıkan videonun sesini değiştirmez.
 - **Saf ses** varsayılan olarak açık: tarayıcının yankı engelleme, gürültü bastırma ve otomatik kazancı kapalı. İyi bir mikrofonu boğuk yapan bunlardı. Hoparlörle kayıt yapıyorsan ya da ortam çok gürültülüyse tek tek açabilirsin.
 - **Alçak kesme 80 Hz** ve **yapay zeka gürültü temizleme** (DPDFNet, Kayıt temizleme özelliği) kayıttan sonra uygulanır; mikserde her kayıt için ayrıca açılıp kapanır.
 - **Mikrofonu test et** ile seviyeyi gör, **Kendimi duy** ile sesini kulaklıktan dinle, **5 sn deneme kaydı** ile nasıl kaydettiğini duy.

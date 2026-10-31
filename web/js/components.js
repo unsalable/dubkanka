@@ -1,5 +1,5 @@
 import { html, render, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
-import { player } from './engine.js';
+import { getVolume, onVolume, player, setVolume } from './engine.js';
 import { recorder } from './recorder.js';
 import { dismissToast, useStore } from './state.js';
 import { clamp, cls, fmtTime } from './util.js';
@@ -46,6 +46,7 @@ const ICONS = {
   leaf: '<path d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15M5 19c3-4 6-7 10-9"/>',
   refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8m0-5v5h5M4 13a8 8 0 0 0 14.3 4.9L20 16m0 5v-5h-5"/>',
   speaker: '<path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+  mute: '<path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z"/><path d="m16 9.5 5 5m0-5-5 5"/>',
   external: '<path d="M14 4h6v6M20 4l-9 9M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
   key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 8.5-8.5M16 7l2.5 2.5M14 9l2 2"/>',
   cpu: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9.5 9.5h5v5h-5zM9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3"/>',
@@ -269,7 +270,7 @@ export function Segmented({ value, options, onChange }) {
 }
 
 /** Video element registered as the player's picture. */
-export function VideoPane({ src, poster, class: c, children, onReady }) {
+export function VideoPane({ src, poster, class: c, children, onReady, onClick, title }) {
   const ref = useRef(null);
   useEffect(() => {
     player.attachVideo(ref.current);
@@ -280,9 +281,23 @@ export function VideoPane({ src, poster, class: c, children, onReady }) {
       }
     };
   }, []);
-  return html`<div class=${cls('videopane', c)}>
+  return html`<div class=${cls('videopane', c, onClick && 'clickable')} onClick=${onClick} title=${title}>
     <video ref=${ref} src=${src} poster=${poster} muted playsinline preload="auto" onLoadedMetadata=${(e) => onReady && onReady(e.target)}></video>
     ${children}
+  </div>`;
+}
+
+/** Listening volume and mute, the same control next to every transport. It never changes the exported video. */
+export function VolumeControl() {
+  const [v, setV] = useState(getVolume);
+  useEffect(() => onVolume(setV), []);
+  const level = v.muted ? 0 : v.level;
+  const toggle = () => setVolume(level === 0 ? { muted: false, level: v.level || 0.8 } : { muted: true });
+  return html`<div class="vol" title=${level === 0 ? 'Ses kapalı' : `Dinleme sesi %${Math.round(level * 100)}`}>
+    <button class="iconbtn sm" onClick=${toggle} aria-label=${level === 0 ? 'Sesi aç' : 'Sesi kapat'}>
+      <${Icon} name=${level === 0 ? 'mute' : 'speaker'} size=${16} /></button>
+    <input type="range" min="0" max="1" step="0.01" value=${level} style=${{ '--p': level * 100 + '%' }} aria-label="Dinleme sesi"
+      onInput=${(e) => { const x = Number(e.target.value); e.target.style.setProperty('--p', x * 100 + '%'); setVolume({ level: x, muted: x === 0 }); }} />
   </div>`;
 }
 

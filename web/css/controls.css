@@ -106,7 +106,7 @@ input[type='range']:disabled { opacity: 0.4; cursor: not-allowed; }
 .dot.bad { background: var(--bad); }
 
 .alert { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 14px; border-radius: var(--r); margin-bottom: 8px; background: var(--raised);
-  border: 1px solid var(--line-2); animation: rise var(--t-slow) var(--ease-out); }
+  border: 1px solid var(--line-2); animation: fade var(--t) var(--ease-out); }
 .alert .icon { color: var(--text-2); }
 .alert.error { background: #2a1513; border-color: rgba(255, 90, 82, 0.26); }
 .alert.error .icon { color: var(--bad); }
@@ -121,7 +121,7 @@ details > summary::-webkit-details-marker { display: none; }
 details > summary::before { content: ''; width: 6px; height: 6px; border-right: 1.6px solid var(--text-3); border-bottom: 1.6px solid var(--text-3); transform: rotate(-45deg);
   border-radius: 1px; transition: transform var(--t) var(--ease-out); margin: 0 6px 0 2px; flex: none; }
 details[open] > summary::before { transform: rotate(45deg); }
-details[open] > :not(summary) { animation: rise var(--t-slow) var(--ease-out); }
+details[open] > :not(summary) { animation: drop var(--t) var(--ease-out); }
 
 .toolbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .vsep { width: 1px; height: 18px; background: var(--line-2); margin: 0 4px; flex: none; }
@@ -140,7 +140,7 @@ details[open] > :not(summary) { animation: rise var(--t-slow) var(--ease-out); }
 /* highlighter swipe behind a name, in the character's colour */
 .hl { position: relative; z-index: 0; padding: 0 3px; font-weight: 600; color: var(--text); white-space: nowrap; }
 .hl::before { content: ''; position: absolute; z-index: -1; inset: 18% -1px 8% -2px; background: var(--c, var(--accent)); opacity: 0.38; border-radius: 2px 5px 3px 6px;
-  transform: skewX(-8deg) rotate(-0.8deg); animation: swipe calc(380ms * var(--m)) var(--ease-out) both; }
+  transform: skewX(-8deg) rotate(-0.8deg); }
 .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--c); }
 .chardot { display: inline-block; border-radius: 50%; flex: none; }
 
@@ -286,11 +286,14 @@ details[open] > :not(summary) { animation: rise var(--t-slow) var(--ease-out); }
 .playbtn:disabled { opacity: 0.35; cursor: not-allowed; }
 .playbtn[aria-label='Durdur'] { background: var(--accent); color: var(--accent-ink); }
 .playbtn[aria-label='Durdur'] .icon { margin-left: 0; }
+.videopane.clickable { cursor: pointer; }
+/* listening volume: a speaker that mutes, a short slider */
+.vol { display: inline-flex; align-items: center; gap: 2px; flex: none; }
+.vol input[type='range'] { width: 84px; }
 
 /* ---------- features offered in place ---------- */
 /* "this needs a feature you have not added": what it does, its size, the button that adds it */
-.offer { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border-radius: var(--r); background: var(--panel-2); border: 1px solid var(--line-2);
-  animation: rise var(--t-slow) var(--ease-out); }
+.offer { display: flex; align-items: center; gap: 12px; padding: 12px 12px 12px 14px; border-radius: var(--r); background: var(--panel-2); border: 1px solid var(--line-2); }
 .offer-ico { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent); flex: none; }
 .offer-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .offer-text b { font-weight: 600; }

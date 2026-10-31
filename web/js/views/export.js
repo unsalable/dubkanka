@@ -3,7 +3,7 @@
 // subtitles and the real mix.
 import { html, useEffect, useLayoutEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P } from '../api.js';
-import { Btn, Field, Icon, JobPanel, Lamp, PlayButton, Range, Segmented, Select, TimeReadout, Toggle, usePlaying } from '../components.js';
+import { Btn, Field, Icon, JobPanel, Lamp, PlayButton, Range, Segmented, Select, TimeReadout, Toggle, usePlaying, VolumeControl } from '../components.js';
 import { buildMix, loadMixBuffers, player, takeSpan } from '../engine.js';
 import { jobOf, patchLocal, toastError, useStore } from '../state.js';
 import { clamp, cls, fmtBytes, fmtTime, readyTake, timeAgo } from '../util.js';
@@ -202,7 +202,7 @@ function FramePlayer({ p, ex }) {
   const seek = (t) => player.playing ? player.play({ from: t, to: dur, ...buildMix(p, bufs, ex.mix) }) : player.seek(t);
   return html`<div class="fp">
     <div class="fp-stage" ref=${stage}>
-      <div class="frame" style=${{ width: size.w + 'px', height: size.h + 'px' }}>
+      <div class="frame" style=${{ width: size.w + 'px', height: size.h + 'px' }} onClick=${toggle} title=${playing ? 'Durdur' : 'Oynat'}>
         <video ref=${video} src=${fileUrl(p.id, p.clip.preview, p.clip.ver)} muted playsinline preload="auto" crossorigin="anonymous"></video>
         <canvas ref=${canvas} style=${{ width: size.w + 'px', height: size.h + 'px' }}></canvas>
         <div class=${cls('frame-sub', soft && 'soft')} ref=${sub} style=${subStyle} hidden><div class="fs-orig" hidden></div><div class="fs-main"></div></div>
@@ -213,6 +213,7 @@ function FramePlayer({ p, ex }) {
       <${PlayButton} playing=${playing} onClick=${toggle} disabled=${!bufs} title="Önizlemeyi oynat (Boşluk)" />
       <${TimeReadout} duration=${dur} />
       <${Scrub} dur=${dur} onSeek=${seek} />
+      <${VolumeControl} />
       <span class="tc dim small">${g.W}×${g.H}</span>
     </div>
   </div>`;
@@ -447,7 +448,7 @@ export function ExportView({ p }) {
         <${Btn} small kind="ghost" icon="folder" onClick=${() => reveal(latest.file)}>Klasörde göster</${Btn}></div>
       <div class="result-grid">
         <video class=${'result-video ' + (latest.height > latest.width ? 'tall' : '')} src=${'/api/exports/' + encodeURIComponent(latest.file)} controls playsinline preload="metadata"></video>
-        <div class="result-list">${p.exports.map((e, i) => html`<div class=${cls('result-row', i === 0 && 'new')} key=${e.file}>
+        <div class="result-list">${p.exports.map((e, i) => html`<div class=${cls('result-row', i === 0 && Date.now() / 1000 - e.created < 20 && 'new')} key=${e.file}>
           <div class="grow"><div class="ellipsis" title=${e.file}>${e.file}</div>
             <div class="mono small dim">${e.summary || `${e.width}×${e.height}`} · ${fmtTime(e.duration, 0)} · ${fmtBytes(e.size)} · ${timeAgo(e.created)}</div>
             ${e.keyframe && html`<div class="small dim">Kopya ${e.keyframe.offset.toFixed(2)} sn önce, anahtar karede başlıyor.</div>`}</div>

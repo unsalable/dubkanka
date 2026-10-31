@@ -67,7 +67,7 @@
   --t-fast: calc(120ms * var(--m));
   --t: calc(200ms * var(--m));
   --t-slow: calc(300ms * var(--m));
-  --t-page: calc(420ms * var(--m));
+  --t-page: calc(300ms * var(--m));
   --shadow-pop: 0 24px 60px -16px rgba(0, 0, 0, 0.72), 0 6px 18px -6px rgba(0, 0, 0, 0.5);
   --shadow-card: 0 18px 44px -26px rgba(0, 0, 0, 0.75);
   --focus: 0 0 0 3px rgba(255, 210, 63, 0.3);

@@ -1,6 +1,6 @@
 import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P } from '../api.js';
-import { Btn, Field, Icon, JobPanel, Lamp, Modal, PlayButton, Popover, Select, TimeReadout, Toggle, usePlaying, VideoPane } from '../components.js';
+import { Btn, Field, Icon, JobPanel, Lamp, Modal, PlayButton, Popover, Select, TimeReadout, Toggle, usePlaying, VideoPane, VolumeControl } from '../components.js';
 import { engine, player, stemUrls } from '../engine.js';
 import { FeatureOffer } from '../feature-ui.js';
 import { featureReady, go, jobOf, patchLocal, toast, toastError, useStore } from '../state.js';
@@ -263,15 +263,18 @@ export function ScriptView({ p }) {
     <div class="ws script-ws">
       <div class="viewer-col">
         <section class="pane viewer-pane">
-          <${VideoPane} src=${fileUrl(p.id, p.clip.preview, p.clip.ver)} poster=${fileUrl(p.id, p.clip.thumb, p.clip.ver)} class="script-video" />
+          <${VideoPane} src=${fileUrl(p.id, p.clip.preview, p.clip.ver)} poster=${fileUrl(p.id, p.clip.thumb, p.clip.ver)} class="script-video"
+            onClick=${() => original && toggle()} title=${playing ? 'Durdur' : 'Oynat'} />
           <div class="transport">
             <${PlayButton} playing=${playing} onClick=${toggle} disabled=${!original} />
             <${TimeReadout} duration=${dur} />
-            <span class="grow"></span>
-            <${Btn} small kind="ghost" icon="plus" onClick=${addLine} title="Oynatma çizgisinin olduğu yere yeni satır">Satır ekle</${Btn}>
-            <${Btn} small kind="ghost" icon="cut" onClick=${split} disabled=${!selLine} title="Seçili satırı oynatma çizgisinden ikiye böl">Böl</${Btn}>
-            <${Btn} small kind="ghost" icon="merge" onClick=${mergeNext} disabled=${!selLine} title="Seçili satırı sonrakiyle birleştir">Birleştir</${Btn}>
-            <${Btn} small kind="ghost" icon="trash" onClick=${delLine} disabled=${!selLine} title="Seçili satırı sil">Sil</${Btn}>
+            <${VolumeControl} />
+            <div class="toolbar line-tools">
+              <${Btn} small kind="ghost" icon="plus" onClick=${addLine} title="Oynatma çizgisinin olduğu yere yeni satır">Satır ekle</${Btn}>
+              <${Btn} small kind="ghost" icon="cut" onClick=${split} disabled=${!selLine} title="Seçili satırı oynatma çizgisinden ikiye böl">Böl</${Btn}>
+              <${Btn} small kind="ghost" icon="merge" onClick=${mergeNext} disabled=${!selLine} title="Seçili satırı sonrakiyle birleştir">Birleştir</${Btn}>
+              <${Btn} small kind="ghost" icon="trash" onClick=${delLine} disabled=${!selLine} title="Seçili satırı sil">Sil</${Btn}>
+            </div>
           </div>
         </section>
         <section class="pane cast-pane">

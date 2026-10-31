@@ -1,6 +1,6 @@
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P, upload } from '../api.js';
-import { Btn, BusMeter, Field, GainSlider, Icon, JobPanel, Lamp, Modal, PlayButton, Range, Segmented, Select, Swatch, TimeReadout, Toggle, usePlaying, VideoPane } from '../components.js';
+import { Btn, BusMeter, Field, GainSlider, Icon, JobPanel, Lamp, Modal, PlayButton, Range, Segmented, Select, Swatch, TimeReadout, Toggle, usePlaying, VideoPane, VolumeControl } from '../components.js';
 import { buildMix, loadMixBuffers, player, takeSpan } from '../engine.js';
 import { FeatureOffer } from '../feature-ui.js';
 import { featureReady, go, jobOf, patchLocal, toast, toastError, useStore } from '../state.js';
@@ -277,14 +277,16 @@ export function MixerView({ p }) {
   return html`<div class="page mixer" ref=${wrap}>
     <div class="ws mixer-ws">
       <section class="pane viewer-pane">
-        <${VideoPane} src=${fileUrl(p.id, p.clip.preview, p.clip.ver)} poster=${fileUrl(p.id, p.clip.thumb, p.clip.ver)} class="mixer-video" />
+        <${VideoPane} src=${fileUrl(p.id, p.clip.preview, p.clip.ver)} poster=${fileUrl(p.id, p.clip.thumb, p.clip.ver)} class="mixer-video"
+          onClick=${() => bufs && toggle()} title=${playing ? 'Durdur' : 'Oynat'} />
         <div class="transport">
           <${PlayButton} playing=${playing} onClick=${toggle} disabled=${!bufs} />
           <${TimeReadout} duration=${dur} />
           <span class="vsep"></span>
           <${Segmented} value=${mode} onChange=${setMode_} options=${[['dub', 'Dublaj'], ['original', 'Orijinal'], ...(unsep ? [] : [['clean', 'Konuşmasız']])]} />
           <span class="grow"></span>
-          <div class="master" title="Çıkış seviyesi"><span class="label">Çıkış</span><${BusMeter} bus="master" /></div>
+          <${VolumeControl} />
+          <div class="master" title="Miksin seviyesi (dinleme sesinden bağımsız)"><span class="label">Çıkış</span><${BusMeter} bus="master" /></div>
         </div>
       </section>
       <aside class="pane mixer-side">

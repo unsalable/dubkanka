@@ -451,6 +451,21 @@ async def char_claim(pid: str, cid: str, request: Request):
     return {"ok": True}
 
 
+@app.post("/api/projects/{pid}/characters/{cid}/unclaim")
+async def char_unclaim(pid: str, cid: str, request: Request):
+    """Give a role back: picking another one in the booth takes this name off the previous character."""
+    role, g = member(request, pid)
+    name = g["name"] if g else (str((await body_json(request)).get("name") or "").strip()[:30] or "Ben")
+
+    def fn(p):
+        c = find_char(p, cid)
+        names = [n.strip() for n in ((c or {}).get("actor") or "").split(",") if n.strip()]
+        if c and name in names:
+            c["actor"] = ", ".join(n for n in names if n != name)
+    mutate(pid, fn)
+    return {"ok": True}
+
+
 @app.post("/api/projects/{pid}/characters/{cid}/merge")
 async def char_merge(pid: str, cid: str, request: Request):
     host_only(request)

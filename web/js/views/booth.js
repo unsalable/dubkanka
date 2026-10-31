@@ -2,14 +2,16 @@
 // takes, instant review. The side holds the roles, the line list and the booth settings (microphone, processing).
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P, upload } from '../api.js';
-import { Btn, Field, Icon, Kbd, Lamp, LevelMeter, Modal, Range, Segmented, Select, Toggle, VideoPane } from '../components.js';
+import { Btn, Field, Icon, Kbd, Lamp, LevelMeter, Modal, PlayButton, Range, Segmented, Select, Toggle, VideoPane, VolumeControl } from '../components.js';
 import { buildMix, engine, loadMixBuffers, player, stemUrls, takeUrl } from '../engine.js';
-import { listMics, micPrefs, recorder, setMicPref } from '../recorder.js';
+import { listMics, micPrefs, onMicPrefs, recorder, setMicPref } from '../recorder.js';
 import { FeatureOffer } from '../feature-ui.js';
 import { featureReady, toast, toastError, useStore } from '../state.js';
 import { clamp, cls, db2gain, drawWave, encodeWav, LS, selectedTake, sleep, syllables, timeAgo } from '../util.js';
 
-const DEFAULTS = { preroll: 2, beeps: true, streamer: true, bg: true, guide: 0, autoStop: true, tail: 1.0, autoReview: true, align: 'auto' };
+// bed: level of the background (music, effects, ambience) under everything the booth plays; guide: the original
+// dialogue in your ears while you record. Both 0..1, set from the listening strip under the controls.
+const DEFAULTS = { preroll: 2, beeps: true, streamer: true, bed: 1, guide: 0, autoStop: true, tail: 1.0, autoReview: true, align: 'auto' };
 const STATUS = { processing: ['busy', 'işleniyor'], error: ['bad', 'hata'] };
 const RING = 2 * Math.PI * 60;
 
@@ -70,7 +72,9 @@ function TakeList({ p, line, me, guest, onPlay }) {
     const n = line.takes.length - i;
     const mine = !guest || t.by === me;
     const [tone, label] = STATUS[t.status] || (t.silent ? ['warn', 'ses yok'] : ['', '']);
-    return html`<div key=${t.id} class=${cls('take', line.take === t.id && 'sel', t.status)}>
+    // only a take that just arrived drops into the list; the ones already there do not move when the page opens
+    const fresh = Date.now() / 1000 - t.created < 12;
+    return html`<div key=${t.id} class=${cls('take', line.take === t.id && 'sel', t.status, fresh && 'fresh')}>
       <button class="iconbtn" disabled=${t.status !== 'ready'} title="Dinle" onClick=${() => onPlay(t)}><${Icon} name="play" size=${14} /></button>
       <span class="take-n tc">${String(n).padStart(2, '0')}</span>
       <div class="take-info"><strong>${t.by}</strong><span class="dim small">${timeAgo(t.created)}${t.source === 'tts' ? ' · yapay zeka' : t.source === 'upload' ? ' · dosya' : ''}${t.denoise ? ' · temizlendi' : ''}</span></div>
@@ -105,23 +109,66 @@ function Roles({ p, filter, setFilter, room, guest }) {
   </div>`;
 }
 
+function useMics() {
+  const [mics, setMics] = useState([]);
+  useEffect(() => {
+    const refresh = () => listMics().then(setMics);
+    refresh();
+    navigator.mediaDevices && navigator.mediaDevices.addEventListener('devicechange', refresh);
+    const off = recorder.onState(refresh); // names show up once the microphone was allowed
+    return () => {
+      off();
+      navigator.mediaDevices && navigator.mediaDevices.removeEventListener('devicechange', refresh);
+    };
+  }, []);
+  return mics.some((m) => m.id === '') ? mics.map((m) => [m.id, m.label]) : [['', 'Varsayılan mikrofon'], ...mics.map((m) => [m.id, m.label])];
+}
+
+/** The microphone, right where you record: switching reopens it at once. */
+function MicSelect() {
+  const options = useMics();
+  const [dev, setDev] = useState(() => micPrefs().deviceId);
+  useEffect(() => onMicPrefs(() => setDev(micPrefs().deviceId)), []);
+  const pick = async (v) => {
+    setMicPref('device', v);
+    if (recorder.ready) await recorder.open(true).catch(toastError);
+  };
+  return html`<${Select} class="mon-mic" value=${dev} onChange=${pick} options=${options} />`;
+}
+
+/** What you hear in the booth: the listening volume, the background and the original dialogue while recording. */
+function Listening({ settings, setLevel }) {
+  return html`<div class="booth-mon">
+    <div class="mon mon-mic-row" title="Mikrofon">
+      <${Icon} name="mic" size=${15} /><${MicSelect} /><${LevelMeter} />
+    </div>
+    <div class="mon mon-levels">
+      <${VolumeControl} />
+      <label class="mon-lvl" title="Fon müziği, efektler ve ortam sesleri: dinlerken ve kayıtta"><span>Fon</span>
+        <${Range} min=${0} max=${1} step=${0.05} value=${settings.bed} onInput=${(v) => setLevel('bed', v)} /></label>
+      <label class="mon-lvl" title="Kayıt sırasında kulağına gelen orijinal konuşma (rehber ses)"><span>Orijinal</span>
+        <${Range} min=${0} max=${1} step=${0.05} value=${settings.guide} onInput=${(v) => setLevel('guide', v)} /></label>
+    </div>
+  </div>`;
+}
+
 function BoothSettings({ settings, set, guest, name, setName, onTestRec, testing }) {
+  const options = useMics();
   const [mics, setMics] = useState([]);
   const [pr, setPr] = useState(micPrefs);
   const [open, setOpen] = useState(recorder.ready);
   const [info, setInfo] = useState(recorder.info);
   useEffect(() => {
-    const refresh = () => listMics().then(setMics);
-    refresh();
-    navigator.mediaDevices && navigator.mediaDevices.addEventListener('devicechange', refresh);
+    listMics().then(setMics);
     const off = recorder.onState((r) => {
       setOpen(r.ready);
       setInfo(r.info);
-      refresh();
+      listMics().then(setMics);
     });
+    const offPrefs = onMicPrefs(() => setPr(micPrefs()));
     return () => {
       off();
-      navigator.mediaDevices && navigator.mediaDevices.removeEventListener('devicechange', refresh);
+      offPrefs();
     };
   }, []);
   // a capture setting changed: reopen the microphone so it applies right away
@@ -131,14 +178,13 @@ function BoothSettings({ settings, set, guest, name, setName, onTestRec, testing
     if (reopen && recorder.ready) await recorder.open(true).catch(toastError);
   };
   const toggleTest = () => (recorder.ready ? recorder.close() : recorder.open().catch(toastError));
-  const options = mics.some((m) => m.id === '') ? mics.map((m) => [m.id, m.label]) : [['', 'Varsayılan mikrofon'], ...mics.map((m) => [m.id, m.label])];
   const headset = info ? info.headset : (mics.find((m) => m.id === pr.deviceId) || {}).headset;
   return html`<div class="boothsettings">
     <div class="seclabel">Mikrofon</div>
     ${!guest && html`<${Field} label="Kaydı yapan"><input class="input" value=${name} onInput=${(e) => setName(e.target.value)} /></${Field}>`}
     <div class="row nowrap mic-pick">
       <${Select} class="grow" value=${pr.deviceId} onChange=${(v) => change('device', v)} options=${options} />
-      <button class="iconbtn" title="Listeyi yenile" onClick=${() => listMics().then(setMics)}><${Icon} name="refresh" size=${15} /></button>
+      <button class="iconbtn" title="Listeyi yenile" onClick=${() => navigator.mediaDevices && navigator.mediaDevices.dispatchEvent(new Event('devicechange'))}><${Icon} name="refresh" size=${15} /></button>
     </div>
     <div class="mic-test">
       <${Btn} small kind=${open ? 'primary' : ''} icon=${open ? 'stop' : 'mic'} onClick=${toggleTest}>${open ? 'Testi durdur' : 'Mikrofonu test et'}</${Btn}>
@@ -166,17 +212,11 @@ function BoothSettings({ settings, set, guest, name, setName, onTestRec, testing
       : html`<${FeatureOffer} id="cleanup" text="Kayıttan sonra oda gürültüsü ve fan sesi yapay zekayla silinir." />`}
 
     <div class="seclabel">Kayıt</div>
-    <div class="row2">
-      <${Field} label="Geri sayım">
-        <${Select} value=${String(settings.preroll)} onChange=${(v) => set('preroll', Number(v))} options=${[['1', '1 sn'], ['2', '2 sn'], ['3', '3 sn'], ['4', '4 sn']]} />
-      </${Field}>
-      <${Field} label="Rehber ses (orijinal)">
-        <${Select} value=${String(settings.guide)} onChange=${(v) => set('guide', Number(v))} options=${[['0', 'Kapalı'], ['0.25', 'Kısık'], ['0.7', 'Normal']]} />
-      </${Field}>
-    </div>
+    <${Field} label="Geri sayım" hint="Fon ve orijinal sesin seviyesi kayıt düğmesinin altında.">
+      <${Select} value=${String(settings.preroll)} onChange=${(v) => set('preroll', Number(v))} options=${[['1', '1 sn'], ['2', '2 sn'], ['3', '3 sn'], ['4', '4 sn']]} />
+    </${Field}>
     <${Toggle} checked=${settings.streamer} onChange=${(v) => set('streamer', v)} label="Akış çizgisi (ekranda girişe kayan çizgi)" />
     <${Toggle} checked=${settings.beeps} onChange=${(v) => set('beeps', v)} label="3 bip" />
-    <${Toggle} checked=${settings.bg} onChange=${(v) => set('bg', v)} label="Kayıtta fon ve ortam sesi çalsın" />
     <${Toggle} checked=${settings.autoStop} onChange=${(v) => set('autoStop', v)} label="Satır bitince kaydı durdur" />
     <${Toggle} checked=${settings.autoReview} onChange=${(v) => set('autoReview', v)} label="Kayıttan sonra dinlet" />
     <${Toggle} checked=${settings.align === 'auto'} onChange=${(v) => set('align', v ? 'auto' : 'recorded')} label="Konuşmayı orijinal girişe hizala" />
@@ -241,7 +281,14 @@ function BulkDialog({ p, files, name, onClose }) {
 
 export function BoothView({ p, guest = false }) {
   const s = useStore();
-  const [settings, setSettings] = useState(() => ({ ...DEFAULTS, ...LS.get('booth.settings', {}) }));
+  const [settings, setSettings] = useState(() => {
+    const st = { ...DEFAULTS, ...LS.get('booth.settings', {}) };
+    if ('bg' in st) {
+      if (st.bg === false) st.bed = 0; // 1.2 and older had the background on or off
+      delete st.bg;
+    }
+    return st;
+  });
   const set = (k, v) => {
     const n = { ...settings, [k]: v };
     setSettings(n);
@@ -270,6 +317,7 @@ export function BoothView({ p, guest = false }) {
   const fileIn = useRef(null);
   const bulkIn = useRef(null);
   const claimed = useRef(null);
+  const sceneBuses = useRef(null);
   const dur = p.clip.duration;
   const chars = Object.fromEntries(p.characters.map((c) => [c.id, c]));
   const c = line ? chars[line.char] : null;
@@ -325,12 +373,27 @@ export function BoothView({ p, guest = false }) {
     player.stop();
     if (phase !== 'upload' && phase !== 'process') setPhase('idle');
   };
+  const playing = ['orig', 'scene', 'review'].includes(phase);
+
+  // a level slider moved: what is playing follows at once
+  const setLevel = (k, v) => {
+    set(k, v);
+    if (k === 'bed') {
+      const base = sceneBuses.current;
+      if (phase === 'scene' && base) {
+        player.setBusGain('bg', base.bg * v);
+        player.setBusGain('amb', base.amb * v);
+      } else player.setBusGain('bg', v);
+    } else if (k === 'guide') player.setBusGain('guide', v);
+  };
 
   const listen = () => {
     if (!bufs || !line || recInfo.current) return;
-    const items = bufs.original ? [{ buffer: bufs.original, at: 0 }] : [...bed(), { buffer: bufs.voices, at: 0 }];
-    setPhase('listen');
-    player.play({ from: Math.max(0, line.start - 0.8), to: Math.min(dur, line.end + 0.5), items, onEnd: () => setPhase('idle') });
+    if (phase === 'orig') return stopAll();
+    const items = bufs.original ? [{ buffer: bufs.original, at: 0 }] : [...bed('bg'), { buffer: bufs.voices, at: 0 }];
+    setPhase('orig');
+    player.play({ from: Math.max(0, line.start - 0.8), to: Math.min(dur, line.end + 0.5), items, buses: { bg: settings.bed },
+      onEnd: () => setPhase('idle') });
   };
 
   const review = async (l = line, t = selectedTake(l)) => {
@@ -343,16 +406,32 @@ export function BoothView({ p, guest = false }) {
     setPhase('review');
     player.play({
       from: Math.max(0, Math.min(l.start, a) - 0.6), to: Math.min(dur, Math.max(l.end, b) + 0.5),
-      items: [...bed(), { buffer: buf, at, region: [a, b], gain: db2gain(t.gain || 0) }], onEnd: () => setPhase('idle'),
+      items: [...bed('bg'), { buffer: buf, at, region: [a, b], gain: db2gain(t.gain || 0) }], buses: { bg: settings.bed },
+      onEnd: () => setPhase('idle'),
     });
   };
+  const toggleReview = () => (phase === 'review' ? stopAll() : review());
 
-  const playScene = async () => {
-    stopAll();
+  /** The scene with every recorded take, from `from` on; the background follows the Fon slider. */
+  const playScene = async (from) => {
+    if (phase === 'scene') return stopAll();
+    if (recInfo.current || phase === 'upload') return;
     const b = await loadMixBuffers(p, { lite: guest }).catch(toastError);
     if (!b) return;
-    setPhase('listen');
-    player.play({ from: 0, to: dur, ...buildMix(p, b, 'dub'), onEnd: () => setPhase('idle') });
+    const mix = buildMix(p, b, 'dub');
+    const base = { bg: mix.buses.bg ?? 1, amb: mix.buses.amb ?? 1 };
+    sceneBuses.current = base;
+    mix.buses.bg = base.bg * settings.bed;
+    mix.buses.amb = base.amb * settings.bed;
+    setPhase('scene');
+    player.play({ from: clamp(from, 0, Math.max(0, dur - 0.2)), to: dur, ...mix, onEnd: () => setPhase('idle') });
+  };
+  const fromLine = () => (line ? line.start - 1 : 0);
+  // the picture works like any player: a click stops what plays, or plays the scene from this line
+  const clickVideo = () => {
+    if (phase === 'rec' || phase === 'upload') return; // a click on the picture never ends a take
+    if (playing) stopAll();
+    else playScene(fromLine());
   };
 
   const record = async () => {
@@ -368,14 +447,13 @@ export function BoothView({ p, guest = false }) {
     }
     const from = line.start - settings.preroll;
     const to = settings.autoStop ? Math.min(dur + 1, line.end + settings.tail) : dur + 0.5;
-    const items = [];
-    if (settings.bg) items.push(...bed('bg'));
-    if (settings.guide > 0) items.push({ buffer: bufs.voices, at: 0, gain: settings.guide, bus: 'guide' });
+    // both are always there, at their slider's level: moving a slider mid-take is heard right away
+    const items = [...bed('bg'), { buffer: bufs.voices, at: 0, bus: 'guide' }];
     const beeps = settings.beeps ? [line.start - 1.5, line.start - 1.0, line.start - 0.5] : [];
     recorder.start();
     recInfo.current = { lineId: line.id, from };
     setPhase('rec');
-    player.play({ from, to, items, beeps, onEnd: () => finish(false) });
+    player.play({ from, to, items, beeps, buses: { bg: settings.bed, guide: settings.guide }, onEnd: () => finish(false) });
     recInfo.current.t0 = player.t0;
   };
 
@@ -473,7 +551,8 @@ export function BoothView({ p, guest = false }) {
         record();
       } else if (e.key === 'Escape') stopAll();
       else if (k === 'p') listen();
-      else if (k === 'l') review();
+      else if (k === 'l') toggleReview();
+      else if (k === 'k') playScene(fromLine());
       else if (e.key === 'Enter' || e.key === 'ArrowDown') {
         e.preventDefault();
         next();
@@ -567,7 +646,8 @@ export function BoothView({ p, guest = false }) {
   return html`<div class=${cls('page booth', guest && 'guest', recording && 'is-rec')}>
     <div class="booth-main" ref=${stage}>
       <section class="pane booth-stage">
-        <${VideoPane} src=${fileUrl(p.id, p.clip.preview, p.clip.ver)} poster=${fileUrl(p.id, p.clip.thumb, p.clip.ver)} class="booth-video">
+        <${VideoPane} src=${fileUrl(p.id, p.clip.preview, p.clip.ver)} poster=${fileUrl(p.id, p.clip.thumb, p.clip.ver)} class="booth-video"
+          onClick=${clickVideo} title=${playing ? 'Durdur' : 'Bu satırdan oynat'}>
           <i class="streamer"></i>
           <div class="countdown"><div class="cd-num"><svg class="cd-ring" viewBox="0 0 132 132"><circle cx="66" cy="66" r="60"
             style=${{ strokeDasharray: RING, strokeDashoffset: 0 }} /></svg><span class="cd-txt"></span></div></div>
@@ -576,7 +656,7 @@ export function BoothView({ p, guest = false }) {
         </${VideoPane}>
         ${line && html`<div class="cue" style=${{ '--c': c ? c.color : '#8c897f' }}>
           <div class="cue-head">
-            <span class="hl" style=${{ '--c': c ? c.color : '#8c897f' }}>${c ? c.name : ''}</span>
+            <span class="hl" key=${line.id} style=${{ '--c': c ? c.color : '#8c897f' }}>${c ? c.name : ''}</span>
             <span class="tc dim">${globalIdx + 1}/${p.lines.length}</span>
             <span class="grow"></span>
             <span class="tc-lcd" title="Satırın süresi">${(line.end - line.start).toFixed(1)} sn</span>
@@ -588,7 +668,10 @@ export function BoothView({ p, guest = false }) {
         <div class="booth-controls">
           <div class="bc-side">
             <${Btn} kind="ghost" icon="prev" onClick=${prev} disabled=${idx <= 0 || recording} title="Önceki satır (↑)" />
-            <${Btn} icon="headphones" onClick=${listen} disabled=${!bufs || recording} title="Orijinali dinle (P)">Orijinal</${Btn}>
+            <${PlayButton} playing=${phase === 'scene'} onClick=${() => playScene(fromLine())} disabled=${!bufs || recording || busy}
+              title=${phase === 'scene' ? 'Durdur (K)' : 'Sahneyi bu satırdan dublajla oynat (K)'} />
+            <${Btn} icon=${phase === 'orig' ? 'stop' : 'headphones'} active=${phase === 'orig'} onClick=${listen} disabled=${!bufs || recording}
+              title=${phase === 'orig' ? 'Durdur (P)' : 'Orijinali dinle (P)'}>${phase === 'orig' ? 'Durdur' : 'Orijinal'}</${Btn}>
           </div>
           <div class="recwrap">
             <button class=${cls('recbtn', recording && 'on', busy && 'busy')} onClick=${record} disabled=${!bufs || busy || testing}
@@ -596,14 +679,15 @@ export function BoothView({ p, guest = false }) {
             <span class="reclabel">${recording ? 'Durdur' : phase === 'upload' ? 'Gönderiliyor' : phase === 'process' ? 'İşleniyor' : take ? 'Tekrar kaydet' : 'Kaydet'}</span>
           </div>
           <div class="bc-side right">
-            <${Btn} icon="play" onClick=${() => review()} disabled=${!take || take.status !== 'ready' || recording} title="Kaydımı dinle (L)">Kaydım</${Btn}>
+            <${Btn} icon=${phase === 'review' ? 'stop' : 'play'} active=${phase === 'review'} onClick=${toggleReview}
+              disabled=${!take || take.status !== 'ready' || recording} title=${phase === 'review' ? 'Durdur (L)' : 'Kaydımı dinle (L)'}>${phase === 'review' ? 'Durdur' : 'Kaydım'}</${Btn}>
             <${Btn} kind="ghost" icon="next" onClick=${next} disabled=${idx >= lines.length - 1 || recording} title="Sonraki satır (Enter)" />
           </div>
         </div>
-        <div class="booth-meter"><${Icon} name="mic" size=${14} /><${LevelMeter} /></div>
+        <${Listening} settings=${settings} setLevel=${setLevel} />
         <div class="booth-hint">
-          <span><${Kbd}>Boşluk</${Kbd}> kaydet</span><span><${Kbd}>P</${Kbd}> orijinal</span><span><${Kbd}>L</${Kbd}> kaydım</span>
-          <span><${Kbd}>Enter</${Kbd}> sonraki</span><span><${Kbd}>Esc</${Kbd}> iptal</span>
+          <span><${Kbd}>Boşluk</${Kbd}> kaydet</span><span><${Kbd}>K</${Kbd}> oynat</span><span><${Kbd}>P</${Kbd}> orijinal</span>
+          <span><${Kbd}>L</${Kbd}> kaydım</span><span><${Kbd}>Enter</${Kbd}> sonraki</span><span><${Kbd}>Esc</${Kbd}> durdur</span>
         </div>
       </section>
       ${line && html`<section class="pane takes-pane">
@@ -612,7 +696,7 @@ export function BoothView({ p, guest = false }) {
             onChange=${(e) => { uploadFile(e.target.files[0]); e.target.value = ''; }} />
           <${Btn} small kind="ghost" icon="upload" onClick=${() => fileIn.current.click()} title="WhatsApp sesli mesajı ya da ses dosyası">Dosyadan</${Btn}>
         </div>
-        <div class="pane-scroll"><${TakeList} p=${p} line=${line} me=${name} guest=${guest} onPlay=${(t) => review(line, t)} /></div>
+        <div class="pane-scroll"><${TakeList} p=${p} line=${line} me=${name} guest=${guest} onPlay=${(t) => (phase === 'review' ? stopAll() : review(line, t))} /></div>
       </section>`}
     </div>
     <aside class="booth-side pane">
@@ -631,7 +715,7 @@ export function BoothView({ p, guest = false }) {
           })}</div>`
         : html`<div class="pane-scroll"><${BoothSettings} settings=${settings} set=${set} guest=${guest} name=${name} setName=${setName} onTestRec=${testRec} testing=${testing} /></div>`}
       <div class="side-foot">
-        <${Btn} small icon="play" onClick=${playScene}>Sahneyi dublajla dinle</${Btn}>
+        <${Btn} small icon=${phase === 'scene' ? 'stop' : 'play'} active=${phase === 'scene'} onClick=${() => playScene(0)}>${phase === 'scene' ? 'Durdur' : 'Sahneyi baştan dinle'}</${Btn}>
         ${!guest && html`<input type="file" hidden multiple ref=${bulkIn} accept="audio/*,video/*,.m4a,.opus,.ogg,.mp3,.wav,.aac,.amr,.webm,.flac"
             onChange=${(e) => { setBulkFiles([...e.target.files]); e.target.value = ''; }} />
           <${Btn} small icon="upload" onClick=${() => bulkIn.current.click()} title="Arkadaşlarının gönderdiği ses dosyalarını satırlara dağıt">Toplu yükle</${Btn}>`}

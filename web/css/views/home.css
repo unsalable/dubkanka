@@ -34,7 +34,7 @@
 .plist-empty { padding: 26px 22px; }
 .plist-empty p { margin: 0; max-width: 62ch; }
 .prow { display: grid; grid-template-columns: 136px minmax(0, 1fr) 64px 92px 32px; align-items: center; gap: 16px; padding: 8px 8px 8px 8px; border-radius: 14px;
-  cursor: pointer; transition: background-color var(--t-fast); animation: rise var(--t-slow) var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 12) * 26ms * var(--mv)); }
+  cursor: pointer; transition: background-color var(--t-fast); }
 .prow:hover { background: rgba(255, 250, 235, 0.035); }
 .prow:focus-visible { outline-offset: -2px; }
 .prow-thumb { position: relative; width: 136px; aspect-ratio: 16 / 9; overflow: hidden; background: var(--raised); border-radius: 10px; box-shadow: inset 0 0 0 1px var(--line);
