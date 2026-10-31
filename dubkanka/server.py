@@ -86,9 +86,6 @@ def system(request: Request):
         "whisperModels": [["small", "Hızlı (küçük model, ~0.5 GB)"],
                           ["large-v3-turbo", "Dengeli - önerilen (~1.6 GB)"],
                           ["large-v3", "En iyi doğruluk (~3 GB, daha yavaş)"]],
-        "claudeModels": [["claude-opus-5-5", "Claude Opus 5.5 (en iyi)"],
-                         ["claude-sonnet-5-5", "Claude Sonnet 5.5 (hızlı)"],
-                         ["claude-haiku-5-5", "Claude Haiku 5.5 (en ucuz)"]],
         "downloaded": {"whisper": [p.name for p in whisper_dir.glob("models--*")] if whisper_dir.exists() else []},
         "exportsDir": str(EXPORTS_DIR),
     }
@@ -98,9 +95,14 @@ def system(request: Request):
 async def settings_update(request: Request):
     host_only(request)
     body = await body_json(request)
-    if "anthropicKey" in body:
-        body["anthropicKey"] = str(body["anthropicKey"] or "").strip()
+    from . import translate
+    from .api_settings import fill_default_models
+    if isinstance(body.get("providers"), dict):
+        body["providers"] = {k: v for k, v in body["providers"].items() if k in translate.REGISTRY}
+    if "translator" in body and translate.ALIASES.get(body["translator"], body["translator"]) not in translate.REGISTRY:
+        body.pop("translator")
     save_settings(body)
+    await asyncio.to_thread(fill_default_models, body)
     return public_settings()
 
 

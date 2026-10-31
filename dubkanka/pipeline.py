@@ -249,10 +249,13 @@ def run_prepare(job, pid, opts):
             prog(0, "Satırlar çevriliyor...")
             p = store.get(pid)
             from .translate import translate_lines
+            notes = []
             out = translate_lines(p["lines"], p["characters"], src_lang, settings.get("dstLang", "en"),
-                                  settings.get("translator", "google"), settings.get("style", "natural"), app, prog)
+                                  settings.get("translator", "google"), settings.get("style", "natural"), app, prog,
+                                  notes)
             store.mutate(pid, lambda p_: [l.update(text=out.get(l["id"], l["text"])) for l in p_["lines"]])
             job.step("translate", "done")
+            warning = " ".join(notes) or None
         except Exception as e:
             warning = f"Çeviri yapılamadı: {e}. Senaryo ekranından tekrar deneyebilirsin."
             job.step("translate", "error")
@@ -271,10 +274,12 @@ def run_translate(job, pid, engine, style, only_empty):
         return {"count": 0}
     st = p["settings"]
     src = st.get("srcLang") if st.get("srcLang") not in (None, "", "auto") else (p.get("detectedLang") or "auto")
-    from .translate import translate_lines
+    from .translate import ALIASES, translate_lines
+    engine = ALIASES.get(engine, engine)
     job.update(0.0, "Satırlar çevriliyor...")
+    notes = []
     out = translate_lines(lines, p["characters"], src, st.get("dstLang", "en"), engine, style, load_settings(),
-                          lambda f, *_: job.update(f))
+                          lambda f, *_: job.update(f), notes)
 
     def fn(p_):
         p_["settings"]["translator"] = engine
@@ -283,4 +288,4 @@ def run_translate(job, pid, engine, style, only_empty):
             if l["id"] in out:
                 l["text"] = out[l["id"]]
     store.mutate(pid, fn)
-    return {"count": len(out)}
+    return {"count": len(out), "message": " ".join(notes) or f"{len(out)} satır çevrildi."}

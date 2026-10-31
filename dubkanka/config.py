@@ -27,9 +27,8 @@ DEFAULT_SETTINGS = {
     "whisperModel": "large-v3-turbo",
     "device": "auto",
     "separationModel": "htdemucs_ft",
-    "translator": "google",
-    "anthropicKey": "",
-    "claudeModel": "claude-opus-5-5",
+    "translator": "google",  # default engine for new scenes: a provider id from translate.PROVIDERS
+    "providers": {},  # per provider {key, model, url}; keys never leave this PC (public_settings masks them)
     "openBrowser": True,
     "projectsDir": "",  # empty = default folder; a change applies after a restart
     "exportsDir": "",
@@ -51,8 +50,23 @@ def load_settings():
                     data = json.loads(SETTINGS_FILE.read_text(encoding="utf-8"))
                 except Exception:
                     data = {}
-            _settings = {**DEFAULT_SETTINGS, **data}
+            _settings = _migrate({**DEFAULT_SETTINGS, **data})
         return dict(_settings)
+
+
+def _migrate(s):
+    """1.0 kept only a Claude key; 1.1 has a list of translation providers."""
+    s["providers"] = {k: dict(v) for k, v in (s.get("providers") or {}).items() if isinstance(v, dict)}
+    key, model = s.pop("anthropicKey", ""), s.pop("claudeModel", "")
+    if key or model:
+        a = s["providers"].setdefault("anthropic", {})
+        if key and not a.get("key"):
+            a["key"] = key
+        if model and not a.get("model"):
+            a["model"] = model
+    if s.get("translator") == "claude":
+        s["translator"] = "anthropic"
+    return s
 
 
 def save_settings(patch):
@@ -60,7 +74,20 @@ def save_settings(patch):
     load_settings()
     with _lock:
         for k, v in patch.items():
-            if k in DEFAULT_SETTINGS:
+            if k == "providers" and isinstance(v, dict):
+                for pid, conf in v.items():  # merge field by field; an empty key removes the saved one
+                    if not isinstance(conf, dict):
+                        continue
+                    cur = _settings["providers"].setdefault(pid, {})
+                    for f, val in conf.items():
+                        if f not in ("key", "model", "url"):
+                            continue
+                        val = str(val or "").strip()
+                        if val:
+                            cur[f] = val
+                        else:
+                            cur.pop(f, None)
+            elif k in DEFAULT_SETTINGS:
                 _settings[k] = v
         SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
         tmp = SETTINGS_FILE.with_suffix(".tmp")
@@ -71,8 +98,8 @@ def save_settings(patch):
 
 def public_settings():
     s = load_settings()
-    key = s.pop("anthropicKey", "")
-    s["hasAnthropicKey"] = bool(key)
+    s["providers"] = {pid: {"hasKey": bool(c.get("key")), "model": c.get("model", ""), "url": c.get("url", "")}
+                      for pid, c in s["providers"].items()}
     return s
 
 
