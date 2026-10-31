@@ -1,7 +1,7 @@
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P } from '../api.js';
 import { Btn, Field, Icon, JobPanel, Select } from '../components.js';
-import { go, jobOf, toastError, useStore } from '../state.js';
+import { go, jobOf, toast, toastError, useStore } from '../state.js';
 import { clamp, fmtTime, parseTime } from '../util.js';
 
 const running = (j) => j && (j.status === 'running' || j.status === 'queued');
@@ -42,6 +42,16 @@ function RangeBar({ duration, range, setRange, current, onSeek }) {
   </div>`;
 }
 
+function Processing({ p, job, title, note }) {
+  return html`<div class="page processing-page"><div class="processing">
+    <div class="processing-head">
+      <div class="processing-thumb">${p.clip && p.clip.thumb ? html`<img src=${fileUrl(p.id, p.clip.thumb, p.clip.ver)} alt="" />` : html`<${Icon} name="film" size=${24} />`}</div>
+      <div><h1>${title}</h1><p>${note}</p></div>
+    </div>
+    <div class="panel"><${JobPanel} bare job=${job} onCancel=${job && job.id && (() => api.post(`/api/jobs/${job.id}/cancel`))} /></div>
+  </div></div>`;
+}
+
 export function PrepareView({ p }) {
   const s = useStore();
   const sys = s.system || {};
@@ -52,8 +62,9 @@ export function PrepareView({ p }) {
   const dur = info ? info.duration : 0;
   const [range, setRange] = useState(() => [p.trim ? p.trim.start : 0, p.trim ? p.trim.end : dur]);
   const [cur, setCur] = useState(0);
-  const [opts, setOpts] = useState(() => ({ ...p.settings, translator: p.settings.translator || sys.settings?.translator || 'google' }));
+  const [opts, setOpts] = useState(() => ({ ...p.settings, translator: p.settings.translator === 'claude' ? 'anthropic' : p.settings.translator || sys.settings?.translator || 'google' }));
   const stopAt = useRef(null);
+  const wasRunning = useRef(running(prep));
 
   useEffect(() => {
     // the page can open while the video is still being read: take the selection once the duration is known
@@ -61,20 +72,27 @@ export function PrepareView({ p }) {
     setRange((r) => (r[1] > 0 && r[1] <= dur + 0.01 ? r : [p.trim ? p.trim.start : 0, p.trim && p.trim.end > 0 ? p.trim.end : dur]));
   }, [dur]);
 
+  // the scene is ready: straight to the script, nobody has to spot a banner
+  useEffect(() => {
+    if (running(prep)) wasRunning.current = true;
+    else if (wasRunning.current && prep && prep.status === 'done' && p.status === 'ready') {
+      wasRunning.current = false;
+      const r = prep.result || {};
+      if (r.warning) toast(r.warning, 'info', 8000);
+      else toast(`Sahne hazır: ${r.lines ?? p.lines.length} satır`, 'ok');
+      go(`p/${p.id}/script`);
+    }
+  }, [prep && prep.status, p.status]);
+
   if (running(imp) || (!p.source && !(imp && imp.status === 'error')))
-    return html`<div class="page narrow"><${JobPanel} job=${imp || { title: 'Video okunuyor', status: 'running', progress: 0, message: 'Bekleniyor…' }} /></div>`;
+    return html`<${Processing} p=${p} job=${imp || { title: 'Video okunuyor', status: 'running', progress: 0, message: 'Bekleniyor…' }}
+      title="Video okunuyor" note=${(imp && imp.title) === 'Video indiriliyor' ? 'Bağlantıdaki video indiriliyor.' : 'Dosya yüklendi, okunuyor.'} />`;
   if (!p.source)
     return html`<div class="page narrow"><${JobPanel} job=${imp} /><${Btn} icon="back" onClick=${() => go('')}>Projelere dön</${Btn}></div>`;
 
   if (running(prep) || p.status === 'preparing')
-    return html`<div class="page"><div class="processing">
-      <div class="processing-head">
-        <div class="processing-thumb">${p.clip && p.clip.thumb ? html`<img src=${fileUrl(p.id, p.clip.thumb, p.clip.ver)} alt="" />` : null}</div>
-        <div><h1>Sahne hazırlanıyor</h1>
-          <p>İlk seferde yapay zeka modelleri indiği için birkaç dakika sürebilir. Sonrakiler çok daha hızlı.</p></div>
-      </div>
-      <div class="panel"><${JobPanel} bare job=${prep} onCancel=${prep && (() => api.post(`/api/jobs/${prep.id}/cancel`))} /></div>
-    </div></div>`;
+    return html`<${Processing} p=${p} job=${prep || { title: 'Sahne hazırlanıyor', status: 'queued', progress: 0, message: 'Sırada…' }}
+      title="Sahne hazırlanıyor" note="İlk seferde yapay zeka modelleri indiği için birkaç dakika sürebilir; sonrakiler çok daha hızlı. Bitince senaryo açılır." />`;
 
   const src = fileUrl(p.id, p.source.proxy || p.source.file);
   const set = (k) => (v) => setOpts((o) => ({ ...o, [k]: v }));
@@ -91,20 +109,22 @@ export function PrepareView({ p }) {
   const start = async () => {
     if (p.status === 'ready' && p.lines.some((l) => l.takes && l.takes.length) && !confirm('Yeniden hazırlarsan mevcut satırlar ve tüm kayıtlar silinir. Devam edilsin mi?')) return;
     try {
+      wasRunning.current = true;
       await api.post(P(p.id, '/prepare'), { start: range[0], end: range[1], ...opts, speakers: Number(opts.speakers) || 0 });
     } catch (e) {
       toastError(e);
     }
   };
   const langs = sys.languages || [];
+  const translators = sys.translators || [];
+  const tr = translators.find((t) => t.id === opts.translator) || {};
   const long = range[1] - range[0] > 300;
 
   return html`<div class="page prepare">
-    ${prep && prep.status === 'error' && html`<${JobPanel} job=${prep} />`}
-    ${p.status === 'ready' && html`<div class="alert ok"><${Icon} name="check" /> Sahne hazır. <a href=${`#/p/${p.id}/script`}>Senaryoya geç</a>
-      <span class="muted">Farklı bir kısım seçip yeniden hazırlayabilirsin.</span></div>`}
-    ${prep && prep.status === 'done' && prep.result && prep.result.warning && html`<div class="alert warn"><${Icon} name="alert" /> ${prep.result.warning}</div>`}
-    <div class="prepare-grid">
+    ${prep && prep.status === 'error' && html`<div class="prepare-alert"><${JobPanel} job=${prep} /></div>`}
+    ${p.status === 'ready' && html`<div class="prepare-alert"><div class="alert ok"><${Icon} name="check" /><span>Bu sahne hazır.</span>
+      <a href=${`#/p/${p.id}/script`}>Senaryoyu aç</a><span class="muted">ya da başka bir kısım seçip yeniden hazırla.</span></div></div>`}
+    <div class="ws prepare-grid">
       <section class="pane viewer-pane">
         <div class="videopane srcwrap">
           <video ref=${video} class="srcvideo" src=${src} controls preload="metadata"
@@ -119,45 +139,42 @@ export function PrepareView({ p }) {
         <div class="trim">
           <${RangeBar} duration=${dur} range=${range} setRange=${setRange} current=${cur} onSeek=${seek} />
           <div class="trimrow">
-            <div class="trimcell"><span class="field-label">Başlangıç</span>
-              <div class="row"><${TimeInput} label="Başlangıç" value=${range[0]} onChange=${(t) => setRange([clamp(t, 0, range[1] - 1), range[1]])} />
-                <${Btn} small kind="ghost" onClick=${() => setRange([Math.min(cur, range[1] - 1), range[1]])} title="Başlangıcı oynatma noktasına al">Şu an</${Btn}></div></div>
+            <div class="trimcell"><span class="seclabel">Giriş</span>
+              <div class="row nowrap"><${TimeInput} label="Başlangıç" value=${range[0]} onChange=${(t) => setRange([clamp(t, 0, range[1] - 1), range[1]])} />
+                <${Btn} small kind="ghost" onClick=${() => setRange([Math.min(cur, range[1] - 1), range[1]])} title="Başlangıcı oynatma noktasına al">Buradan</${Btn}></div></div>
             <div class="trimcell center"><${Btn} icon="play" onClick=${playSel}>Seçimi izle</${Btn}>
-              <span class="tc">Süre ${fmtTime(range[1] - range[0])}</span></div>
-            <div class="trimcell right"><span class="field-label">Bitiş</span>
-              <div class="row"><${Btn} small kind="ghost" onClick=${() => setRange([range[0], Math.max(cur, range[0] + 1)])} title="Bitişi oynatma noktasına al">Şu an</${Btn}>
+              <span class="tc-lcd">${fmtTime(range[1] - range[0])}</span></div>
+            <div class="trimcell right"><span class="seclabel">Çıkış</span>
+              <div class="row nowrap"><${Btn} small kind="ghost" onClick=${() => setRange([range[0], Math.max(cur, range[0] + 1)])} title="Bitişi oynatma noktasına al">Buraya kadar</${Btn}>
                 <${TimeInput} label="Bitiş" value=${range[1]} onChange=${(t) => setRange([range[0], clamp(t, range[0] + 1, dur)])} /></div></div>
           </div>
-          ${long && html`<div class="alert warn small" style=${{ margin: '12px 8px 0' }}><${Icon} name="alert" size=${16} />Seçim ${fmtTime(range[1] - range[0], 0)} uzunluğunda. TikTok için genelde 15 sn ile 3 dk arası bir sahne yeter; kısa sahne daha hızlı hazırlanır.</div>`}
+          ${long && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />Seçim ${fmtTime(range[1] - range[0], 0)} uzunluğunda. TikTok için genelde 15 sn ile 3 dk arası yeter; kısa sahne daha hızlı hazırlanır.</div>`}
         </div>
       </section>
       <section class="pane">
         <div class="pane-head"><h3>Sahne ayarları</h3></div>
         <div class="pane-body">
-          <${Field} label="Videoda konuşulan dil">
+          <${Field} label="Videodaki dil">
             <${Select} value=${opts.srcLang || 'auto'} onChange=${set('srcLang')} options=${[['auto', 'Otomatik algıla'], ...langs]} />
           </${Field}>
-          <${Field} label="Dublaj dili" hint="Aynı dili seçersen çeviri yapılmaz (Türkçe troll dublaj için ideal).">
+          <${Field} label="Dublaj dili" hint="Aynı dili seçersen çeviri yapılmaz (Türkçe troll dublaj için).">
             <${Select} value=${opts.dstLang || 'en'} onChange=${set('dstLang')} options=${langs} />
           </${Field}>
-          <${Field} label="Sahnede kaç kişi konuşuyor?" hint="Biliyorsan seç; kim konuşuyor ayrımı daha doğru olur.">
+          <${Field} label="Kaç kişi konuşuyor?" hint="Biliyorsan seç; kimin konuştuğu daha doğru ayrılır.">
             <${Select} value=${String(opts.speakers || 0)} onChange=${set('speakers')}
-              options=${[['0', 'Bilmiyorum, otomatik bulsun'], ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => [String(n), n + ' kişi'])]} />
+              options=${[['0', 'Otomatik bul'], ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => [String(n), n + ' kişi'])]} />
           </${Field}>
           <${Field} label="Çeviri">
-            <${Select} value=${opts.translator} onChange=${set('translator')} options=${[
-              ['google', 'Google Çeviri (ücretsiz)'],
-              ['claude', 'Claude: dublaja uygun, satır süresine sığan çeviri' + (sys.settings && !sys.settings.hasAnthropicKey ? ' (API anahtarı gerekli)' : '')],
-            ]} />
+            <${Select} value=${opts.translator} onChange=${set('translator')} options=${translators.map((t) => [t.id, t.name + (t.configured ? '' : ' (ayarlanmadı)')])} />
           </${Field}>
-          ${opts.translator === 'claude' && html`<${Field} label="Çeviri tarzı">
+          ${tr.kind === 'llm' && html`<${Field} label="Çeviri tarzı">
             <${Select} value=${opts.style || 'natural'} onChange=${set('style')} options=${Object.entries(sys.styles || {})} />
           </${Field}>`}
-          ${opts.translator === 'claude' && sys.settings && !sys.settings.hasAnthropicKey && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />Claude için <a href="#/settings">Ayarlar</a>'dan API anahtarını gir. Girmezsen hazırlık yine çalışır, sadece çeviri boş kalır.</div>`}
-          <div class="prep-cta">
-            <${Btn} kind="primary big" icon="sparkle" onClick=${start}>${p.status === 'ready' ? 'Yeniden hazırla' : 'Sahneyi hazırla'}</${Btn}>
-            <p>Konuşmalar fondan ayrılır (kuş, rüzgar gibi ortam sesleri korunur), yazıya dökülür, konuşmacılara bölünür ve çevrilir.</p>
-          </div>
+          ${tr.id && !tr.configured && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${tr.name} ayarlanmamış; satırlar çevrilmeden kalır. <a href="#/settings">Ayarlar</a></div>`}
+        </div>
+        <div class="pane-body prep-cta">
+          <${Btn} kind="primary big" icon="sparkle" onClick=${start}>${p.status === 'ready' ? 'Yeniden hazırla' : 'Sahneyi hazırla'}</${Btn}>
+          <p>Konuşmalar fondan ayrılır (kuş, rüzgar gibi ortam sesleri korunur), yazıya dökülür, konuşmacılara bölünür ve çevrilir. Bitince senaryo açılır.</p>
         </div>
       </section>
     </div>

@@ -1,6 +1,6 @@
 import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P } from '../api.js';
-import { Btn, CharDot, Field, Icon, JobPanel, Modal, PlayButton, Select, TimeReadout, Toggle, usePlaying, VideoPane } from '../components.js';
+import { Btn, Field, Icon, JobPanel, Lamp, Modal, PlayButton, Popover, Select, TimeReadout, Toggle, usePlaying, VideoPane } from '../components.js';
 import { engine, player, stemUrls } from '../engine.js';
 import { go, jobOf, patchLocal, toast, toastError, useStore } from '../state.js';
 import { fitZoom, Timeline } from '../timeline.js';
@@ -22,14 +22,28 @@ export function playOriginal(p, original, from, to) {
   player.play({ from, to, items: [{ buffer: original, at: 0 }] });
 }
 
-function SpeedBadge({ orig, text }) {
-  if (!text || !text.trim()) return html`<span class="badge" title="Dublaj metni boş">boş</span>`;
+/** Does the dub fit the mouth? Syllables of the dub against the original. */
+function Fit({ orig, text }) {
+  if (!text || !text.trim()) return html`<${Lamp} title="Dublaj metni boş">boş</${Lamp}>`;
   const so = syllables(orig);
   const sd = syllables(text);
   const r = sd / Math.max(1, so);
-  if (r > 1.35) return html`<span class="badge bad" title=${`Orijinal ${so} hece, dublaj ${sd} hece. Kısaltırsan ağız hareketine daha iyi oturur.`}>uzun</span>`;
-  if (r < 0.6) return html`<span class="badge warn" title=${`Orijinal ${so} hece, dublaj ${sd} hece.`}>kısa</span>`;
-  return html`<span class="badge good" title=${`Orijinal ${so} hece, dublaj ${sd} hece.`}>uygun</span>`;
+  const title = `Orijinal ${so} hece, dublaj ${sd} hece.`;
+  if (r > 1.35) return html`<${Lamp} tone="bad" title=${title + ' Kısaltırsan ağız hareketine daha iyi oturur.'}>uzun</${Lamp}>`;
+  if (r < 0.6) return html`<${Lamp} tone="warn" title=${title}>kısa</${Lamp}>`;
+  return html`<${Lamp} tone="ok" title=${title}>uygun</${Lamp}>`;
+}
+
+/** Character tag of a line: the highlighter mark; click to give the line to someone else. */
+function CharTag({ p, line, c, onPick }) {
+  const btn = useRef(null);
+  const [open, setOpen] = useState(false);
+  return html`<button ref=${btn} class="chartag" title="Bu satırı kim söylüyor?" onClick=${(e) => { e.stopPropagation(); setOpen(!open); }}>
+      <span class="hl" style=${{ '--c': c ? c.color : '#8c897f' }}>${c ? c.name : '?'}</span><${Icon} name="chevron" size=${11} class="chev" /></button>
+    ${open && html`<${Popover} anchor=${btn.current} align="start" title="Söyleyen" onClose=${() => setOpen(false)}>
+      ${p.characters.map((ch) => html`<button key=${ch.id} class="popitem" onClick=${() => { setOpen(false); onPick(ch.id); }}>
+        <span class="swatch" style=${{ '--c': ch.color }}></span><span class="grow">${ch.name}</span>${ch.id === line.char && html`<${Icon} name="check" size=${14} />`}</button>`)}
+    </${Popover}>`}`;
 }
 
 function LineRow({ p, line, idx, selected, onSelect, onPlay, chars }) {
@@ -64,81 +78,85 @@ function LineRow({ p, line, idx, selected, onSelect, onPlay, chars }) {
     patchLocal((pp) => (pp.lines.find((l) => l.id === line.id).char = cid));
     api.patch(P(p.id, `/lines/${line.id}`), { char: cid }).catch(toastError);
   };
-  return html`<div class=${cls('linerow', selected && 'sel', flash && 'flash')} style=${{ '--c': c ? c.color : '#8b8b93', '--i': idx }} onClick=${() => onSelect(line)} id=${'line-' + line.id}>
+  return html`<div class=${cls('linerow', selected && 'sel', flash && 'flash')} style=${{ '--c': c ? c.color : '#8c897f', '--i': idx }}
+    onClick=${() => onSelect(line)} id=${'line-' + line.id}>
     <div class="linerow-num">${idx + 1}</div>
     <div class="linerow-main">
       <div class="linerow-meta">
-        <select class="input charselect" value=${line.char} title="Bu satırı kim söylüyor?" onClick=${(e) => e.stopPropagation()} onChange=${(e) => setChar(e.target.value)}>
-          ${p.characters.map((ch) => html`<option value=${ch.id} selected=${ch.id === line.char}>${ch.name}</option>`)}
-        </select>
-        <span class="tc">${fmtTime(line.start)} · ${(line.end - line.start).toFixed(1)} sn</span>
+        <${CharTag} p=${p} line=${line} c=${c} onPick=${setChar} />
+        <span class="tc">${fmtTime(line.start)}</span><span class="tc dim">${(line.end - line.start).toFixed(1)} sn</span>
+        <span class="grow"></span>
+        ${recorded && html`<${Lamp} tone="ok" title="Seçili bir kaydı var">kayıtlı</${Lamp}>`}
+        <${Fit} orig=${line.orig} text=${text} />
       </div>
-      <div class="orig" title="Orijinal">${line.orig || html`<em>(orijinal metin yok)</em>`}</div>
+      <div class="orig" title="Orijinal">${line.orig || html`<em>orijinal metin yok</em>`}</div>
       <textarea ref=${area} class="input dubtext" rows="1" placeholder="Dublaj repliğini yaz…" value=${text}
         onFocus=${() => { focused.current = true; onSelect(line); }}
         onBlur=${(e) => { focused.current = false; save.flush(e.target.value); }}
         onInput=${(e) => { setText(e.target.value); save(e.target.value); }}
         onKeyDown=${(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const next = document.querySelector(`#line-${p.lines[idx + 1]?.id} textarea`); if (next) next.focus(); else e.target.blur(); } }}></textarea>
     </div>
-    <div class="linerow-side">
-      <div class="row" style=${{ gap: '4px', justifyContent: 'flex-end' }}>
-        ${recorded ? html`<span class="badge good" title="Kaydı var"><${Icon} name="check" size=${12} />kayıt</span>` : null}
-        <${SpeedBadge} orig=${line.orig} text=${text} />
-      </div>
-      <div class="linerow-acts">
-        <button class="iconbtn" title="Orijinali dinle" onClick=${(e) => { e.stopPropagation(); onPlay(line); }}><${Icon} name="headphones" size=${16} /></button>
-        <button class="iconbtn" title="Bu satırı kaydet" onClick=${(e) => { e.stopPropagation(); go(`p/${p.id}/record/${line.id}`); }}><${Icon} name="mic" size=${16} /></button>
-      </div>
+    <div class="linerow-acts">
+      <button class="iconbtn" title="Orijinali dinle" onClick=${(e) => { e.stopPropagation(); onPlay(line); }}><${Icon} name="headphones" size=${16} /></button>
+      <button class="iconbtn" title="Bu satırı kaydet" onClick=${(e) => { e.stopPropagation(); go(`p/${p.id}/record/${line.id}`); }}><${Icon} name="mic" size=${16} /></button>
     </div>
   </div>`;
 }
 
-function CharChip({ p, c, count }) {
+function CastRow({ p, c, count, i }) {
   const [name, setName] = useState(c.name);
   const [actor, setActor] = useState(c.actor || '');
+  const [menu, setMenu] = useState(false);
+  const dots = useRef(null);
   useEffect(() => setName(c.name), [c.name]);
   useEffect(() => setActor(c.actor || ''), [c.actor]);
   const patch = (body) => api.patch(P(p.id, `/characters/${c.id}`), body).catch(toastError);
-  const [menu, setMenu] = useState(false);
   const merge = async (into) => {
     setMenu(false);
-    if (!into) return;
     await api.post(P(p.id, `/characters/${c.id}/merge`), { into }).catch(toastError);
   };
-  return html`<div class="charchip" style=${{ '--c': c.color }}>
-    <input type="color" class="colorpick" value=${c.color} title="Renk" onChange=${(e) => patch({ color: e.target.value })} />
-    <div class="charchip-fields">
-      <input class="bare strong" value=${name} title="Karakter adı" aria-label="Karakter adı" onInput=${(e) => setName(e.target.value)} onBlur=${() => name.trim() && name !== c.name && patch({ name: name.trim() })} onKeyDown=${(e) => e.key === 'Enter' && e.target.blur()} />
-      <input class="bare small" value=${actor} placeholder="Seslendiren…" title="Bu rolü kim seslendirecek?" aria-label="Seslendiren" onInput=${(e) => setActor(e.target.value)} onBlur=${() => actor !== (c.actor || '') && patch({ actor: actor.trim() })} onKeyDown=${(e) => e.key === 'Enter' && e.target.blur()} />
-    </div>
-    <span class="count">${count}</span>
-    <button class="iconbtn" title="Diğer işlemler" onClick=${() => setMenu(!menu)}><${Icon} name="dots" size=${16} /></button>
-    ${menu && html`<div class="popmenu" onMouseLeave=${() => setMenu(false)}>
-      <div class="muted small">Aynı kişi mi? Şununla birleştir:</div>
-      ${p.characters.filter((x) => x.id !== c.id).map((x) => html`<button class="popitem" onClick=${() => merge(x.id)}><${CharDot} color=${x.color} /> ${x.name}</button>`)}
-      ${count === 0 && html`<button class="popitem danger" onClick=${() => { setMenu(false); api.del(P(p.id, `/characters/${c.id}`)).catch(toastError); }}><${Icon} name="trash" size=${14} /> Karakteri sil</button>`}
-    </div>`}
+  const others = p.characters.filter((x) => x.id !== c.id);
+  return html`<div class="castrow" style=${{ '--c': c.color, '--i': i }}>
+    <label class="colorpick" title="Kalem rengi"><input type="color" value=${c.color} onChange=${(e) => patch({ color: e.target.value })} /></label>
+    <input class="bare strong castname" value=${name} title="Karakter adı" aria-label="Karakter adı" onInput=${(e) => setName(e.target.value)}
+      onBlur=${() => name.trim() && name !== c.name && patch({ name: name.trim() })} onKeyDown=${(e) => e.key === 'Enter' && e.target.blur()} />
+    <input class="bare castactor" value=${actor} placeholder="seslendiren" title="Bu rolü kim seslendirecek?" aria-label="Seslendiren"
+      onInput=${(e) => setActor(e.target.value)} onBlur=${() => actor !== (c.actor || '') && patch({ actor: actor.trim() })} onKeyDown=${(e) => e.key === 'Enter' && e.target.blur()} />
+    <span class="tc dim" title="Satır sayısı">${count}</span>
+    <button class="iconbtn sm" ref=${dots} title="Diğer işlemler" aria-haspopup="menu" aria-expanded=${menu} onClick=${() => setMenu(!menu)}><${Icon} name="dots" size=${16} /></button>
+    ${menu && html`<${Popover} anchor=${dots.current} title=${others.length ? 'Aynı kişi mi? Şununla birleştir' : null} onClose=${() => setMenu(false)}>
+      ${others.map((x) => html`<button key=${x.id} class="popitem" onClick=${() => merge(x.id)}>
+        <span class="swatch" style=${{ '--c': x.color }}></span><span class="grow">${x.name}</span><span class="dim tc">${p.lines.filter((l) => l.char === x.id).length}</span></button>`)}
+      ${others.length > 0 && html`<div class="popover-sep"></div>`}
+      ${count === 0
+        ? html`<button class="popitem danger" onClick=${() => { setMenu(false); api.del(P(p.id, `/characters/${c.id}`)).catch(toastError); }}><${Icon} name="trash" size=${14} />Karakteri sil</button>`
+        : html`<div class="popitem dim" aria-disabled="true"><${Icon} name="info" size=${14} />Satırı olan karakter silinemez, önce birleştir.</div>`}
+    </${Popover}>`}
   </div>`;
 }
+
+const ENGINE_KIND = (sys, id) => ((sys.translators || []).find((t) => t.id === id) || {}).kind;
 
 function TranslatePanel({ p, onClose }) {
   const s = useStore();
   const sys = s.system || {};
-  const [engineName, setEngine] = useState(p.settings.translator || 'google');
+  const translators = sys.translators || [];
+  const [engineName, setEngine] = useState(() => (p.settings.translator === 'claude' ? 'anthropic' : p.settings.translator) || 'google');
   const [style, setStyle] = useState(p.settings.style || 'natural');
   const [onlyEmpty, setOnlyEmpty] = useState(false);
   const job = jobOf('translate');
+  const tr = translators.find((t) => t.id === engineName) || {};
   const go_ = () => api.post(P(p.id, '/translate'), { engine: engineName, style, onlyEmpty }).catch(toastError);
   const runningJob = job && (job.status === 'running' || job.status === 'queued');
+  const options = translators.map((t) => [t.id, t.name + (t.configured ? '' : ' (ayarlanmadı)')]);
   return html`<${Modal} title="Satırları çevir" onClose=${onClose}>
-    <${Field} label="Çeviri motoru"><${Select} value=${engineName} onChange=${setEngine} options=${[['google', 'Google Çeviri (ücretsiz)'], ['claude', 'Claude: dublaja uygun çeviri']]} /></${Field}>
-    ${engineName === 'claude' && html`<${Field} label="Tarz" hint="Troll: sahne aynı kalır, replikler komik ya da absürt yeniden yazılır.">
+    <${Field} label="Çeviri servisi"><${Select} value=${engineName} onChange=${setEngine} options=${options.length ? options : [['google', 'Google Çeviri']]} /></${Field}>
+    ${ENGINE_KIND(sys, engineName) === 'llm' && html`<${Field} label="Tarz" hint="Troll: sahne aynı kalır, replikler komik ya da absürt yeniden yazılır.">
       <${Select} value=${style} onChange=${setStyle} options=${Object.entries(sys.styles || {})} /></${Field}>`}
-    ${engineName === 'claude' && sys.settings && !sys.settings.hasAnthropicKey && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />Önce <a href="#/settings">Ayarlar</a>'dan Anthropic API anahtarını gir.</div>`}
+    ${!tr.configured && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${tr.name} henüz ayarlanmadı. <a href="#/settings">Ayarlar → Çeviri</a></div>`}
     <${Toggle} checked=${onlyEmpty} onChange=${setOnlyEmpty} label="Sadece boş satırları çevir (yazdıklarım kalsın)" />
-    ${!onlyEmpty && html`<p class="muted small">Dolu satırların metni de değişecek.</p>`}
     ${job && html`<${JobPanel} job=${job} />`}
-    <div class="modal-actions"><${Btn} onClick=${onClose}>Kapat</${Btn}><${Btn} kind="primary" icon="sparkle" disabled=${runningJob} onClick=${go_}>Çevir</${Btn}></div>
+    <div class="modal-actions"><${Btn} onClick=${onClose}>Kapat</${Btn}><${Btn} kind="primary" icon="sparkle" disabled=${runningJob || !tr.configured} onClick=${go_}>Çevir</${Btn}></div>
   </${Modal}>`;
 }
 
@@ -157,7 +175,7 @@ function ShareScript({ p, onClose }) {
   const [cid, setCid] = useState(p.characters[0] ? p.characters[0].id : '');
   const txt = scriptText(p, cid);
   return html`<${Modal} title="Senaryoyu arkadaşına gönder" onClose=${onClose} wide>
-    <p class="muted">Arkadaşın odaya bağlanamıyorsa bu metni WhatsApp'tan gönder. Kayıtlarını sana atınca <b>Kayıt</b> ekranındaki <b>Dosyadan yükle</b> ile eklersin, zamanlamayı uygulama ayarlar.</p>
+    <p class="muted">Odaya bağlanamayan arkadaşına bu metni WhatsApp'tan gönder. Kayıtlarını sana atınca <b>Kayıt</b> ekranındaki <b>Toplu yükle</b> ile eklersin; zamanlamayı uygulama ayarlar.</p>
     <${Field} label="Kimin için?"><${Select} value=${cid} onChange=${setCid} options=${[...p.characters.map((c) => [c.id, c.name]), ['', 'Tüm senaryo']]} /></${Field}>
     <textarea class="input sharetext" readonly value=${txt}></textarea>
     <div class="modal-actions"><${Btn} icon="copy" kind="primary" onClick=${async () => { await copyText(txt); toast('Kopyalandı', 'ok'); }}>Kopyala</${Btn}></div>
@@ -231,13 +249,14 @@ export function ScriptView({ p }) {
   });
 
   const track = {
-    id: 'voices', label: html`<${Icon} name="wave" size=${14} />Orijinal konuşmalar`, height: 84, buffer: voices, waveColor: 'rgba(205,205,215,0.32)',
+    id: 'voices', label: html`<${Icon} name="wave" size=${14} />Orijinal konuşmalar`, height: 84, buffer: voices, waveColor: 'rgba(214,210,198,0.3)',
     clips: p.lines.map((l, i) => ({
       id: l.id, start: l.start, end: l.end, color: (chars[l.char] || {}).color, label: `${i + 1}`,
       title: `${(chars[l.char] || {}).name}: ${l.orig}`, resizable: true, draggable: true, className: 'lineclip',
     })),
   };
   const empty = p.lines.length === 0;
+  const recorded = p.lines.filter((l) => l.take).length;
 
   return html`<div class="page script" ref=${wrap}>
     <div class="ws script-ws">
@@ -254,14 +273,14 @@ export function ScriptView({ p }) {
             <${Btn} small kind="ghost" icon="trash" onClick=${delLine} disabled=${!selLine} title="Seçili satırı sil">Sil</${Btn}>
           </div>
         </section>
-        <section class="pane chars-pane">
-          <div class="pane-head"><h3>Karakterler</h3><span class="count">${p.characters.length}</span><span class="grow"></span>
+        <section class="pane cast-pane">
+          <div class="pane-head"><h3>Oyuncular</h3><span class="count">${p.characters.length}</span><span class="grow"></span>
             <${Btn} small kind="ghost" icon="plus" onClick=${() => api.post(P(p.id, '/characters'), {}).catch(toastError)}>Karakter</${Btn}></div>
-          <div class="pane-body">${p.characters.map((c) => html`<${CharChip} key=${c.id} p=${p} c=${c} count=${counts[c.id] || 0} />`)}</div>
+          <div class="pane-scroll cast">${p.characters.map((c, i) => html`<${CastRow} key=${c.id} p=${p} c=${c} count=${counts[c.id] || 0} i=${i} />`)}</div>
         </section>
       </div>
       <section class="pane lines-pane">
-        <div class="pane-head"><h3>Satırlar</h3><span class="count">${p.lines.length}</span><span class="grow"></span>
+        <div class="pane-head"><h3>Senaryo</h3><span class="count">${p.lines.length} satır · ${recorded} kayıtlı</span><span class="grow"></span>
           <${Btn} small kind="ghost" icon="sparkle" onClick=${() => setModal('translate')}>Çevir</${Btn}>
           <${Btn} small kind="ghost" icon="copy" onClick=${() => setModal('share')} title="Senaryoyu WhatsApp'tan göndermek için kopyala">Paylaş</${Btn}>
           <${Btn} small kind="primary" icon="mic" onClick=${() => go(`p/${p.id}/record`)}>Kayda geç</${Btn}></div>

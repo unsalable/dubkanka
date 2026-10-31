@@ -1,120 +1,424 @@
-import { html, useState } from '../../vendor/preact-htm.js';
+// Share: presets, the technical encode options (or a bit-exact copy of the source picture) and a playable preview of
+// the framing, the subtitles and the real mix.
+import { html, useEffect, useLayoutEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P } from '../api.js';
-import { Btn, Field, Icon, JobPanel, Range, Select, Toggle } from '../components.js';
+import { Btn, Field, Icon, JobPanel, Lamp, PlayButton, Range, Segmented, Select, TimeReadout, Toggle, usePlaying } from '../components.js';
+import { buildMix, loadMixBuffers, player, takeSpan } from '../engine.js';
 import { jobOf, patchLocal, toastError, useStore } from '../state.js';
-import { cls, fmtBytes, fmtTime, timeAgo } from '../util.js';
+import { clamp, cls, fmtBytes, fmtTime, readyTake, timeAgo } from '../util.js';
 
 const FONTS = ['Arial Black', 'Impact', 'Arial', 'Segoe UI', 'Verdana', 'Comic Sans MS', 'Trebuchet MS', 'Georgia'];
-const FORMAT_SHAPES = { vertical_blur: [9, 16], vertical_crop: [9, 16], square: [1, 1] };
+const FORMAT_NAMES = { vertical_blur: ['9:16', 'Bulanık arka plan'], vertical_crop: ['9:16', 'Ekranı doldur'], square: ['1:1', 'Kare'], original: ['Kaynak', 'Orijinal boyut'] };
+const CODECS = [['h264', 'H.264 / AVC'], ['hevc', 'H.265 / HEVC'], ['av1', 'AV1']];
+const ABITRATES = [96, 128, 160, 192, 256, 320];
+const LUFS = [['-14', '-14 LUFS · TikTok, YouTube'], ['-16', '-16 LUFS · Apple, podcast'], ['-23', '-23 LUFS · EBU R128 yayın']];
 
-function FramePreview({ p, ex }) {
-  const [vw, vh] = FORMAT_SHAPES[ex.format] || [p.clip.width || 16, p.clip.height || 9];
-  const thumb = fileUrl(p.id, p.clip.thumb, p.clip.ver);
-  const first = p.lines.find((l) => (l.text || '').trim());
-  const sample = ex.subs === 'orig' ? (first || {}).orig : (first || {}).text;
-  // fit the frame into the stage: tall formats are bounded by height, wide ones by width
-  const W = vh > vw ? (380 * vw) / vh : Math.min(380, 340 * (vw / vh));
-  const H = (W * vh) / vw;
-  const srcAspect = (p.clip.width || 16) / (p.clip.height || 9);
-  let fgH = H;
-  let fgW = H * srcAspect;
-  if (fgW > W) {
-    fgW = W;
-    fgH = W / srcAspect;
+const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
+function merged(def, ex) {
+  const out = { ...def };
+  for (const [k, v] of Object.entries(ex || {})) out[k] = isObj(v) && isObj(def[k]) ? merged(def[k], v) : v;
+  return out;
+}
+
+/** Same timing as the server's subtitle_events: the dub take when there is one, the line otherwise. */
+export function subtitleEvents(p) {
+  const dur = p.clip.duration;
+  const out = p.lines.map((l) => {
+    const t = readyTake(l);
+    let s, e;
+    if (t) {
+      const [, a, b] = takeSpan(t);
+      s = a + (t.voiceOffset || 0) - 0.05;
+      e = b + 0.15;
+    } else {
+      s = l.start - 0.05;
+      e = l.end + 0.25;
+    }
+    return [Math.max(0, s), Math.min(dur, e), l];
+  });
+  out.sort((a, b) => a[0] - b[0]);
+  for (let i = 0; i < out.length - 1; i++) if (out[i][1] > out[i + 1][0] - 0.02 && out[i + 1][0] > out[i][0] + 0.3) out[i][1] = out[i + 1][0] - 0.02;
+  return out;
+}
+
+function credits(p, ex) {
+  if ((ex.creditsText || '').trim()) return ex.creditsText.trim();
+  const names = {};
+  for (const l of p.lines) {
+    const t = readyTake(l);
+    if (t && t.source !== 'tts' && t.by) (names[l.char] = names[l.char] || new Set()).add(t.by);
   }
+  const parts = p.characters.filter((c) => names[c.id]).map((c) => `${c.name}: ${[...names[c.id]].join(', ')}`);
+  return parts.length ? 'Seslendirenler — ' + parts.join('  •  ') : '';
+}
+
+/** Output size and where the scene sits in it (export._geometry). */
+function geometry(fmt, w0, h0, height) {
+  const even = (x) => Math.max(2, Math.round(x / 2) * 2);
+  if (fmt === 'original') {
+    const s = height === 'source' ? 1 : height / Math.min(w0, h0);
+    return { W: even(w0 * s), H: even(h0 * s), box: [0, 0, even(w0 * s), even(h0 * s)] };
+  }
+  const short = height === 'source' ? 1080 : height;
+  const W = short;
+  const H = fmt === 'square' ? short : even((short * 16) / 9);
+  if (fmt === 'vertical_crop') return { W, H, box: [0, 0, W, H] };
+  const s = Math.min(W / w0, H / h0);
+  const fw = Math.floor((w0 * s) / 2) * 2;
+  const fh = Math.floor((h0 * s) / 2) * 2;
+  return { W, H, box: [(W - fw) / 2, (H - fh) / 2, fw, fh] };
+}
+
+/** The finished video in miniature: the picture framed like the export, burned subtitles, the real mix. */
+function FramePlayer({ p, ex }) {
+  const stage = useRef(null);
+  const canvas = useRef(null);
+  const video = useRef(null);
+  const sub = useRef(null);
+  const cred = useRef(null);
+  const [size, setSize] = useState({ w: 360, h: 640 });
+  const [bufs, setBufs] = useState(null);
+  const playing = usePlaying();
+  const dur = p.clip.duration;
+  const w0 = p.clip.width || 1280;
+  const h0 = p.clip.height || 720;
+  const g = geometry(ex.format, w0, h0, ex.video.height);
+  const scale = size.w / g.W;
+  const events = subtitleEvents(p);
+  const creditText = ex.credits ? credits(p, ex) : '';
+  const chars = Object.fromEntries(p.characters.map((c) => [c.id, c]));
+  const copying = ex.video.mode === 'copy';
+
+  // fit the output frame into the stage (before the first paint, so the frame does not animate in from a default)
+  useLayoutEffect(() => {
+    const el = stage.current;
+    const fit = () => {
+      const aw = el.clientWidth - 24;
+      const ah = el.clientHeight - 24;
+      const r = g.W / g.H;
+      const w = Math.min(aw, ah * r);
+      setSize({ w: Math.floor(w), h: Math.floor(w / r) });
+    };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [g.W, g.H]);
+
+  useEffect(() => {
+    let alive = true;
+    loadMixBuffers(p).then((b) => alive && setBufs(b)).catch(toastError);
+    return () => (alive = false);
+  }, [p.stems.ver, p.lines.map((l) => (readyTake(l) || {}).file || '').join('|')]);
+
+  useEffect(() => {
+    const v = video.current;
+    const prev = player.video;
+    player.attachVideo(v);
+    return () => {
+      player.stop();
+      player.attachVideo(prev && prev.isConnected ? prev : null);
+    };
+  }, []);
+
+  // draw the frame and place the subtitle for the current time
+  useEffect(() => {
+    const c = canvas.current;
+    const v = video.current;
+    if (!c || !v) return;
+    const dpr = window.devicePixelRatio || 1;
+    c.width = Math.round(size.w * dpr);
+    c.height = Math.round(size.h * dpr);
+    const ctx = c.getContext('2d');
+    const k = c.width / g.W;
+    const draw = () => {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, c.width, c.height);
+      const vw = v.videoWidth;
+      const vh = v.videoHeight;
+      if (vw) {
+        const fit = (cover) => {
+          const s = cover ? Math.max(c.width / vw, c.height / vh) : Math.min(c.width / vw, c.height / vh);
+          return [(c.width - vw * s) / 2, (c.height - vh * s) / 2, vw * s, vh * s];
+        };
+        if (ex.format === 'vertical_blur' || ex.format === 'square') {
+          ctx.filter = `blur(${Math.max(1, 26 * k * (g.W / 1080))}px) brightness(0.86)`;
+          ctx.drawImage(v, ...fit(true));
+          ctx.filter = 'none';
+          ctx.drawImage(v, g.box[0] * k, g.box[1] * k, g.box[2] * k, g.box[3] * k);
+        } else ctx.drawImage(v, ...fit(ex.format === 'vertical_crop'));
+      }
+      const t = Math.max(0, player.time);
+      const ev = events.find(([s, e]) => t >= s && t <= e);
+      if (sub.current) {
+        const l = ev && ev[2];
+        const dub = l && (ex.subs === 'orig' ? l.orig : l.text);
+        sub.current.hidden = !(ex.subs !== 'none' && dub);
+        if (!sub.current.hidden) {
+          sub.current.querySelector('.fs-main').textContent = dub;
+          const o = sub.current.querySelector('.fs-orig');
+          o.textContent = ex.subs === 'both' ? l.orig : '';
+          o.hidden = ex.subs !== 'both';
+          sub.current.style.color = ex.subColor === 'character' && chars[l.char] ? chars[l.char].color : '#fff';
+        }
+      }
+      if (cred.current) cred.current.hidden = !(creditText && t >= dur - 3.5 && ex.subMode === 'burn' && !copying);
+    };
+    draw();
+    const off = player.on(draw);
+    v.addEventListener('seeked', draw);
+    v.addEventListener('loadeddata', draw);
+    return () => {
+      off();
+      v.removeEventListener('seeked', draw);
+      v.removeEventListener('loadeddata', draw);
+    };
+  }, [size.w, size.h, ex.format, ex.subs, ex.subColor, ex.subMode, ex.video.height, creditText, events.length, p.rev]);
+
+  const toggle = () => {
+    if (player.playing) return player.stop();
+    if (!bufs) return;
+    const from = player.time >= dur - 0.05 ? 0 : Math.max(0, player.time);
+    player.play({ from, to: dur, ...buildMix(p, bufs, ex.mix) });
+  };
+  useEffect(() => {
+    if (player.playing && bufs) player.play({ from: player.time, to: dur, ...buildMix(p, bufs, ex.mix) });
+  }, [ex.mix]);
+
+  // subtitle size and height exactly like build_ass, scaled to the preview
+  const fontPx = Math.max(24, Math.floor(Math.min(g.W, g.H) * 0.058 * (ex.subSize || 1)));
   let pos = ex.subPos;
-  if (pos == null) pos = ex.format === 'vertical_blur' && fgH < H * 0.8 ? Math.min(0.86, (H + fgH) / 2 / H + 0.07) : ex.format === 'vertical_crop' ? 0.74 : 0.93;
-  const size = Math.max(7, Math.min(W, H) * 0.058 * (ex.subSize || 1));
-  const charColor = ex.subColor === 'character' && first ? (p.characters.find((c) => c.id === first.char) || {}).color : '#fff';
-  return html`<div class="frame" style=${{ width: W + 'px', height: H + 'px' }}>
-    <img src=${thumb} class="frame-blur" alt="" style=${{ opacity: ex.format === 'vertical_blur' || ex.format === 'square' ? 1 : 0 }} />
-    ${ex.format === 'vertical_crop'
-      ? html`<img src=${thumb} class="frame-fill" alt="" />`
-      : html`<img src=${thumb} class="frame-fg" alt="" style=${{ width: fgW + 'px', height: fgH + 'px' }} />`}
-    ${ex.subs !== 'none' && sample && html`<div class="frame-sub" style=${{ bottom: (1 - pos) * H + 'px', fontFamily: ex.subFont, fontSize: size + 'px', color: charColor }}>
-      ${ex.subs === 'both' && html`<div class="frame-sub-orig" style=${{ fontSize: size * 0.62 + 'px' }}>${first.orig}</div>`}${sample}</div>`}
+  if (pos == null) {
+    if (ex.format === 'vertical_blur' && g.box[3] < g.H * 0.8) pos = Math.min(0.86, (g.box[1] + g.box[3]) / g.H + (2.6 * fontPx) / g.H);
+    else pos = ex.format === 'vertical_crop' ? 0.74 : 0.93;
+  }
+  const soft = ex.subMode === 'soft' || copying;
+  const subStyle = soft
+    ? { bottom: size.h * 0.06 + 'px', fontSize: Math.max(11, size.h * 0.035) + 'px' }
+    : { bottom: Math.max(10, g.H * (1 - pos)) * scale + 'px', fontFamily: `'${ex.subFont}'`, fontSize: fontPx * scale + 'px',
+        WebkitTextStroke: `${Math.max(1, fontPx * 0.09 * scale)}px #000` };
+
+  const seek = (t) => player.playing ? player.play({ from: t, to: dur, ...buildMix(p, bufs, ex.mix) }) : player.seek(t);
+  return html`<div class="fp">
+    <div class="fp-stage" ref=${stage}>
+      <div class="frame" style=${{ width: size.w + 'px', height: size.h + 'px' }}>
+        <video ref=${video} src=${fileUrl(p.id, p.clip.preview, p.clip.ver)} muted playsinline preload="auto" crossorigin="anonymous"></video>
+        <canvas ref=${canvas} style=${{ width: size.w + 'px', height: size.h + 'px' }}></canvas>
+        <div class=${cls('frame-sub', soft && 'soft')} ref=${sub} style=${subStyle} hidden><div class="fs-orig" hidden></div><div class="fs-main"></div></div>
+        <div class="frame-credits" ref=${cred} hidden style=${{ top: g.H * 0.06 * scale + 'px', fontSize: fontPx * 0.55 * scale + 'px' }}>${creditText}</div>
+      </div>
+    </div>
+    <div class="transport">
+      <${PlayButton} playing=${playing} onClick=${toggle} disabled=${!bufs} title="Önizlemeyi oynat (Boşluk)" />
+      <${TimeReadout} duration=${dur} />
+      <${Scrub} dur=${dur} onSeek=${seek} />
+      <span class="tc dim small">${g.W}×${g.H}</span>
+    </div>
+  </div>`;
+}
+
+function Scrub({ dur, onSeek }) {
+  const ref = useRef(null);
+  useEffect(() => player.on(() => {
+    if (ref.current && document.activeElement !== ref.current) {
+      ref.current.value = Math.max(0, player.time);
+      ref.current.style.setProperty('--p', (clamp(player.time / dur, 0, 1) * 100) + '%');
+    }
+  }), [dur]);
+  return html`<input ref=${ref} class="scrub grow" type="range" min="0" max=${dur} step="0.01" defaultValue="0"
+    onInput=${(e) => { e.target.style.setProperty('--p', (e.target.value / dur) * 100 + '%'); onSeek(Number(e.target.value)); }} />`;
+}
+
+function SourceInfo({ info }) {
+  if (!info || !info.source) return null;
+  const s = info.source;
+  const k = info.copy.keyframe;
+  return html`<div class="srcinfo">
+    <div class="seclabel">Kaynak dosya</div>
+    <div class="mono small srcline">${s.width}×${s.height} · ${s.fps} fps · ${(s.vcodec || '').toUpperCase()} ${s.profile || ''} · ${s.pixfmt || ''}${s.bitrate ? ` · ${(s.bitrate / 1e6).toFixed(1)} Mb/s` : ''}</div>
+    <div class="mono small srcline dim">${(s.acodec || 'ses yok').toUpperCase()}${s.abitrate ? ` ${Math.round(s.abitrate / 1000)}k` : ''}${s.sampleRate ? ` · ${s.sampleRate / 1000} kHz` : ''} · .${s.container}</div>
+    ${k && html`<div class="small srcline">${k.exact
+      ? html`<${Lamp} tone="ok">Kesim bir anahtar kareye denk geliyor: kopya birebir başlar.</${Lamp}>`
+      : html`<${Lamp} tone="warn">Kopya ${k.offset.toFixed(2)} sn önceki anahtar kareden (${fmtTime(k.actual, 2)}) başlar; o kısımda orijinal ses çalar.</${Lamp}>`}</div>`}
   </div>`;
 }
 
 export function ExportView({ p }) {
   const s = useStore();
   const sys = s.system || {};
-  const ex = p.export;
+  const ex = merged(sys.exportDefaults || {}, p.export);
+  const v = ex.video || {};
+  const a = ex.audio || {};
   const job = jobOf('export');
   const running = job && (job.status === 'running' || job.status === 'queued');
-  const [autoPos, setAutoPos] = useState(ex.subPos == null);
+  const [info, setInfo] = useState(null);
+  const [adv, setAdv] = useState(() => ex.preset === 'custom');
+  const encoders = (sys.encoders || []).filter((e) => e.codec === v.codec);
+  const qr = (sys.qualityRange || {})[v.codec] || [10, 40, 20];
+  const copying = v.mode === 'copy';
+
+  useEffect(() => {
+    api.get(P(p.id, '/export/info')).then(setInfo).catch(() => {});
+  }, [p.id, ex.container, ex.subs, ex.subMode]);
+
   const patch = (body) => {
-    patchLocal((pp) => Object.assign(pp.export, body));
+    patchLocal((pp) => {
+      pp.export = merged(merged(sys.exportDefaults || {}, pp.export), body);
+    });
     api.patch(P(p.id), { export: body }).catch(toastError);
   };
-  const recorded = p.lines.filter((l) => l.take).length;
-  const latest = (p.exports || [])[0];
+  const tech = (body) => patch({ ...body, preset: 'custom' });
+  const applyPreset = (id) => {
+    const pr = (sys.exportPresets || {})[id];
+    if (!pr) return;
+    // TikTok means 9:16; the other presets keep the chosen framing (stream copy forces the original size itself)
+    const framing = id === 'tiktok' && !ex.format.startsWith('vertical') ? { format: 'vertical_blur' } : {};
+    patch({ ...pr.settings, ...framing, preset: id });
+  };
+  const setCodec = (c) => {
+    const [, , q] = (sys.qualityRange || {})[c] || [0, 0, 20];
+    tech({ video: { codec: c, encoder: 'auto', quality: q, pixfmt: c === 'h264' ? 'yuv420p' : v.pixfmt } });
+  };
   const make = () => api.post(P(p.id, '/export'), {}).catch(toastError);
   const reveal = (file) => api.post('/api/open-folder', { file }).catch(toastError);
+  const recorded = p.lines.filter((l) => l.take).length;
+  const latest = (p.exports || [])[0];
+  const problem = info && info.problem;
+  const est = v.rc !== 'crf' && !copying ? ((v.bitrate * 1e6 + a.bitrate * 1000) * p.clip.duration) / 8 : null;
+  const fpsOpts = (sys.fpsOptions || ['source']).map((f) => [String(f), f === 'source' ? `Kaynak (${Math.min(60, p.clip.fps || 30)} fps)` : `${f} fps`]);
+  const hOpts = (sys.heightOptions || ['source']).map((h) => [String(h), h === 'source' ? (ex.format === 'original' ? `Kaynak (${Math.min(p.clip.width || 0, p.clip.height || 0)}p)` : 'Standart (1080p)') : `${h}p`]);
 
   return html`<div class="page export">
-    <div class="export-grid">
-      <section class="pane">
-        <div class="pane-head"><h3>Video ayarları</h3></div>
-        <div class="pane-body">
-          <div class="section-label">Biçim</div>
-          <div class="formats" role="radiogroup">${Object.entries(sys.formats || {}).map(
-            ([k, label]) => html`<button key=${k} role="radio" aria-checked=${ex.format === k} class=${cls('formatcard', ex.format === k && 'on')} onClick=${() => patch({ format: k })}>
-              <span class=${'shape shape-' + k}></span><span>${label}</span></button>`
-          )}</div>
-          <${Field} label="Altyazı"><${Select} value=${ex.subs} onChange=${(v) => patch({ subs: v })} options=${Object.entries(sys.subs || {})} /></${Field}>
-          ${ex.subs !== 'none' && html`
-            <div class="row2">
-              <${Field} label="Yazı tipi"><${Select} value=${ex.subFont} onChange=${(v) => patch({ subFont: v })} options=${FONTS.map((f) => [f, f])} /></${Field}>
-              <${Field} label="Renk"><${Select} value=${ex.subColor || 'white'} onChange=${(v) => patch({ subColor: v })} options=${[['white', 'Beyaz (klasik)'], ['character', 'Karakter renginde']]} /></${Field}>
-            </div>
-            <${Field} label=${`Yazı boyutu: %${Math.round((ex.subSize || 1) * 100)}`}>
-              <${Range} min=${0.6} max=${1.8} step=${0.05} value=${ex.subSize || 1} onInput=${(v) => patch({ subSize: v })} />
-            </${Field}>
-            <${Toggle} checked=${autoPos} onChange=${(v) => { setAutoPos(v); patch({ subPos: v ? null : 0.8 }); }} label="Altyazı konumunu otomatik ayarla" />
-            ${!autoPos && html`<${Field} label="Altyazı yüksekliği">
-              <${Range} min=${0.3} max=${0.97} step=${0.01} value=${ex.subPos ?? 0.8} onInput=${(v) => patch({ subPos: v })} />
-            </${Field}>`}`}
-          <${Toggle} checked=${ex.credits} onChange=${(v) => patch({ credits: v })} label="Sonda seslendirenleri göster" />
-          ${ex.credits && html`<${Field} label="Jenerik yazısı" hint="Boş bırakırsan kayıtlardan otomatik yazılır (ör. Polat: Ahmet).">
-            <input class="input" value=${ex.creditsText || ''} placeholder="ör. Dublaj: @kankalar" onChange=${(e) => patch({ creditsText: e.target.value })} />
-          </${Field}>`}
-          <${Field} label="Kalite"><${Select} value=${ex.quality} onChange=${(v) => patch({ quality: v })} options=${[['high', 'Yüksek (önerilen)'], ['normal', 'Normal (daha küçük dosya)']]} /></${Field}>
+    <div class="ws export-grid">
+      <section class="pane export-settings">
+        <div class="pane-head"><h3>Hazır ayar</h3></div>
+        <div class="presets" role="radiogroup">
+          ${Object.entries(sys.exportPresets || {}).map(([id, pr]) => html`<button key=${id} role="radio" aria-checked=${ex.preset === id}
+            class=${cls('preset', ex.preset === id && 'on')} onClick=${() => applyPreset(id)}>
+            <span class="preset-name">${pr.label}${id === 'tiktok' ? html` <span class="dim">· önerilen</span>` : ''}</span>
+            <span class="preset-sum mono">${pr.summary}</span></button>`)}
+          <button role="radio" aria-checked=${ex.preset === 'custom'} class=${cls('preset', ex.preset === 'custom' && 'on')} onClick=${() => { setAdv(true); patch({ preset: 'custom' }); }}>
+            <span class="preset-name">Özel</span><span class="preset-sum mono">Aşağıdaki teknik ayarlarla</span></button>
         </div>
-      </section>
-      <section class="pane export-side">
-        <div class="pane-head"><h3>Önizleme</h3><span class="grow"></span><span class="muted small">${recorded}/${p.lines.length} satır dublajlı</span></div>
+
         <div class="pane-body">
-          <div class="stage"><${FramePreview} p=${p} ex=${ex} /></div>
-          ${recorded < p.lines.length && html`<p class="muted small">Kaydı olmayan satırlarda orijinal ses çalar (Mikser'den kapatabilirsin).</p>`}
-          <${Btn} kind="primary big" icon="film" onClick=${make} disabled=${running}>${running ? 'Oluşturuluyor…' : 'Videoyu oluştur'}</${Btn}>
-          ${job && (running || job.status === 'error') && html`<div style=${{ marginTop: '12px' }}><${JobPanel} bare job=${job} /></div>`}
+          <div class="seclabel">Biçim</div>
+          <div class="formats" role="radiogroup">${Object.keys(FORMAT_NAMES).map((k) => html`<button key=${k} role="radio" aria-checked=${ex.format === k}
+            class=${cls('formatcard', ex.format === k && 'on')} disabled=${copying && k !== 'original'} title=${copying && k !== 'original' ? 'Kaynak kopyasında görüntü değişmez' : ''}
+            onClick=${() => patch({ format: k })}><span class=${'shape shape-' + k}></span><span><b>${FORMAT_NAMES[k][0]}</b> ${FORMAT_NAMES[k][1]}</span></button>`)}</div>
+
+          <div class="seclabel">Ses</div>
+          <${Segmented} value=${ex.mix} onChange=${(m) => patch({ mix: m })} options=${[['dub', 'Dublaj'], ['clean', 'Konuşmasız (sadece fon)'], ['original', 'Orijinal ses']]} />
+
+          <div class="seclabel">Altyazı</div>
+          <div class="row2">
+            <${Select} value=${ex.subs} onChange=${(x) => patch({ subs: x })} options=${Object.entries(sys.subs || {})} />
+            <${Segmented} value=${copying ? 'soft' : ex.subMode} onChange=${(m) => patch({ subMode: m })} options=${[['burn', 'Görüntüye yak'], ['soft', 'Ayrı iz']]} />
+          </div>
+          ${ex.subs !== 'none' && ex.subMode === 'burn' && !copying && html`
+            <div class="row2" style=${{ marginTop: '10px' }}>
+              <${Field} label="Yazı tipi"><${Select} value=${ex.subFont} onChange=${(x) => patch({ subFont: x })} options=${FONTS.map((f) => [f, f])} /></${Field}>
+              <${Field} label="Renk"><${Select} value=${ex.subColor || 'white'} onChange=${(x) => patch({ subColor: x })} options=${[['white', 'Beyaz'], ['character', 'Karakter renginde']]} /></${Field}>
+            </div>
+            <${Field} label=${html`Boyut <span class="tc">%${Math.round((ex.subSize || 1) * 100)}</span>`}>
+              <${Range} min=${0.6} max=${1.8} step=${0.05} value=${ex.subSize || 1} onInput=${(x) => patch({ subSize: x })} />
+            </${Field}>
+            <${Toggle} checked=${ex.subPos == null} onChange=${(on) => patch({ subPos: on ? null : 0.8 })} label="Yüksekliği otomatik ayarla" />
+            ${ex.subPos != null && html`<${Field} label="Yükseklik"><${Range} min=${0.3} max=${0.97} step=${0.01} value=${ex.subPos} onInput=${(x) => patch({ subPos: x })} /></${Field}>`}`}
+          ${ex.subMode === 'soft' || copying ? html`<span class="field-hint">Ayrı iz: altyazı videoya gömülmez, oynatıcıda açılıp kapanır (MP4: mov_text, MKV: SRT). TikTok ayrı izi göstermez.</span>` : null}
+          ${!copying && ex.subMode === 'burn' && html`<${Toggle} checked=${ex.credits} onChange=${(x) => patch({ credits: x })} label="Sonda seslendirenler yazsın" />`}
+          ${ex.credits && !copying && ex.subMode === 'burn' && html`<input class="input" value=${ex.creditsText || ''} placeholder="Boş bırakırsan kayıtlardan yazılır (ör. Cengo: Melih)" onChange=${(e) => patch({ creditsText: e.target.value })} />`}
+        </div>
+
+        <details class="adv" open=${adv} onToggle=${(e) => setAdv(e.target.open)}>
+          <summary><span class="seclabel">Teknik ayarlar</span></summary>
+          <div class="pane-body">
+            <${Field} label="Görüntü akışı">
+              <${Segmented} value=${v.mode} onChange=${(m) => tech(m === 'copy' ? { video: { mode: 'copy' }, format: 'original', subMode: 'soft' } : { video: { mode: 'encode' } })}
+                options=${[['encode', 'Yeniden kodla'], ['copy', 'Kaynaktan kopyala (-c:v copy)']]} />
+            </${Field}>
+            ${copying
+              ? html`<p class="field-hint">Görüntü bitlerine dokunulmaz: kaynak videonun kendi kodlaması aynen kalır, sadece yeni ses eklenir. Çözünürlük, kare hızı ve codec kaynaktaki gibidir.</p>`
+              : html`
+              <div class="row2">
+                <${Field} label="Codec"><${Select} value=${v.codec} onChange=${setCodec} options=${CODECS} /></${Field}>
+                <${Field} label="Kodlayıcı"><${Select} value=${v.encoder} onChange=${(x) => tech({ video: { encoder: x } })}
+                  options=${[['auto', 'Otomatik (en iyisi)'], ...encoders.map((e) => [e.id, `${e.label} · ${e.id}`])]} /></${Field}>
+              </div>
+              <${Field} label="Hız kontrolü" hint=${v.rc === 'crf' ? 'Sabit kalite: dosya boyutu sahneye göre değişir.' : v.rc === 'vbr' ? 'Ortalama bit hızı, karmaşık sahnelere daha fazla.' : 'Sabit bit hızı: boyut kesin, kalite değişir.'}>
+                <${Segmented} value=${v.rc} onChange=${(x) => tech({ video: { rc: x } })} options=${[['crf', 'CRF / CQ'], ['vbr', 'VBR'], ['cbr', 'CBR']]} />
+              </${Field}>
+              ${v.rc === 'crf'
+                ? html`<${Field} label=${html`Kalite <span class="tc">${v.codec === 'h264' ? 'CRF' : 'CRF/CQ'} ${v.quality}</span>`} hint="Düşük değer: daha kaliteli, daha büyük dosya. 18 gözle kayıpsıza yakındır.">
+                    <${Range} min=${qr[0]} max=${qr[1]} step=${1} value=${v.quality} onChange=${(x) => tech({ video: { quality: x } })} />
+                  </${Field}>`
+                : html`<${Field} label="Bit hızı (Mb/s)"><input class="input mono" type="number" min="0.5" max="200" step="0.5" value=${v.bitrate}
+                    onChange=${(e) => tech({ video: { bitrate: Number(e.target.value) } })} /></${Field}>`}
+              <div class="row2">
+                <${Field} label="Hız / verim (preset)" hint="Yavaş: aynı boyutta daha temiz görüntü.">
+                  <${Select} value=${v.preset} onChange=${(x) => tech({ video: { preset: x } })} options=${(sys.encoderPresets || ['medium']).map((x) => [x, x])} />
+                </${Field}>
+                <${Field} label="Kare hızı"><${Select} value=${String(v.fps)} onChange=${(x) => tech({ video: { fps: x === 'source' ? 'source' : Number(x) } })} options=${fpsOpts} /></${Field}>
+              </div>
+              <div class="row2">
+                <${Field} label="Çözünürlük"><${Select} value=${String(v.height)} onChange=${(x) => tech({ video: { height: x === 'source' ? 'source' : Number(x) } })} options=${hOpts} /></${Field}>
+                <${Field} label="Renk derinliği"><${Select} value=${v.pixfmt} onChange=${(x) => tech({ video: { pixfmt: x } })}
+                  options=${[['yuv420p', '8-bit · yuv420p'], ...(v.codec === 'h264' ? [] : [['yuv420p10le', '10-bit · yuv420p10le']])]} /></${Field}>
+              </div>
+              <${Field} label=${html`Anahtar kare aralığı (GOP) <span class="tc">${v.gop} sn</span>`} hint="Kısa aralık: videoda ileri sarma daha akıcı, dosya biraz büyür.">
+                <${Range} min=${0.5} max=${10} step=${0.5} value=${v.gop} onChange=${(x) => tech({ video: { gop: x } })} />
+              </${Field}>`}
+            <div class="seclabel">Ses kodlama</div>
+            <div class="row2">
+              <${Field} label="Codec"><${Select} value=${a.codec} onChange=${(x) => tech({ audio: { codec: x } })} options=${Object.entries(sys.audioCodecs || {})} /></${Field}>
+              ${['aac', 'libopus'].includes(a.codec)
+                ? html`<${Field} label="Bit hızı"><${Select} value=${String(a.bitrate)} onChange=${(x) => tech({ audio: { bitrate: Number(x) } })} options=${ABITRATES.map((b) => [String(b), b + ' kb/s'])} /></${Field}>`
+                : html`<${Field} label="Örnekleme"><${Select} value=${String(a.sampleRate)} onChange=${(x) => tech({ audio: { sampleRate: Number(x) } })} options=${[['48000', '48 kHz'], ['44100', '44.1 kHz']]} /></${Field}>`}
+            </div>
+            <${Toggle} checked=${a.loudnorm} onChange=${(x) => tech({ audio: { loudnorm: x } })} label="Ses yüksekliğini normalize et (EBU R128, iki geçiş)" />
+            ${a.loudnorm && html`<${Select} value=${String(a.lufs)} onChange=${(x) => tech({ audio: { lufs: Number(x) } })} options=${LUFS} />`}
+            <div class="seclabel">Kapsayıcı</div>
+            <${Segmented} value=${ex.container} onChange=${(x) => tech({ container: x })} options=${Object.keys(sys.containers || { mp4: 1 }).map((k) => [k, k.toUpperCase()])} />
+            <span class="field-hint">${(sys.containers || {})[ex.container]}</span>
+          </div>
+        </details>
+        <div class="pane-body"><${SourceInfo} info=${info} /></div>
+      </section>
+
+      <section class="pane export-side">
+        <div class="pane-head"><h3>Önizleme</h3><span class="grow"></span><span class="dim small">${recorded}/${p.lines.length} satır dublajlı</span></div>
+        <${FramePlayer} p=${p} ex=${ex} />
+        <div class="pane-body make">
+          ${problem && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${problem}</div>`}
+          <div class="row nowrap">
+            <${Btn} kind="primary big" icon="film" onClick=${make} disabled=${running || !!problem}>${running ? 'Oluşturuluyor…' : 'Videoyu oluştur'}</${Btn}>
+          </div>
+          <div class="make-sum mono small dim">${copying ? 'Görüntü: kaynaktan kopya' : `${(CODECS.find((c) => c[0] === v.codec) || [])[1]} · ${v.rc === 'crf' ? 'CRF ' + v.quality : v.bitrate + ' Mb/s ' + v.rc.toUpperCase()} · ${v.preset}`}
+            · ${(sys.audioCodecs || {})[a.codec] || a.codec}${['aac', 'libopus'].includes(a.codec) ? ' ' + a.bitrate + 'k' : ''} · ${ex.container.toUpperCase()}${est ? ` · ~${fmtBytes(est)}` : ''}</div>
+          ${job && (running || job.status === 'error') && html`<div style=${{ marginTop: '10px' }}><${JobPanel} bare job=${job} /></div>`}
         </div>
       </section>
     </div>
-    ${latest && html`<section class="panel result" key=${latest.file}>
-      <div class="panel-head"><h2>Son video</h2><span class="muted small">${timeAgo(latest.created)}</span></div>
+    ${latest && html`<section class="results" key=${latest.file}>
+      <div class="results-head"><h2>Videolar</h2><span class="count tc">${p.exports.length}</span><span class="grow"></span>
+        <${Btn} small kind="ghost" icon="folder" onClick=${() => reveal(latest.file)}>Klasörde göster</${Btn}></div>
       <div class="result-grid">
         <video class=${'result-video ' + (latest.height > latest.width ? 'tall' : '')} src=${'/api/exports/' + encodeURIComponent(latest.file)} controls playsinline preload="metadata"></video>
-        <div>
-          <div class="tc muted small" style=${{ marginBottom: '12px' }}>${latest.width}×${latest.height} · ${fmtTime(latest.duration, 0)} · ${fmtBytes(latest.size)}</div>
-          <div class="toolbar">
-            <a class="btn btn-primary" href=${'/api/exports/' + encodeURIComponent(latest.file) + '?dl=1'}><${Icon} name="download" size=${16} /><span>İndir</span></a>
-            <${Btn} icon="folder" onClick=${() => reveal(latest.file)}>Klasörde göster</${Btn}>
-          </div>
-          <p class="muted small" style=${{ marginTop: '12px' }}>TikTok'a yüklemek için videoyu telefonuna at (WhatsApp, Google Drive, kablo…) ya da TikTok'un web sitesinden doğrudan yükle.</p>
-          <details><summary class="muted small">Diğer dosyalar</summary>
-            <div class="toolbar" style=${{ marginTop: '8px' }}>
-              <a class="btn btn-sm" href=${P(p.id, '/srt?which=dub')}>Altyazı (.srt)</a>
-              <a class="btn btn-sm" href=${P(p.id, '/srt?which=orig')}>Orijinal altyazı (.srt)</a>
-              <a class="btn btn-sm" href=${P(p.id, '/audio?mode=dub')}>Sadece ses (.wav)</a>
-            </div>
-          </details>
-          ${(p.exports || []).length > 1 && html`<details><summary class="muted small">Önceki videolar (${p.exports.length - 1})</summary>
-            ${p.exports.slice(1).map((e) => html`<div class="row small" style=${{ padding: '4px 0' }}><span class="grow mono">${e.file}</span><a href=${'/api/exports/' + encodeURIComponent(e.file) + '?dl=1'}>indir</a></div>`)}
-          </details>`}
-        </div>
+        <div class="result-list">${p.exports.map((e, i) => html`<div class=${cls('result-row', i === 0 && 'new')} key=${e.file}>
+          <div class="grow"><div class="ellipsis" title=${e.file}>${e.file}</div>
+            <div class="mono small dim">${e.summary || `${e.width}×${e.height}`} · ${fmtTime(e.duration, 0)} · ${fmtBytes(e.size)} · ${timeAgo(e.created)}</div>
+            ${e.keyframe && html`<div class="small dim">Kopya ${e.keyframe.offset.toFixed(2)} sn önce, anahtar karede başlıyor.</div>`}</div>
+          <a class="btn btn-sm" href=${'/api/exports/' + encodeURIComponent(e.file) + '?dl=1'}><${Icon} name="download" size=${14} /><span>İndir</span></a>
+          <button class="iconbtn" title="Klasörde göster" onClick=${() => reveal(e.file)}><${Icon} name="folder" size=${15} /></button>
+        </div>`)}</div>
       </div>
+      <details class="extras"><summary class="muted small">Diğer dosyalar</summary>
+        <div class="toolbar" style=${{ marginTop: '8px' }}>
+          <a class="btn btn-sm" href=${P(p.id, '/srt?which=dub')}>Altyazı (.srt)</a>
+          <a class="btn btn-sm" href=${P(p.id, '/srt?which=orig')}>Orijinal altyazı (.srt)</a>
+          <a class="btn btn-sm" href=${P(p.id, '/audio?mode=dub')}>Sadece ses (.wav)</a>
+        </div>
+      </details>
     </section>`}
   </div>`;
 }

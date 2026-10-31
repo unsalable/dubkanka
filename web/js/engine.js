@@ -89,12 +89,24 @@ export async function loadMixBuffers(p, { lite = false, original = false } = {})
   return out;
 }
 
+/** [position, audible start, audible end] of a take in project time: nudged, minus what was trimmed off. */
+export function takeSpan(t) {
+  const at = t.start + (t.nudge || 0);
+  return [at, at + (t.trimIn || 0), at + t.duration - (t.trimOut || 0)];
+}
+
 export const FILL_PRE = 0.15;
 export const FILL_POST = 0.25;
 
-/** The final dub mix as playable items (same rules as the server render). */
+/** The final dub mix as playable items (same rules as the server render: mixer.render). */
 export function buildMix(p, bufs, mode = 'dub') {
   const items = [];
+  if (mode === 'clean') {  // music, effects and ambience: every voice removed
+    const m = p.mix;
+    items.push({ buffer: bufs.bg, at: 0, bus: 'bg' });
+    items.push({ buffer: bufs.amb, at: 0, bus: 'amb' });
+    return { items, buses: { bg: m.bgMute ? 0 : db2gain(m.bgGain), amb: m.ambMute ? 0 : db2gain(m.ambGain || 0) } };
+  }
   if (mode === 'original') {
     if (bufs.original) items.push({ buffer: bufs.original, at: 0, bus: 'original' });
     else {
@@ -123,9 +135,10 @@ export function buildMix(p, bufs, mode = 'dub') {
     const bus = 'char:' + line.char;
     if (!(bus in buses)) buses[bus] = c.mute || mix.dubMute ? 0 : db2gain((c.gain || 0) + (mix.dubGain || 0));
     if (t && bufs.takes[t.id]) {
-      const at = t.start + (t.nudge || 0);
-      windows.push([at, at + t.duration]);
-      items.push({ buffer: bufs.takes[t.id], at, gain: db2gain(t.gain || 0), bus, fade: 0.003 });
+      const [at, a, b] = takeSpan(t);
+      windows.push([a, b]);
+      const trimmed = (t.trimIn || 0) > 0 || (t.trimOut || 0) > 0;
+      items.push({ buffer: bufs.takes[t.id], at, region: [a, b], gain: db2gain(t.gain || 0), bus, fade: trimmed ? 0.006 : 0.003 });
     } else if (mix.fillMissing !== false) {
       items.push({ buffer: bufs.voices, at: 0, region: [line.start - FILL_PRE, line.end + FILL_POST], fade: 0.03, bus: 'fill' });
     }

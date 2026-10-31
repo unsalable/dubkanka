@@ -1,4 +1,4 @@
-import { html, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
+import { html, render, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { player } from './engine.js';
 import { recorder } from './recorder.js';
 import { dismissToast, useStore } from './state.js';
@@ -44,6 +44,19 @@ const ICONS = {
   sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
   wave: '<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0"/>',
   leaf: '<path d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15M5 19c3-4 6-7 10-9"/>',
+  refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8m0-5v5h5M4 13a8 8 0 0 0 14.3 4.9L20 16m0 5v-5h-5"/>',
+  speaker: '<path d="M4 9.5h3.5L12 5v14l-4.5-4.5H4z"/><path d="M15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11"/>',
+  external: '<path d="M14 4h6v6M20 4l-9 9M18 14v4.5A1.5 1.5 0 0 1 16.5 20h-11A1.5 1.5 0 0 1 4 18.5v-11A1.5 1.5 0 0 1 5.5 6H10"/>',
+  key: '<circle cx="8" cy="15" r="4"/><path d="m11 12 8.5-8.5M16 7l2.5 2.5M14 9l2 2"/>',
+  cpu: '<rect x="6" y="6" width="12" height="12" rx="1.5"/><path d="M9.5 9.5h5v5h-5zM9 3v3m6-3v3M9 18v3m6-3v3M3 9h3m-3 6h3m12-6h3m-3 6h3"/>',
+  globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.5 5.4 3.5 8.5s-1 5.9-3.5 8.5c-2.5-2.6-3.5-5.4-3.5-8.5s1-5.9 3.5-8.5z"/>',
+  bolt: '<path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/>',
+  chevron: '<path d="m9 6 6 6-6 6"/>',
+  eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
+  magnet: '<path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4zM6 8h4m4 0h4"/>',
+  clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
+  user: '<circle cx="12" cy="8" r="3.8"/><path d="M4.5 20a7.5 7.5 0 0 1 15 0"/>',
+  trim: '<path d="M7 4v16M17 4v16M7 12h10M10 9l-3 3 3 3M14 9l3 3-3 3"/>',
 };
 
 export function Icon({ name, size = 18, class: c }) {
@@ -66,9 +79,68 @@ export function Toasts() {
   return html`<div class="toasts" role="status" aria-live="polite">${s.toasts.map(
     (t) => html`<div key=${t.id} class=${cls('toast', 'toast-' + t.type, t.leaving && 'leaving')} onClick=${() => dismissToast(t.id)}>
       <${Icon} name=${TOAST_ICON[t.type] || 'info'} size=${16} /><span class="grow">${t.text}</span>
+      ${t.action && html`<button class="btn btn-sm toast-action" onClick=${(e) => { e.stopPropagation(); dismissToast(t.id); t.action.onClick(); }}>${t.action.label}</button>`}
       <i class="toast-life" style=${{ animationDuration: t.ms + 'ms' }}></i>
     </div>`
   )}</div>`;
+}
+
+/** Renders children into a layer on <body>: menus and popovers are never clipped by a scrolling pane. */
+export function Portal({ children }) {
+  const host = useRef(null);
+  if (!host.current) host.current = document.createElement('div');
+  useLayoutEffect(() => {
+    document.body.appendChild(host.current);
+    return () => {
+      render(null, host.current);
+      host.current.remove();
+    };
+  }, []);
+  useLayoutEffect(() => render(children, host.current));
+  return null;
+}
+
+/** A menu anchored to an element; opens below it, or above when there is no room. Closes on outside click / Esc. */
+export function Popover({ anchor, onClose, children, align = 'end', title, class: c }) {
+  const ref = useRef(null);
+  const [pos, setPos] = useState(null);
+  useLayoutEffect(() => {
+    if (!anchor) return;
+    const place = () => {
+      const el = ref.current;
+      if (!el || !anchor.isConnected) return onClose();
+      const a = anchor.getBoundingClientRect();
+      const w = el.offsetWidth;
+      const h = el.offsetHeight;
+      const left = clamp(align === 'end' ? a.right - w : a.left, 8, innerWidth - w - 8);
+      let top = a.bottom + 4;
+      let from = 'top';
+      if (top + h > innerHeight - 8 && a.top - 4 - h > 8) {
+        top = a.top - 4 - h;
+        from = 'bottom';
+      } else top = Math.max(8, Math.min(top, innerHeight - h - 8));
+      setPos({ left: left + 'px', top: top + 'px', transformOrigin: `${from} ${align === 'end' ? 'right' : 'left'}` });
+    };
+    place();
+    const outside = (e) => ref.current && !ref.current.contains(e.target) && !anchor.contains(e.target) && onClose();
+    const key = (e) => e.key === 'Escape' && onClose();
+    addEventListener('pointerdown', outside, true);
+    addEventListener('keydown', key);
+    addEventListener('resize', onClose);
+    addEventListener('scroll', place, true);
+    return () => {
+      removeEventListener('pointerdown', outside, true);
+      removeEventListener('keydown', key);
+      removeEventListener('resize', onClose);
+      removeEventListener('scroll', place, true);
+    };
+  }, [anchor]);
+  return html`<${Portal}><div class=${cls('popover', c)} ref=${ref} role="menu" style=${pos || { left: '0px', top: '0px', visibility: 'hidden' }}>
+    ${title && html`<div class="popover-title">${title}</div>`}${children}</div></${Portal}>`;
+}
+
+export function Lamp({ tone, title, children }) {
+  return html`<span class=${cls('lamp', tone)} title=${title}>${children}</span>`;
 }
 
 let modalSeq = 0;
@@ -242,18 +314,34 @@ export function usePlaying() {
   return p;
 }
 
-export function LevelMeter() {
+/** Microphone level as an LED bar: -60..0 dBFS, the peak holds for a second, the frame turns red on clipping. */
+export function LevelMeter({ title = 'Mikrofon seviyesi' }) {
   const ref = useRef(null);
-  useEffect(
-    () =>
-      recorder.onLevel((peak) => {
-        if (!ref.current) return;
-        const db = 20 * Math.log10(Math.max(peak, 1e-5));
-        ref.current.style.transform = `scaleX(${clamp((db + 60) / 60, 0, 1)})`;
-      }),
-    []
-  );
-  return html`<div class="meter" title="Mikrofon seviyesi"><div ref=${ref}></div></div>`;
+  useEffect(() => {
+    let hold = -60;
+    let heldAt = 0;
+    let clipT = 0;
+    return recorder.onLevel((peak) => {
+      const el = ref.current;
+      if (!el) return;
+      const db = 20 * Math.log10(Math.max(peak, 1e-5));
+      el.firstChild.style.transform = `scaleX(${clamp((db + 60) / 60, 0, 1)})`;
+      const now = performance.now();
+      if (db >= hold || now - heldAt > 1000) {
+        hold = db;
+        heldAt = now;
+      }
+      const pk = el.lastChild;
+      pk.style.opacity = hold > -58 ? '1' : '0';
+      pk.style.transform = `translateX(${clamp((hold + 60) / 60, 0, 1) * (el.clientWidth - 3)}px)`;
+      if (peak >= 0.995) {
+        el.classList.add('clip');
+        clearTimeout(clipT);
+        clipT = setTimeout(() => el.classList.remove('clip'), 1500);
+      }
+    });
+  }, []);
+  return html`<div class="meter" ref=${ref} title=${title}><div></div><i class="peak"></i></div>`;
 }
 
 // One animation loop drives every bus meter on screen: fast attack, slow fall, idle when silent.

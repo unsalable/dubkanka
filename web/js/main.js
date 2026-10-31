@@ -1,6 +1,7 @@
 import { html, render, useEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { api, P } from './api.js';
 import { Icon, Toasts, useIndicator } from './components.js';
+import { desktop, useUpdate } from './desktop.js';
 import { player } from './engine.js';
 import { go, openProject, setState, startWatch, store, toastError, useStore } from './state.js';
 import { cls } from './util.js';
@@ -29,10 +30,18 @@ function RoomButton({ project, active }) {
   const online = on ? (r.guests || []).filter((g) => g.online).length : 0;
   const href = project ? `#/p/${project.id}/room` : r && r.projectId ? `#/p/${r.projectId}/room` : null;
   if (!href) return null;
-  const label = !r || r.status === 'off' ? 'Arkadaşlar' : on ? `Oda açık · ${online}` : r.status === 'starting' ? 'Oda açılıyor' : 'Oda hatası';
+  const tone = !r || r.status === 'off' ? null : on ? 'ok' : r.status === 'starting' ? 'busy' : 'bad';
   return html`<a class=${cls('roombtn', active && 'active')} href=${href} title="Arkadaşlarını odaya çağır">
-    ${r && r.status !== 'off' ? html`<span class=${cls('dot', on ? 'on' : r.status === 'starting' ? 'warn' : 'bad')}></span>` : html`<${Icon} name="users" size=${16} />`}
-    <span class="roombtn-label">${label}</span></a>`;
+    ${tone ? html`<span class=${cls('lamp', tone)}></span>` : html`<${Icon} name="users" size=${16} />`}
+    <span class="roombtn-label">${!r || r.status === 'off' ? 'Oda' : on ? 'Oda açık' : r.status === 'starting' ? 'Oda açılıyor' : 'Oda hatası'}</span>
+    ${on && html`<span class="count" title="Odadaki arkadaşlar">${online}</span>`}</a>`;
+}
+
+function UpdateButton() {
+  const u = useUpdate();
+  if (!u || u.state !== 'downloaded') return null;
+  return html`<button class="updatebtn" title=${`DubKanka ${u.version} indirildi`} onClick=${() => desktop.updates.install()}>
+    <${Icon} name="refresh" size=${14} />Güncelle ve yeniden başlat</button>`;
 }
 
 function ProjectName({ p }) {
@@ -74,6 +83,7 @@ function Shell({ project, tab, children }) {
       </div>
       ${project ? html`<${Tabs} project=${project} tab=${tab} />` : html`<span class="topbar-spacer"></span>`}
       <div class="topbar-right">
+        <${UpdateButton} />
         <${RoomButton} project=${project} active=${tab === 'room'} />
         <a class=${cls('iconbtn', store.route[0] === 'settings' && 'on')} href="#/settings" title="Ayarlar"><${Icon} name="gear" /></a>
       </div>
@@ -85,9 +95,8 @@ function Shell({ project, tab, children }) {
 function Loading() {
   return html`<div class="page" aria-busy="true">
     <div class="ws" style=${{ gridTemplateColumns: 'minmax(0,1.1fr) minmax(320px,1fr)', height: 'min(62vh, 640px)' }}>
-      <div class="skel"></div><div class="skel"></div>
+      <div class="skel" style=${{ borderRadius: 0 }}></div><div class="skel" style=${{ borderRadius: 0 }}></div>
     </div>
-    <div class="skel" style=${{ height: '120px', marginTop: '8px' }}></div>
   </div>`;
 }
 
@@ -120,7 +129,7 @@ function App() {
   else if (a === 'settings') view = html`<${Shell}><${SettingsView} /></${Shell}>`;
   else view = html`<${Shell}><${HomeView} /></${Shell}>`;
   return html`${view}<${Toasts} />${!s.online && html`<div class="offline" role="alert"><${Icon} name="alert" size=${16} />
-    Uygulamayla bağlantı koptu. DubKanka penceresi açık mı?</div>`}`;
+    Uygulamayla bağlantı koptu. DubKanka açık mı?</div>`}`;
 }
 
 async function boot() {

@@ -1,21 +1,17 @@
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P, upload } from '../api.js';
-import { Btn, Icon, Progress } from '../components.js';
-import { closeProject, go, openProject, toastError, useStore } from '../state.js';
+import { Btn, Icon, Lamp, Popover, Progress, Select, Toggle } from '../components.js';
+import { closeProject, go, openProject, setState, toastError, useStore } from '../state.js';
 import { cls, fmtTime, timeAgo } from '../util.js';
 
-const VIDEO_EXT = /\.(mp4|mkv|mov|webm|m4v|avi|flv|wmv|ts)$/i;
-const STEPS = [
-  ['film', 'Sahneyi seç', 'Videoyu at, dublajlayacağın kısmı kes.'],
-  ['sparkle', 'Hazırlansın', 'Konuşmalar fondan ayrılır, yazıya dökülür, kişilere bölünür ve çevrilir.'],
-  ['mic', 'Seslendirin', 'Herkes kendi repliğini bip sesleriyle tam zamanında kaydeder, linkle telefondan bile.'],
-  ['share', 'Paylaş', 'Altyazılı 9:16 TikTok videosu tek tıkla çıkar.'],
-];
+const VIDEO_EXT = /\.(mp4|mkv|mov|webm|m4v|avi|flv|wmv|ts|mts|3gp)$/i;
 
-function ProjectCard({ p, i, onDelete }) {
+function ProjectRow({ p, i, onDelete }) {
   const thumb = useRef(null);
   const vid = useRef(null);
+  const more = useRef(null);
   const [hover, setHover] = useState(false);
+  const [menu, setMenu] = useState(false);
   const ready = p.status === 'ready';
   const ver = Math.floor(p.updated);
   useEffect(() => {
@@ -33,29 +29,37 @@ function ProjectCard({ p, i, onDelete }) {
     await openProject(p.id);
     go(`p/${p.id}`);
   };
-  return html`<div class="pcard" style=${{ '--i': i }} onClick=${open} onMouseEnter=${() => ready && setHover(true)} onMouseLeave=${() => setHover(false)}
+  const state = p.status === 'preparing'
+    ? html`<${Lamp} tone="busy">hazırlanıyor</${Lamp}>`
+    : ready
+    ? html`<${Lamp} tone=${p.lines && p.recorded >= p.lines ? 'ok' : 'accent'}>${p.recorded}/${p.lines} satır kayıtlı</${Lamp}>`
+    : html`<${Lamp}>sahne seçilmedi</${Lamp}>`;
+  return html`<div class="prow" style=${{ '--i': i }} onClick=${open} onMouseEnter=${() => ready && setHover(true)} onMouseLeave=${() => setHover(false)}
     role="link" tabIndex="0" onKeyDown=${(e) => e.key === 'Enter' && open()}>
-    <div class=${cls('pcard-thumb', hover && 'playing')} ref=${thumb}>
-      ${p.thumb ? html`<img src=${fileUrl(p.id, p.thumb, ver)} alt="" loading="lazy" />` : html`<${Icon} name="film" size=${28} />`}
+    <div class=${cls('prow-thumb', hover && 'playing')} ref=${thumb}>
+      ${p.thumb ? html`<img src=${fileUrl(p.id, p.thumb, ver)} alt="" loading="lazy" />` : html`<${Icon} name="film" size=${22} />`}
       ${ready && hover && html`<video ref=${vid} src=${fileUrl(p.id, 'media/preview.mp4', ver)} muted loop playsinline preload="none"
         onPlaying=${(e) => e.target.classList.add('on')}></video>`}
-      ${p.status === 'preparing' && html`<span class="pcard-state"><span class="spinner"></span>Hazırlanıyor</span>`}
-      ${p.status !== 'ready' && p.status !== 'preparing' && html`<span class="pcard-state">Sahne seçilmedi</span>`}
-      ${p.duration && html`<span class="pcard-dur">${fmtTime(p.duration, 0)}</span>`}
-      ${ready && p.lines > 0 && html`<div class="pcard-bar"><i style=${{ '--p': p.recorded / p.lines }}></i></div>`}
+      ${ready && p.lines > 0 && html`<div class="prow-bar"><i style=${{ '--p': p.recorded / p.lines }}></i></div>`}
     </div>
-    <div class="pcard-meta">
-      <div class="grow">
-        <div class="pcard-title" title=${p.name}>${p.name}</div>
-        <div class="pcard-sub">${ready ? `${p.recorded}/${p.lines} satır kayıtlı · ${p.characters} karakter` : 'Hazır değil'} · ${timeAgo(p.updated)}</div>
-      </div>
-      <button class="iconbtn" title="Projeyi sil" onClick=${(e) => { e.stopPropagation(); onDelete(p); }}><${Icon} name="trash" size=${16} /></button>
+    <div class="prow-main">
+      <div class="prow-title" title=${p.name}>${p.name}</div>
+      <div class="prow-meta">${state}${ready && html`<span class="dim">${p.characters} karakter</span>`}</div>
     </div>
+    <span class="tc prow-dur">${p.duration ? fmtTime(p.duration, 0) : '--:--'}</span>
+    <span class="prow-when dim">${timeAgo(p.updated)}</span>
+    <button class="iconbtn" ref=${more} title="Diğer işlemler" onClick=${(e) => { e.stopPropagation(); setMenu(!menu); }}><${Icon} name="dots" size=${16} /></button>
+    ${menu && html`<${Popover} anchor=${more.current} onClose=${() => setMenu(false)}>
+      <button class="popitem" onClick=${(e) => { e.stopPropagation(); setMenu(false); open(); }}><${Icon} name="chevron" size=${14} />Aç</button>
+      <button class="popitem danger" onClick=${(e) => { e.stopPropagation(); setMenu(false); onDelete(p); }}><${Icon} name="trash" size=${14} />Projeyi sil</button>
+    </${Popover}>`}
   </div>`;
 }
 
 export function HomeView() {
   const s = useStore();
+  const sys = s.system;
+  const st = (sys && sys.settings) || {};
   const [projects, setProjects] = useState(null);
   const [up, setUp] = useState(null);
   const [url, setUrl] = useState('');
@@ -66,15 +70,22 @@ export function HomeView() {
     closeProject();
     load();
   }, []);
+  const auto = st.autoPrepare !== false;
+  const saveSetting = async (patch) => {
+    try {
+      setState({ system: { ...sys, settings: await api.post('/api/settings', patch) } });
+    } catch (e) {
+      toastError(e);
+    }
+  };
 
   const onFile = async (file) => {
     if (!file || up) return;
     setUp({ name: file.name, progress: 0 });
     try {
       const base = file.name.replace(/\.[^.]+$/, '');
-      const r = await upload(`/api/projects/upload?filename=${encodeURIComponent(file.name)}&name=${encodeURIComponent(base)}`, file, (f) =>
-        setUp({ name: file.name, progress: f })
-      );
+      const q = `filename=${encodeURIComponent(file.name)}&name=${encodeURIComponent(base)}&auto=${auto ? 1 : 0}`;
+      const r = await upload(`/api/projects/upload?${q}`, file, (f) => setUp({ name: file.name, progress: f }));
       go(`p/${r.project.id}/prepare`);
     } catch (e) {
       toastError(e);
@@ -107,13 +118,13 @@ export function HomeView() {
       window.removeEventListener('dragover', over);
       window.removeEventListener('drop', drop);
     };
-  }, [up]);
+  }, [up, auto]);
 
   const onUrl = async (e) => {
     e.preventDefault();
     if (!url.trim()) return;
     try {
-      const r = await api.post('/api/projects/url', { url: url.trim() });
+      const r = await api.post('/api/projects/url', { url: url.trim(), auto });
       go(`p/${r.project.id}/prepare`);
     } catch (err) {
       toastError(err);
@@ -124,53 +135,55 @@ export function HomeView() {
     await api.del(P(p.id)).catch(toastError);
     load();
   };
+  const tr = ((sys && sys.translators) || []).find((t) => t.id === (st.translator || 'google'));
 
-  const sys = s.system;
   return html`<div class="page home">
-    ${sys && !sys.ffmpeg && html`<div class="alert error"><${Icon} name="alert" /> ffmpeg bulunamadı. Kurulum.bat dosyasını çalıştırıp uygulamayı yeniden aç.</div>`}
-    <header class="home-head">
-      <div>
-        <h1>Yeni dublaj</h1>
-        <p>Bir dizi ya da film sahnesi at. Konuşmalar fondan ayrılır, satırlar yazılır ve çevrilir, sonra arkadaşlarınla seslendirirsiniz.</p>
-      </div>
-    </header>
-    <section class="newproj">
-      <div class=${cls('dropzone', veil && 'drag')} onClick=${() => !up && input.current.click()} role="button" tabIndex="0"
+    ${sys && !sys.ffmpeg && html`<div class="alert error"><${Icon} name="alert" /> ffmpeg bulunamadı. Kurulumu onarıp uygulamayı yeniden aç.</div>`}
+    <section class="intake">
+      <div class=${cls('dropwell', veil && 'drag', up && 'busy')} onClick=${() => !up && input.current.click()} role="button" tabIndex="0"
         onKeyDown=${(e) => (e.key === 'Enter' || e.key === ' ') && !up && input.current.click()}>
-        <input ref=${input} type="file" hidden accept="video/*,.mkv,.avi,.mov,.webm,.mp4,.m4v,.flv,.wmv,.ts"
-          onChange=${(e) => onFile(e.target.files[0])} />
+        <input ref=${input} type="file" hidden accept="video/*,.mkv,.avi,.mov,.webm,.mp4,.m4v,.flv,.wmv,.ts,.mts,.3gp"
+          onChange=${(e) => { onFile(e.target.files[0]); e.target.value = ''; }} />
         ${up
-          ? html`<div class="dz-up">
-              <div class="row"><strong class="grow" style=${{ textAlign: 'left', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>${up.name}</strong>
-                <span class="tc muted">%${Math.round(up.progress * 100)}</span></div>
+          ? html`<div class="dw-up">
+              <div class="row nowrap"><strong class="grow ellipsis">${up.name}</strong><span class="tc muted">%${Math.round(up.progress * 100)}</span></div>
               <${Progress} value=${up.progress} live />
-              <span class="muted small" style=${{ textAlign: 'left' }}>Yükleniyor, bitince sahne seçimine geçeceksin.</span></div>`
-          : html`<span class="dz-plus"><${Icon} name="plus" size=${22} /></span>
-              <strong>Video seç ya da buraya sürükle</strong><span class="muted small">mp4, mkv, mov, webm…</span>`}
+              <span class="muted small">${auto ? 'Yükleniyor; bitince sahne kendiliğinden hazırlanır.' : 'Yükleniyor; bitince sahneyi seçeceksin.'}</span></div>`
+          : html`<${Icon} name="upload" size=${22} />
+              <div><strong>Videoyu buraya bırak</strong><span class="muted"> ya da tıklayıp seç</span></div>
+              <span class="mono dim small">mp4 · mkv · mov · webm · avi</span>`}
       </div>
-      <form class="urlbox" onSubmit=${onUrl}>
-        <h3><${Icon} name="link" size=${16} />Bağlantıdan al</h3>
-        <p class="small">YouTube ve benzeri sitelerden videoyu doğrudan indirir.</p>
-        <div class="urlform">
-          <input class="input" placeholder="https://…" value=${url} onInput=${(e) => setUrl(e.target.value)} aria-label="Video bağlantısı" />
-          <${Btn} type="submit" kind="primary" disabled=${!url.trim()}>Getir</${Btn}>
+      <form class="intake-cell" onSubmit=${onUrl}>
+        <div class="seclabel">Bağlantıdan</div>
+        <div class="row nowrap">
+          <input class="input" placeholder="https://youtube.com/…" value=${url} onInput=${(e) => setUrl(e.target.value)} aria-label="Video bağlantısı" />
+          <${Btn} type="submit" disabled=${!url.trim()}>Getir</${Btn}>
         </div>
+        <span class="field-hint">YouTube, X, Instagram ve benzerlerinden indirir.</span>
       </form>
+      <div class="intake-cell">
+        <div class="seclabel">Otomatik</div>
+        <${Toggle} checked=${auto} onChange=${(v) => saveSetting({ autoPrepare: v })} label=${html`<span class="toggle-text">Bırakınca hazırla<small>Konuşmalar ayrılır, yazıya dökülür, çevrilir</small></span>`} />
+        <div class="row nowrap">
+          <span class="muted small">Dublaj dili</span>
+          <${Select} class="grow" value=${st.defaultDstLang || 'en'} disabled=${!auto} onChange=${(v) => saveSetting({ defaultDstLang: v })} options=${(sys && sys.languages) || [['en', 'İngilizce']]} />
+        </div>
+        ${tr && html`<span class="field-hint">Çeviri: ${tr.name} · <a href="#/settings">değiştir</a></span>`}
+      </div>
     </section>
 
-    <section>
-      <div class="section-head"><h2>Projeler</h2>${projects && projects.length > 0 && html`<span class="count">${projects.length}</span>`}</div>
+    <section class="plist-wrap">
+      <div class="plist-head"><h2>Projeler</h2>${projects && projects.length > 0 && html`<span class="count tc">${projects.length}</span>`}</div>
       ${projects === null
-        ? html`<div class="cards">${[0, 1, 2].map((i) => html`<div key=${i}><div class="skel" style=${{ aspectRatio: '16/9' }}></div><div class="skel" style=${{ height: '14px', width: '60%', marginTop: '10px' }}></div></div>`)}</div>`
+        ? html`<div class="plist">${[0, 1, 2].map((i) => html`<div key=${i} class="prow skelrow"><div class="skel prow-thumb"></div><div class="skel" style=${{ height: '14px', width: '40%' }}></div></div>`)}</div>`
         : projects.length === 0
-        ? html`<ol class="howto">${STEPS.map(([icon, t, d], i) => html`<li key=${t} style=${{ '--i': i }}><strong><${Icon} name=${icon} size=${16} />${i + 1}. ${t}</strong><p>${d}</p></li>`)}</ol>`
-        : html`<div class="cards">${projects.map((p, i) => html`<${ProjectCard} key=${p.id} p=${p} i=${i} onDelete=${del} />`)}</div>`}
+        ? html`<p class="plist-empty muted">Henüz proje yok. Bir dizi ya da film sahnesi bırak: konuşmalar fondan ayrılır, satırlar yazılır ve çevrilir, sonra herkes kendi repliğini kaydeder.</p>`
+        : html`<div class="plist">${projects.map((p, i) => html`<${ProjectRow} key=${p.id} p=${p} i=${i} onDelete=${del} />`)}</div>`}
     </section>
     ${sys && html`<footer class="sysinfo">
-      <${Icon} name="info" size=${14} />
-      ${sys.gpu && sys.gpu.available ? `Ekran kartı: ${sys.gpu.name} (${sys.gpu.memoryGB} GB), yapay zeka işlemleri hızlı çalışır.` : 'Ekran kartı bulunamadı, işlemler işlemcide (daha yavaş) yapılır.'}
-      <span>·</span> Videolar: <span class="mono">${sys.exportsDir}</span>
+      <span class=${cls('lamp', sys.gpu && sys.gpu.available ? 'ok' : 'warn')}>${sys.gpu && sys.gpu.available ? `${sys.gpu.name} · ${sys.gpu.memoryGB} GB` : 'Ekran kartı yok, işlemler işlemcide (yavaş)'}</span>
+      <span class="dim">Videolar</span><span class="mono dim">${sys.exportsDir}</span>
     </footer>`}
-    ${veil && html`<div class="dropveil"><div class="dropveil-card"><${Icon} name="upload" size=${30} />Videoyu bırak, sahneyi açalım</div></div>`}
+    ${veil && html`<div class="dropveil"><div class="dropveil-card"><${Icon} name="upload" size=${28} />Bırak${auto ? ', gerisi otomatik' : ''}</div></div>`}
   </div>`;
 }

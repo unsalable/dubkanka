@@ -1,48 +1,62 @@
-/* ---------- script ---------- */
-.ws { display: grid; gap: 8px; }
-.script-ws { grid-template-columns: minmax(0, 1.08fr) minmax(380px, 1fr); grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: 'viewer lines' 'tl tl'; height: calc(100dvh - var(--topbar-h) - 16px); }
-.script-ws > .viewer-col { grid-area: viewer; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+/* ---------- script: video and cast on the left, the cue sheet on the right, the dialogue timeline below ---------- */
+.script-ws { grid-template-columns: minmax(0, 1.05fr) minmax(400px, 1fr); grid-template-rows: minmax(0, 1fr) auto; grid-template-areas: 'viewer lines' 'tl tl';
+  height: calc(100dvh - var(--topbar-h) - 1px); }
+.script-ws > .viewer-col { grid-area: viewer; display: grid; grid-template-rows: minmax(220px, 1fr) minmax(120px, auto); gap: 1px; min-height: 0; background: var(--line); }
 .script-ws > .lines-pane { grid-area: lines; }
 .script-ws > .tl { grid-area: tl; }
-.viewer-col .viewer-pane { flex: 1; min-height: 220px; }
-.chars-pane .pane-body { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px; }
-.charchip { position: relative; display: flex; align-items: center; gap: 8px; background: var(--raised); border: 1px solid var(--line-2); border-radius: 8px; padding: 4px 4px 4px 8px; animation: rise 360ms var(--ease-out) both; }
-.charchip-fields { display: flex; flex-direction: column; width: 132px; }
-.charchip-fields .bare.small { color: var(--text-2); }
-.charchip .count { font-size: 11px; color: var(--text-3); font-variant-numeric: tabular-nums; }
-.colorpick { width: 18px; height: 18px; border: 0; padding: 0; background: none; cursor: pointer; border-radius: 5px; overflow: hidden; flex: none; }
-.colorpick::-webkit-color-swatch-wrapper { padding: 0; }
-.colorpick::-webkit-color-swatch { border: 0; border-radius: 5px; }
-.colorpick::-moz-color-swatch { border: 0; border-radius: 5px; }
+.cast-pane { max-height: 32vh; }
+
+/* cast: one row per character, its highlighter colour as a chip you can repaint */
+.cast { padding: 4px 0; }
+.castrow { display: grid; grid-template-columns: 22px minmax(90px, 0.9fr) minmax(80px, 1fr) 28px 24px; align-items: center; gap: 6px; padding: 3px 8px 3px 12px;
+  animation: rise var(--t-slow) var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 10) * 24ms * var(--mv)); }
+.castrow:hover { background: rgba(255, 255, 255, 0.02); }
+.castrow .tc { text-align: right; font-size: 12px; }
+.castname { font-size: 13px; }
+.castactor { color: var(--text-2); font-size: 12px; }
+.colorpick { position: relative; width: 16px; height: 16px; border-radius: var(--r-xs); background: var(--c); cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+  transition: transform var(--t-fast) var(--ease-out); }
+.colorpick:hover { transform: scale(1.12); }
+.colorpick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+
+/* cue sheet */
 .lines { display: flex; flex-direction: column; }
-.linerow { position: relative; display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 4px 10px; padding: 10px 10px 10px 8px; border-bottom: 1px solid var(--line); cursor: pointer; transition: background-color var(--t-fast); animation: rise 380ms var(--ease-out) both; animation-delay: calc(min(var(--i, 0), 14) * 22ms); }
-.linerow:hover { background: #1b1b1f; }
-.linerow.sel { background: #1a2130; }
-.linerow.sel::after { content: ''; position: absolute; inset: 0; box-shadow: inset 0 0 0 1px rgba(110, 168, 255, 0.45); pointer-events: none; }
-.linerow-num { font: 600 12px var(--mono); color: var(--text-3); text-align: right; padding-top: 4px; font-variant-numeric: tabular-nums; }
-.linerow.sel .linerow-num { color: var(--accent-text); }
-.linerow-main { min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.linerow-meta { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.charselect { height: 24px; width: auto; max-width: 150px; padding: 0 24px 0 8px; font-size: 12px; font-weight: 600; background-position: right 7px center; background-color: transparent; border-color: transparent; color: var(--c); }
-.charselect:hover { background-color: var(--raised); border-color: var(--line-2); }
-.linerow-meta .tc { font-size: 11.5px; color: var(--text-3); }
-.orig { color: var(--text-2); font-size: 12.5px; line-height: 1.4; }
-.dubtext { font-size: 14px; font-weight: 500; min-height: 34px; resize: none; overflow: hidden; background: transparent; border-color: transparent; padding: 6px 8px; margin-left: -8px; width: calc(100% + 8px); }
+.linerow { position: relative; display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 2px 8px; padding: 9px 8px 10px 0; border-bottom: 1px solid var(--line);
+  cursor: pointer; transition: background-color var(--t-fast); animation: rise calc(380ms * var(--m)) var(--ease-out) both;
+  animation-delay: calc(min(var(--i, 0), 14) * 20ms * var(--mv)); }
+.linerow:hover { background: rgba(255, 255, 255, 0.018); }
+.linerow.sel { background: rgba(255, 210, 63, 0.05); }
+.linerow.sel::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 2px; background: var(--accent); }
+.linerow-num { font: 500 12px var(--mono); color: var(--text-3); text-align: right; padding-top: 4px; font-variant-numeric: tabular-nums; }
+.linerow.sel .linerow-num { color: var(--accent); }
+.linerow-main { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.linerow-meta { display: flex; align-items: center; gap: 10px; min-width: 0; height: 24px; }
+.linerow-meta .tc { font-size: 12px; color: var(--text-2); }
+.linerow-meta .tc.dim { color: var(--text-3); }
+.chartag { display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 4px 0 0; border: 0; background: transparent; color: var(--text); font: 600 12px var(--font);
+  font-stretch: var(--cond); letter-spacing: 0.03em; text-transform: uppercase; cursor: pointer; border-radius: var(--r-sm); }
+.chartag .chev { color: var(--text-3); transform: rotate(90deg); transition: transform var(--t) var(--ease-out); }
+.chartag:hover .chev { color: var(--text); }
+.chartag[aria-expanded='true'] .chev { transform: rotate(-90deg); }
+.orig { color: var(--text-2); font-size: 12.5px; line-height: 1.45; }
+.orig em { color: var(--text-3); }
+.dubtext { font-size: 15px; font-weight: 500; line-height: 1.4; min-height: 32px; resize: none; overflow: hidden; background: transparent; border-color: transparent;
+  padding: 4px 8px; margin-left: -8px; width: calc(100% + 8px); }
 .dubtext:hover { background: var(--sunk); border-color: var(--line-2); }
 .dubtext:focus { background: var(--sunk); }
-.linerow.flash .dubtext { animation: flash 900ms var(--ease-out); }
-.linerow-side { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
-.linerow-acts { display: flex; gap: 2px; opacity: 0.55; transition: opacity var(--t); }
+.linerow.flash .dubtext { animation: flash calc(900ms * var(--m)) var(--ease-out); }
+.linerow-acts { display: flex; flex-direction: column; gap: 2px; opacity: 0.5; transition: opacity var(--t); padding-top: 22px; }
 .linerow:hover .linerow-acts, .linerow.sel .linerow-acts { opacity: 1; }
-.linerow-acts .iconbtn { width: 28px; height: 28px; }
 .sharetext { min-height: 260px; font-family: var(--mono); font-size: 12px; }
 
 @media (max-width: 1180px), (max-height: 640px) {
   .script-ws { height: auto; grid-template-columns: 1fr; grid-template-rows: none; grid-template-areas: 'viewer' 'tl' 'lines'; }
-  .script-ws > .lines-pane { max-height: none; }
+  .script-ws > .viewer-col { grid-template-rows: auto auto; }
   .viewer-col .viewer-pane .videopane { aspect-ratio: 16 / 9; max-height: 52vh; }
+  .cast-pane { max-height: none; }
 }
 @media (max-width: 760px) {
-  .linerow { grid-template-columns: 24px minmax(0, 1fr); }
-  .linerow-side { grid-column: 2; flex-direction: row; align-items: center; justify-content: space-between; }
+  .linerow { grid-template-columns: 26px minmax(0, 1fr); }
+  .linerow-acts { grid-column: 2; flex-direction: row; padding-top: 0; }
+  .castrow { grid-template-columns: 22px 1fr 1fr 24px 24px; }
 }

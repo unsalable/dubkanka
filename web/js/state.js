@@ -1,6 +1,6 @@
 import { useLayoutEffect, useReducer } from '../vendor/preact-htm.js';
 import { api, P } from './api.js';
-import { sleep } from './util.js';
+import { LS, sleep } from './util.js';
 
 export const store = {
   role: null, // host | guest | anon
@@ -40,10 +40,19 @@ export function parseRoute() {
   return location.hash.replace(/^#\/?/, '').split('/').filter(Boolean);
 }
 
+// Motion level (Ayarlar → Görünüm), applied as <html data-motion>: CSS scales durations and distances from it.
+export const MOTION_LEVELS = [['full', 'Tam'], ['reduced', 'Azaltılmış'], ['off', 'Kapalı']];
+export const motion = () => document.documentElement.dataset.motion || 'full';
+export function setMotion(level) {
+  LS.set('motion', level);
+  document.documentElement.dataset.motion = level;
+}
+document.documentElement.dataset.motion = LS.get('motion', matchMedia('(prefers-reduced-motion: reduce)').matches ? 'reduced' : 'full');
+
 // Where a route sits in the workflow, so page changes slide forwards or backwards.
 const PLACE = { prepare: 1, script: 2, record: 3, mix: 4, export: 5, room: 6 };
 const place = (r) => (r[0] === 'p' ? PLACE[r[2]] || 1 : r[0] === 'settings' ? 9 : 0);
-const calm = () => document.hidden || !document.startViewTransition || matchMedia('(prefers-reduced-motion: reduce)').matches;
+const calm = () => document.hidden || !document.startViewTransition || motion() === 'off';
 
 /** Apply a route change inside a view transition: the page slides, the video picture glides to its new spot. */
 export function transition(update, dir = 1) {
@@ -83,9 +92,9 @@ export function dismissToast(id) {
   setState((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, leaving: true } : t)) }));
   setTimeout(() => setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 200);
 }
-export function toast(text, type = 'info', ms = 4200) {
+export function toast(text, type = 'info', ms = 4200, action = null) {
   const id = ++toastId;
-  setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, type, ms }] }));
+  setState((s) => ({ toasts: [...s.toasts.slice(-3), { id, text, type, ms, action }] }));
   setTimeout(() => dismissToast(id), ms);
 }
 export const toastError = (e) => toast(e && e.message ? e.message : String(e), 'error', 6000);

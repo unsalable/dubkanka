@@ -14,7 +14,8 @@ from fastapi.staticfiles import StaticFiles
 
 from . import media
 from . import __version__
-from .config import DESKTOP, EXPORTS_DIR, HOME, MODELS_DIR, PROJECTS_DIR, RUNTIME, WEB_DIR, load_settings, public_settings, save_settings
+from .config import (DESKTOP, EXPORTS_DIR, HOME, LOGS_DIR, MODELS_DIR, PROJECTS_DIR, RUNTIME, WEB_DIR, load_settings,
+                     public_settings, save_settings)
 from .gpu import gpu_info
 from .access import GUEST_COOKIE, body_json, host_only, is_remote, member, mutate, project_or_404, save_body, who
 from .jobs import bus, jobs
@@ -688,7 +689,8 @@ def project_audio(pid: str, request: Request, mode: str = "dub"):
 async def open_folder(request: Request):
     host_only(request)
     b = await body_json(request)
-    target = EXPORTS_DIR
+    target = {"projects": PROJECTS_DIR, "models": MODELS_DIR, "logs": LOGS_DIR}.get(b.get("target"), EXPORTS_DIR)
+    target.mkdir(parents=True, exist_ok=True)
     if b.get("file"):
         from .export import export_path
         try:

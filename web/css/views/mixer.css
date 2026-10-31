@@ -1,18 +1,24 @@
-/* ---------- mixer ---------- */
-.mixer-ws { grid-template-columns: minmax(0, 1fr) 340px; align-items: stretch; margin-bottom: 8px; }
-.mixer-ws .viewer-pane .videopane { max-height: 46vh; aspect-ratio: 16 / 9; }
-.mixer-side { overflow: auto; max-height: calc(46vh + 64px); }
-.mixer-side .pane-body + .pane-body { border-top: 1px solid var(--line); }
-.inspector-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
-.inspector-text { font-size: 14px; font-weight: 600; margin-bottom: 14px; line-height: 1.4; animation: line-in 320ms var(--ease-out) both; }
+/* ---------- mixer: picture and inspector on top, the multitrack below ---------- */
+.mixer { display: flex; flex-direction: column; min-height: calc(100dvh - var(--topbar-h) - 1px); background: var(--line); gap: 1px; }
+.mixer-ws { grid-template-columns: minmax(0, 1fr) 360px; align-items: stretch; }
+.mixer-ws .viewer-pane .videopane { max-height: 44vh; aspect-ratio: 16 / 9; }
+.mixer-side { max-height: calc(44vh + 45px); }
+.mixer .tl { flex: 1; }
+.inspector-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.inspector-head .hl { font-stretch: var(--cond); text-transform: uppercase; letter-spacing: 0.03em; font-size: 12px; }
+.inspector-text { font-size: 14px; font-weight: 500; margin-bottom: 12px; line-height: 1.4; animation: line-in var(--t-slow) var(--ease-out) both; }
 .inspector-empty { color: var(--text-2); font-size: 12.5px; display: flex; gap: 10px; align-items: flex-start; }
 .inspector-empty .icon { color: var(--text-3); margin-top: 1px; }
-.nudges { gap: 4px; }
-.nudges .btn { min-width: 46px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.mixer-side .seclabel { margin-top: 12px; }
+.mixer-side .pane-body > .seclabel:first-child { margin-top: 0; }
+.nudges { gap: 4px; margin: 4px 0 8px; }
+.nudges .btn { min-width: 44px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .charfx { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.charfx .hl { font-size: 12px; font-stretch: var(--cond); text-transform: uppercase; letter-spacing: 0.03em; }
 .charfx select { width: 170px; }
-.master { display: flex; flex-direction: column; gap: 3px; width: 70px; margin-left: 4px; }
-.master .vu.h { flex: none; height: 3px; width: 100%; }
+.master { display: flex; flex-direction: column; gap: 3px; width: 76px; margin-left: 4px; }
+.master .label { font-size: 10px; }
+.master .vu.h { flex: none; height: 5px; width: 100%; }
 
 @media (max-width: 1100px) {
   .mixer-ws { grid-template-columns: 1fr; }

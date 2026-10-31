@@ -1,1 +1,35 @@
-/* Settings view */
+/* ---------- settings: a section index on the left, the sections in one scroll on the right ---------- */
+.settings { display: grid; grid-template-columns: 220px minmax(0, 760px); gap: 40px; max-width: 1080px; padding: 28px 24px 64px; }
+.set-nav { position: sticky; top: 28px; align-self: start; display: flex; flex-direction: column; gap: 2px; }
+.set-nav h1 { margin-bottom: 14px; }
+.set-link { background: none; border: 0; color: var(--text-2); font: 500 13px var(--font); text-align: left; padding: 6px 10px; border-radius: var(--r-sm); cursor: pointer;
+  transition: background-color var(--t-fast), color var(--t-fast); }
+.set-link:hover { background: var(--raised); color: var(--text); }
+.set-body { min-width: 0; }
+.set-sec { padding: 0 0 26px; margin-bottom: 26px; border-bottom: 1px solid var(--line); scroll-margin-top: 20px; animation: rise var(--t-slow) var(--ease-out) both; }
+.set-sec:last-child { border-bottom: 0; }
+.set-sec h2 { margin-bottom: 8px; }
+.set-sec > p { max-width: 64ch; }
+.detect { margin: 4px 0 10px; }
+.found { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; margin-bottom: 12px; background: var(--sunk); border: 1px solid var(--line); border-radius: var(--r-sm);
+  animation: rise var(--t-slow) var(--ease-out); }
+.found-row { display: flex; align-items: center; gap: 10px; }
+.provs { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.prov { border-bottom: 1px solid var(--line); background: var(--panel); }
+.prov:last-child { border-bottom: 0; }
+.prov-head { display: flex; align-items: center; gap: 10px; width: 100%; height: 40px; padding: 0 12px; border: 0; background: transparent; color: var(--text); font: inherit;
+  cursor: pointer; text-align: left; transition: background-color var(--t-fast); }
+.prov-head:hover { background: rgba(255, 255, 255, 0.02); }
+.prov-head .chev { color: var(--text-3); transition: transform var(--t) var(--ease-out); }
+.prov.open .prov-head .chev { transform: rotate(90deg); }
+.prov-name { font-weight: 600; }
+.prov-body { padding: 4px 14px 14px 34px; animation: rise var(--t-slow) var(--ease-out); }
+.prov-body .lamp { white-space: normal; }
+.folder { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.folder:last-of-type { border-bottom: 0; margin-bottom: 10px; }
+
+@media (max-width: 900px) {
+  .settings { grid-template-columns: 1fr; gap: 16px; padding: 18px 12px 48px; }
+  .set-nav { position: static; flex-direction: row; flex-wrap: wrap; }
+  .set-nav h1 { width: 100%; }
+}
