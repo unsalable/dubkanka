@@ -62,6 +62,16 @@ def _watch_parent(pid):
             os._exit(0)
 
 
+def _warm_encoders():
+    """Testing which video encoders work takes a few seconds: do it before the first visit to the export page."""
+    from . import media
+    try:
+        if media.has_ffmpeg():
+            media.ffmpeg_caps()
+    except Exception:
+        pass
+
+
 def main():
     ap = argparse.ArgumentParser(prog="dubkanka")
     ap.add_argument("--port", type=int)
@@ -92,6 +102,7 @@ def main():
     from .gpu import gpu_info
     from .server import app
     threading.Thread(target=gpu_info, daemon=True).start()  # warm up torch/CUDA in the background
+    threading.Thread(target=_warm_encoders, daemon=True).start()
     _quiet_dropped_connections()
     uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning", timeout_keep_alive=30)
 

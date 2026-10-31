@@ -161,9 +161,12 @@ async def project_patch(pid: str, request: Request):
     def fn(p):
         if isinstance(body.get("name"), str) and body["name"].strip():
             p["name"] = body["name"].strip()[:80]
-        for k in ("settings", "mix", "export"):
+        for k in ("settings", "mix"):
             if isinstance(body.get(k), dict):
                 p[k].update({kk: vv for kk, vv in body[k].items() if kk != "sfx"})
+        if isinstance(body.get("export"), dict):  # nested video/audio options: merge, do not replace
+            from .export import EXPORT_DEFAULTS, merge
+            merge(p["export"], {kk: vv for kk, vv in body["export"].items() if kk in EXPORT_DEFAULTS})
     mutate(pid, fn)
     return store.get(pid)
 
@@ -651,14 +654,14 @@ def export_file(name: str, request: Request, dl: int = 0):
     role, _ = who(request)
     if role == "anon":
         raise HTTPException(403, "Odaya katılman gerekiyor.")
-    from .export import export_path
+    from .export import export_path, media_type
     try:
         f = export_path(name)
     except FileNotFoundError:
         raise HTTPException(404, "Video bulunamadı")
     if dl:
-        return FileResponse(f, filename=name, media_type="video/mp4")
-    return FileResponse(f, media_type="video/mp4")
+        return FileResponse(f, filename=name, media_type=media_type(name))
+    return FileResponse(f, media_type=media_type(name))
 
 
 @app.get("/api/projects/{pid}/srt")

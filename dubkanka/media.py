@@ -61,22 +61,51 @@ def has_ffmpeg():
 
 
 _caps = {}
+_caps_lock = threading.Lock()
+
+# Video encoders DubKanka can drive, best first per codec. Hardware ones are only offered when a test encode works.
+ENCODERS = [
+    ("h264_nvenc", "h264", "NVENC (NVIDIA)", True), ("h264_qsv", "h264", "Quick Sync (Intel)", True),
+    ("h264_amf", "h264", "AMF (AMD)", True), ("libx264", "h264", "x264 (işlemci)", False),
+    ("hevc_nvenc", "hevc", "NVENC (NVIDIA)", True), ("hevc_qsv", "hevc", "Quick Sync (Intel)", True),
+    ("hevc_amf", "hevc", "AMF (AMD)", True), ("libx265", "hevc", "x265 (işlemci)", False),
+    ("av1_nvenc", "av1", "NVENC (NVIDIA)", True), ("av1_qsv", "av1", "Quick Sync (Intel)", True),
+    ("av1_amf", "av1", "AMF (AMD)", True), ("libsvtav1", "av1", "SVT-AV1 (işlemci)", False),
+    ("libaom-av1", "av1", "libaom (işlemci, yavaş)", False),
+]
+
+
+def _encode_test(ff, enc, pix):
+    r = subprocess.run([ff, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i", "color=c=black:s=256x256:d=0.1",
+                        "-c:v", enc, "-pix_fmt", pix, "-f", "null", "-"], capture_output=True, creationflags=NO_WINDOW)
+    return r.returncode == 0
 
 
 def ffmpeg_caps():
-    """Detect optional ffmpeg features once (rubberband, libass, working NVENC)."""
-    if _caps:
+    """Detect optional ffmpeg features once (rubberband, libass, encoders that really work on this PC)."""
+    with _caps_lock:
+        if _caps:
+            return _caps
+        ff = ffmpeg_path()
+        run = lambda *a: subprocess.run([ff, "-hide_banner", *a], capture_output=True, text=True, encoding="utf-8",
+                                        errors="replace", creationflags=NO_WINDOW).stdout
+        filters, listed = run("-filters"), run("-encoders")
+        caps = {"rubberband": " rubberband " in filters, "subtitles": " subtitles " in filters,
+                "loudnorm": " loudnorm " in filters, "encoders": []}
+        for enc, codec, label, hw in ENCODERS:
+            if f" {enc} " not in listed:
+                continue
+            ten = codec != "h264"
+            if hw:  # listed is not enough for hardware: the GPU and driver must be there
+                if not _encode_test(ff, enc, "yuv420p"):
+                    continue
+                ten = ten and _encode_test(ff, enc, "p010le")
+            elif ten:
+                ten = _encode_test(ff, enc, "yuv420p10le")
+            caps["encoders"].append({"id": enc, "codec": codec, "label": label, "hw": hw, "tenBit": ten})
+        caps["nvenc"] = any(e["id"] == "h264_nvenc" for e in caps["encoders"])
+        _caps.update(caps)
         return _caps
-    ff = ffmpeg_path()
-    filters = subprocess.run([ff, "-hide_banner", "-filters"], capture_output=True, text=True,
-                             encoding="utf-8", errors="replace", creationflags=NO_WINDOW).stdout
-    _caps["rubberband"] = " rubberband " in filters
-    _caps["subtitles"] = " subtitles " in filters
-    test = subprocess.run([ff, "-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i",
-                           "color=c=black:s=256x256:d=0.1", "-c:v", "h264_nvenc", "-f", "null", "-"],
-                          capture_output=True, creationflags=NO_WINDOW)
-    _caps["nvenc"] = test.returncode == 0
-    return _caps
 
 
 def _parse_time(s):
@@ -134,6 +163,8 @@ def probe(path):
         "hasAudio": a is not None,
         "format": fmt.get("format_name", ""),
         "size": int(fmt.get("size") or 0),
+        "bitrate": int(fmt.get("bit_rate") or 0),
+        "startTime": float(fmt.get("start_time") or 0),
     }
     if v:
         w, h = int(v.get("width") or 0), int(v.get("height") or 0)
@@ -153,10 +184,42 @@ def probe(path):
                     break
             except (ZeroDivisionError, ValueError):
                 pass
-        res.update(width=w, height=h, fps=round(fps, 3), vcodec=v.get("codec_name", ""))
+        res.update(width=w, height=h, fps=round(fps, 3), vcodec=v.get("codec_name", ""), profile=v.get("profile", ""),
+                   pixfmt=v.get("pix_fmt", ""), vbitrate=int(v.get("bit_rate") or 0), rotation=rot)
     if a:
-        res.update(acodec=a.get("codec_name", ""), channels=int(a.get("channels") or 2))
+        res.update(acodec=a.get("codec_name", ""), channels=int(a.get("channels") or 2),
+                   abitrate=int(a.get("bit_rate") or 0), sampleRate=int(a.get("sample_rate") or 0))
     return res
+
+
+def keyframe_before(path, t, start_time=0.0):
+    """Time (from the file start) of the last video keyframe at or before t: where a stream copy can begin."""
+    lo = max(0.0, t - 30.0)
+    out = subprocess.run([ffprobe_path(), "-v", "error", "-select_streams", "v:0", "-skip_frame", "nokey",
+                          "-show_entries", "frame=pts_time", "-of", "csv=p=0",
+                          "-read_intervals", f"{lo + start_time:.3f}%{t + start_time + 0.05:.3f}", str(path)],
+                         capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+    times = []
+    for line in out.stdout.split():
+        try:
+            times.append(float(line.strip().strip(",")) - start_time)
+        except ValueError:
+            pass
+    before = [k for k in times if k <= t + 1e-3]
+    if before:
+        return max(before)
+    return 0.0 if lo == 0 else keyframe_before(path, lo, start_time)
+
+
+def measure_loudness(path, target=-14.0, peak=-1.0):
+    """First loudnorm pass: the measured values the second pass needs for a linear, exact gain."""
+    cmd = [ffmpeg_path(), "-hide_banner", "-nostdin", "-i", str(path), "-af",
+           f"loudnorm=I={target}:TP={peak}:LRA=11:print_format=json", "-f", "null", "-"]
+    r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
+    m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", r.stderr)
+    if not m:
+        raise MediaError("Ses seviyesi ölçülemedi.")
+    return json.loads(m.group(0))
 
 
 def browser_playable(info):
