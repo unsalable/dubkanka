@@ -1,6 +1,6 @@
 // Puts a pinned uv.exe into resources/: the installer ships it and uses it to set up Python and the AI packages.
 import { execFileSync } from 'node:child_process';
-import { createWriteStream, existsSync, mkdirSync, mkdtempSync, renameSync, rmSync } from 'node:fs';
+import { copyFileSync, createWriteStream, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { Readable } from 'node:stream';
@@ -24,6 +24,6 @@ await pipeline(Readable.fromWeb(res.body), createWriteStream(zip));
 // Windows' own bsdtar reads zip files; a tar from Git or MSYS on PATH would not
 execFileSync(join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', zip, '-C', work]);
 mkdirSync(dirname(dest), { recursive: true });
-renameSync(join(work, 'uv.exe'), dest);
+copyFileSync(join(work, 'uv.exe'), dest); // temp and checkout can sit on different drives (CI)
 rmSync(work, { recursive: true, force: true });
 console.log(`uv ${UV_VERSION} → ${dest}`);

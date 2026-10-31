@@ -1,7 +1,7 @@
 {
   "name": "dubkanka",
   "productName": "DubKanka",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "Arkadaşlarınla dublaj stüdyosu",
   "author": "unsalable",
   "license": "UNLICENSED",
@@ -43,7 +43,11 @@
       {
         "from": "../dubkanka",
         "to": "app/dubkanka",
-        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"]
+        "filter": [
+          "**/*",
+          "!**/__pycache__/**",
+          "!**/*.pyc"
+        ]
       },
       {
         "from": "../web",
@@ -62,7 +66,9 @@
       "target": [
         {
           "target": "nsis",
-          "arch": ["x64"]
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "icon": "build/icon.ico",
