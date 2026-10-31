@@ -1,66 +1,97 @@
-# DubKanka 🎙️ — Arkadaşlarınla dublaj stüdyosu
+# DubKanka: arkadaşlarınla dublaj stüdyosu
 
-Bir dizi ya da film sahnesini arkadaşlarınla dublajlamak için hazırlanmış bir uygulama. Videoyu atıyorsun, sonra:
+Bir dizi ya da film sahnesini arkadaşlarınla dublajlayıp TikTok'a atmak için Windows uygulaması. Videoyu bırakıyorsun:
 
-- konuşmalar müzik ve efektlerden **ayrılıyor** (fon müziği, kuş, rüzgar, kalabalık gibi ortam sesleri kalıyor, sadece eski konuşmalar gidiyor),
-- kimin **ne zaman** konuştuğu bulunup her replik ayrı bir satıra yazılıyor,
-- satırlar istediğin dile **çevriliyor** (Google ücretsiz, ya da Claude ile dublaja uygun/troll çeviri),
-- herkes kendi repliğini **bip sesleriyle tam zamanında** kaydediyor (linkle telefondan bile),
-- en sonda **altyazılı TikTok videosu (9:16)** tek tıkla hazırlanıyor.
+- konuşmalar müzikten, efektten ve ortam seslerinden (kuş, rüzgar, kalabalık) **ayrılıyor**,
+- kimin ne zaman konuştuğu bulunup her replik ayrı bir satıra yazılıyor ve **çevriliyor**,
+- herkes kendi repliğini **akış çizgisi ve bip sesleriyle tam zamanında** kaydediyor, linkle telefondan bile,
+- en sonda **altyazılı TikTok videosu** ya da görüntüsü hiç yeniden kodlanmamış bir kopya çıkıyor.
 
-## Başlatma
+## İndir ve kur
 
-1. **`Baslat.bat`** dosyasına çift tıkla. Siyah bir pencere açılır ve tarayıcıda uygulama gelir (`http://127.0.0.1:8765`).
-2. Kapatmak için siyah pencereyi kapatman yeterli.
+1. [Sürümler](https://github.com/unsalable/dubkanka/releases/latest) sayfasından **`DubKanka-Setup-x.y.z.exe`** dosyasını indir ve çalıştır. Yönetici izni istemez.
+2. Windows "Bilgisayarınız korundu" derse: **Ek bilgi → Yine de çalıştır**. (Uygulama imzalı değil, o yüzden çıkıyor.)
+3. İlk açılışta DubKanka gerekenleri kendisi kurar: Python, ekran kartına uygun PyTorch, yapay zeka paketleri, ffmpeg, oda aracı ve modeller. Toplam 5 GB kadar, internet hızına göre **10-30 dakika**. Bir kereye mahsus.
 
-> Bu bilgisayarda kurulum yapıldı. Başka bir bilgisayara kopyalarsan önce **`Kurulum.bat`**'ı çalıştır (internet gerekir, ilk sefer 5-10 dk).
-
-## 5 adımda dublaj
-
-| Adım | Ne yapıyorsun |
+| Gereken | |
 |---|---|
-| **1. Sahne** | Videoyu sürükle bırak ya da YouTube vb. linki yapıştır. Dublajlayacağın kısmı seç, videodaki dili, dublaj dilini ve (biliyorsan) kaç kişinin konuştuğunu seç → **Sahneyi hazırla**. İlk seferde yapay zeka modelleri iner (~2 GB), sonrakiler 20-30 sn sürer. |
-| **2. Senaryo** | Her satır: kim söylüyor, orijinal metin, dublaj metni. Metni değiştir; yanındaki **uygun / uzun / kısa** rozeti repliğin ağıza sığıp sığmadığını hece sayısına göre söyler. Zaman çizelgesinde kutuların kenarını sürükleyerek başlangıç/bitişi düzelt. Yanlış ayrılmış karakterleri ⋯ menüsünden birleştir, seslendiren arkadaşın adını yaz. **Çevir** ile tekrar çevirt. |
-| **3. Kayıt** | Kayıt kabini: karakterini seç, **Boşluk** tuşuna bas → video satırdan 2 sn önce başlar, **3 bip** sesinden sonra konuş. Üstteki çubuk satırın süresini, alttaki kelimeler orijinal ritmi gösterir. Kayıt otomatik durur, sessizlikler kesilir, konuşman orijinal başlangıca **otomatik hizalanır** ve ses seviyesi orijinale eşitlenir, ardından hemen dinletilir. Beğenmezsen tekrar kaydet; en iyisini seç. |
-| **4. Mikser** | Fon müziği, **ortam sesleri** (kuş, rüzgar, kalabalık: kendi sürgüsüyle kısıp açabilirsin), her karakterin sesi ve kayıtlar tek ekranda. Eski bir projede ortam izi yoksa izin yanındaki **Geri getir** düğmesine bas. Kayıt kutularını sürükleyerek kaydır; bir kayda tıklayıp ses, **süreye sığdır**, **troll efekti** (sincap, dev, robot, telefon, telsiz, megafon, yankı…) ayarla. **Dublaj / Orijinal** düğmesiyle anında karşılaştır. Kaydı olmayan satırlar ya orijinal sesle çalar ya da **yapay zeka sesiyle** doldurulur. Meme sesi gibi ekstra ses dosyaları da eklenebilir. |
-| **5. Paylaş** | TikTok/Reels 9:16 (bulanık arka plan ya da ekranı doldur), kare veya orijinal boyut; altyazı yazı tipi/boyut/renk; sonda "Seslendirenler" jeneriği → **Videoyu oluştur**. Videolar `Videolar` klasörüne kaydedilir. |
+| Sistem | Windows 10 / 11, 64 bit |
+| Ekran kartı | NVIDIA önerilir (RTX 20 ve sonrası CUDA 12.8, GTX 900/10 serisi CUDA 12.6). Yoksa işlemcide çalışır ama yavaştır. |
+| Disk | 10 GB boş yer |
 
-**Kısayollar (kayıt kabini):** `Boşluk` kaydet/durdur · `P` orijinali dinle · `L` kaydımı dinle · `Enter` sonraki satır · `↑` önceki satır · `Esc` iptal
+**Güncellemeler kendiliğinden gelir.** Yeni sürüm arka planda iner; üst çubukta **Güncelle ve yeniden başlat** belirir. Projeler, ayarlar ve modeller olduğu gibi kalır.
 
-## Arkadaşlarla birlikte
+## Ücretli mi, nasıl çalışıyor?
 
-**Canlı oda (önerilen):** **Arkadaşlar** sekmesi → bir kerelik *bağlantı aracını indir* (Cloudflare, ücretsiz, hesap gerekmez) → **Odayı aç**. Çıkan link + 4 haneli PIN'i (veya QR kodu) WhatsApp'tan gönder. Arkadaşın linke telefonundan ya da bilgisayarından girer, adını ve PIN'i yazar, karakterini seçer ve kaydeder. Kayıtları anında senin projene düşer, kimin hangi satırda olduğunu görürsün. Link sadece uygulama açıkken çalışır; PIN 5 kez yanlış girilirse o kişi bir süre bekletilir.
+- **Oda:** Arkadaşlarına verilen link Cloudflare'in ücretsiz geçici tüneliyle (`cloudflared`, hesap gerekmez) senin bilgisayarına bağlanır. Link sadece DubKanka açıkken çalışır, 4 haneli PIN ister.
+- **Yapay zeka:** Ses ayırma (Demucs), yazıya dökme (Whisper), konuşmacı ayrımı ve gürültü temizleme bilgisayarında, ekran kartında çalışır. Bulut yok, ücret yok.
+- **Çeviri:** Google Çeviri ücretsiz ve varsayılan. Ayarlar'a anahtar girersen Claude, OpenAI, Gemini, Groq, OpenRouter, DeepSeek, Mistral ya da DeepL kullanılabilir; bunlar kendi hesabından ücretlendirilir. Ollama ve LM Studio bilgisayarında ücretsiz çalışır.
+- **Yapay zeka sesi** (boş satırları doldurmak için): Microsoft Edge'in ücretsiz sesleri.
 
-**Odaya giremeyen arkadaş için:** Senaryo ekranında, satır listesinin üstündeki **Paylaş** ile repliklerini gönder. Her repliği ayrı kaydedip dosya adını satır numarası yapsın (`3.m4a` gibi, WhatsApp sesli mesajı da olur). Gelen dosyaları Kayıt ekranındaki **Toplu ses yükle** ile at. Sessizlikler kesilir ve her kayıt kendi yerine hizalanır.
+DubKanka'yı kuran her arkadaş kendi projesini ve odasını açabilir, kimsenin bilgisayarına bağlı değil.
 
-## İpuçları
+## Dublaj adım adım
 
-- 🎧 **Kulaklık kullanın.** Hoparlörden gelen fon müziği mikrofona girmez, kayıt tertemiz olur.
-- Sahnede kaç kişi konuştuğunu biliyorsan seç; konuşmacı ayrımı daha isabetli olur.
-- Bluetooth kulaklıkta kayıtlar hep biraz geç oturuyorsa: Kayıt → Kabin ayarları → *Gecikme düzeltme*.
-- Türkçe → Türkçe troll dublaj için dublaj dilini de Türkçe seç (çeviri yapılmaz), sonra Claude ile **Komik / troll** tarzında yeniden yazdırabilirsin.
+| Adım | Ne oluyor |
+|---|---|
+| **Video** | Ana sayfaya videoyu bırak ya da YouTube vb. linki yapıştır. **Bırakınca hazırla** açıksa (varsayılan) 15 dakikadan kısa videolar baştan sona hazırlanır, bitince senaryo açılır. Kapalıysa ya da uzun videolarda **Sahne** ekranında kısmı seçip dili ve konuşan kişi sayısını ayarlarsın. |
+| **Senaryo** | Her satır: kim söylüyor (renkli kalem izi), orijinal metin, dublaj metni. Lamba repliğin ağza sığıp sığmadığını hece sayısına göre söyler. Zaman çizelgesinde satırları sürükle, kenarlarından uzat. Oyuncular listesinde karakteri yeniden adlandır, rengini değiştir, `⋯` menüsünden başka karakterle birleştir. **Çevir** ile istediğin servisle yeniden çevirt. |
+| **Kayıt** | Rolünü seç, **Boşluk**'a bas: video satırdan önce başlar, akış çizgisi ekranın sağına ulaştığında ve üçüncü bipten sonra konuş. Altta orijinal repliğin dalga biçimi ve kelimeleri gerçek zamanlarıyla durur; dublaj metni kelime kelime yanar. Kayıt sessizlikleri kesilip orijinal girişe hizalanır ve hemen dinletilir. |
+| **Mikser** | Fon, ortam sesleri, karakterler ve ekstra sesler ayrı izlerde. Kayıtları sürükleyerek kaydır, **kenarlarından tutup baştan ya da sondan kırp**. Kaydı olmayan satırlar karakterin izinde boş kutu olarak durur; onları da uzatıp kısaltabilirsin. Dublaj / Orijinal / Konuşmasız arasında oynatırken geçiş yap. |
+| **Paylaş** | Hazır ayar seç (TikTok, Yüksek kalite, Küçük dosya, Kaynak kopyası) ya da teknik ayarları kendin yap: H.264 / H.265 / AV1, NVENC / Quick Sync / AMF / işlemci kodlayıcı, CRF-CQ / VBR / CBR, preset, kare hızı, çözünürlük, 8/10-bit, GOP, AAC / Opus / FLAC / PCM, EBU R128 ses yüksekliği, MP4 / MKV / MOV. Sağdaki önizleme kadrajı, altyazıyı ve gerçek miksi oynatır. |
 
-## Claude ile dublaja uygun çeviri (isteğe bağlı)
+**Kaynak kopyası:** Görüntü yeniden kodlanmaz (`-c:v copy`), sadece yeni ses eklenir; kaynak dosyanın kalitesi bit bit korunur. Kesim bir anahtar kareye denk gelmiyorsa kopya en yakın önceki anahtar kareden başlar ve o birkaç karede orijinal ses çalar; ekran bunu önceden söyler.
 
-**Ayarlar**'a Anthropic API anahtarını gir ([console.anthropic.com](https://console.anthropic.com/)). Claude her satırı süresine sığacak şekilde, doğal konuşma diliyle çevirir. *Troll* tarzında ise sahneyi koruyup replikleri komik hale getirir. Varsayılan model Claude Opus 5.5'tir. Model bir isteği reddederse Anthropic'in sunucu tarafı yedek modeli (`fallbacks: "default"`) devreye girer. Anahtar sadece bu bilgisayarda (`settings.json`) saklanır.
+**Kısayollar (kayıt):** `Boşluk` kaydet / durdur · `P` orijinali dinle · `L` kaydımı dinle · `Enter` sonraki · `↑` önceki · `Esc` iptal
+
+## Kabin ve mikrofon
+
+- **Saf ses** varsayılan olarak açık: tarayıcının yankı engelleme, gürültü bastırma ve otomatik kazancı kapalı. İyi bir mikrofonu boğuk yapan bunlardı. Hoparlörle kayıt yapıyorsan ya da ortam çok gürültülüyse tek tek açabilirsin.
+- **Alçak kesme 80 Hz** ve **yapay zeka gürültü temizleme** (DPDFNet) kayıttan sonra uygulanır; mikserde her kayıt için ayrıca açılıp kapanır.
+- **Mikrofonu test et** ile seviyeyi gör, **Kendimi duy** ile sesini kulaklıktan dinle, **5 sn deneme kaydı** ile nasıl kaydettiğini duy.
+- Bluetooth kulaklığın mikrofonu telefon kalitesinde kaydeder; uygulama bunu fark edince uyarır.
+
+## Arkadaşlarla
+
+**Oda** düğmesi → **Odayı aç**. Çıkan link ve PIN'i (ya da QR kodu) WhatsApp'tan gönder. Arkadaşın adını ve PIN'i yazar, rolünü seçer, kaydeder; kayıtlar anında projene düşer. Oda ekranında kimin hangi rolde ve hangi satırda olduğu görünür; sen de kayıt ekranında bir rol seçince herkes görür.
+
+Odaya giremeyen arkadaş için: Senaryo → **Paylaş** ile replikleri gönder. Gelen ses dosyalarını Kayıt → **Toplu yükle** ile at; dosya adındaki numara satırı bulur, WhatsApp sesli mesajlarının satırını listeden seçersin.
+
+## Ayarlar
+
+- **Çeviri:** varsayılan servis, servis başına anahtar, model listesi ve **Dene** düğmesi. **Otomatik bul** bilgisayarda çalışan Ollama / LM Studio'yu ve ortam değişkenlerindeki API anahtarlarını bulup ayarlar.
+- **Görünüm → Animasyonlar:** Tam, Azaltılmış ya da Kapalı. Zayıf bilgisayarlarda Kapalı'yı seç.
+- **Klasörler:** videoların ve projelerin yeri.
 
 ## Klasörler
 
-| Klasör | İçerik |
+| Nerede | Ne var |
 |---|---|
-| `Videolar/` | Oluşturduğun videolar |
-| `projeler/` | Projeler (kesilen sahne, ayrılmış sesler, kayıtlar) |
-| `models/` | İndirilen yapay zeka modelleri (~2 GB) |
-| `bin/` | Oda için bağlantı aracı (cloudflared) |
+| `Videolar\DubKanka` | Oluşturduğun videolar |
+| `%LOCALAPPDATA%\DubKanka\projeler` | Projeler (kesilen sahne, ayrılmış sesler, kayıtlar) |
+| `%LOCALAPPDATA%\DubKanka\models` | Yapay zeka modelleri |
+| `%LOCALAPPDATA%\DubKanka\runtime` | Python ve paketler |
+| `%LOCALAPPDATA%\DubKanka\logs` | Günlükler (sorun bildirirken bunları gönder) |
+
+Uygulamayı kaldırmak projelere dokunmaz. Her şeyi silmek için kaldırdıktan sonra `%LOCALAPPDATA%\DubKanka` klasörünü de sil.
 
 ## Sorun giderme
 
-- **Tarayıcı açılmadı:** adres çubuğuna `http://127.0.0.1:8765` yaz.
-- **Mikrofon çalışmıyor:** adres çubuğundaki kilit simgesinden mikrofon iznini ver; Kabin ayarları → *Mikrofonu dene*.
-- **Kayıtta ses yok uyarısı:** doğru mikrofon seçili mi, sessize alınmış mı kontrol et.
-- **Google Çeviri hatası:** internet bağlantısını kontrol edip Senaryo → Çevir ile tekrar dene.
-- **Link ile video inmedi:** videoyu bilgisayara indirip dosya olarak sürükle.
+- **İlk kurulum yarıda kaldı:** internet bağlantısını kontrol edip **Tekrar dene**. Kaldığı yerden devam eder.
+- **Mikrofon çalışmıyor:** Kabin → doğru mikrofon seçili mi, **Mikrofonu test et** seviye gösteriyor mu? Başka bir uygulama mikrofonu kullanıyor olabilir.
+- **Kayıtlar hep geç oturuyor:** Kabin → *Gecikme düzeltme* (Bluetooth için 150-250 ms).
+- **Bir şeyler bozuldu:** Ayarlar → Sistem → **Kurulumu onar**.
 
-## Teknik özet
+## Yeni sürüm yayınlamak
 
-Python (FastAPI) sunucu + tarayıcı arayüzü (Preact). Ses ayırma: Demucs `htdemucs_ft` (sadece vokal uzmanı modeli, ekran kartında); Demucs'un "ses" sanıp aldığı kuş/rüzgar gibi ortam sesleri DPDFNet (48 kHz konuşma iyileştirme, sherpa-onnx) ile konuşmadan ayrılıp ayrı bir ize geri konur. Yazıya dökme: faster-whisper `large-v3-turbo` (kelime zamanlamalı). Konuşmacı ayrımı: sherpa-onnx (pyannote segmentasyon + WeSpeaker ResNet34). Hizalama: Silero VAD. Efekt/hız: ffmpeg (rubberband, NVENC, libass altyazı). Yapay zeka sesi: edge-tts. Oda: Cloudflare quick tunnel + PIN. Mikser önizlemesi tarayıcıda Web Audio ile, son video sunucuda aynı kurallarla üretilir.
+```powershell
+.\scripts\release.ps1 1.2.0
+```
+
+Sürümü `desktop/package.json`'a yazar, commit'ler, `v1.2.0` etiketini gönderir. GitHub Actions `DubKanka-Setup-1.2.0.exe`'yi derleyip sürüm olarak yayınlar; kurulu uygulamalar kendini günceller.
+
+## Geliştirme
+
+- **Kaynaktan çalıştırma:** `Kurulum.bat` (bir kere), sonra `Baslat.bat`. Tarayıcıda `http://127.0.0.1:8765` açılır.
+- **Masaüstü uygulaması:** `cd desktop`, `npm install`, sonra mevcut Python ile: `$env:DUBKANKA_PYTHON = "..\.venv\Scripts\python.exe"; npm start`. Kurulum dosyası: `npm run dist`.
+- **Yapı:** Python (FastAPI) sunucu + tarayıcı arayüzü (Preact, derleme adımı yok) + Electron kabuğu. Ses ayırma Demucs `htdemucs_ft`, ortam sesleri ve gürültü DPDFNet (sherpa-onnx), yazıya dökme faster-whisper, konuşmacı ayrımı sherpa-onnx (pyannote + WeSpeaker), hizalama Silero VAD, video ffmpeg (NVENC, rubberband, libass), yapay zeka sesi edge-tts. Tasarım dili: `DESIGN.md`.

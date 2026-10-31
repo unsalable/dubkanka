@@ -1,23 +1,19 @@
 # DubKanka: ürün notu
 
-**Ne:** Bir dizi ya da film sahnesini arkadaşlarla dublajlayıp TikTok'a atmak için yerel bir web uygulaması (FastAPI + Preact, Türkçe arayüz).
+**Ne:** Bir dizi ya da film sahnesini arkadaşlarla dublajlayıp TikTok'a atmak için Windows masaüstü uygulaması (Electron kabuk + yerel FastAPI sunucu + Preact arayüz, Türkçe). GitHub sürümlerinden tek bir kurulum dosyasıyla kurulur, kendini günceller.
 
-**Kimin için:** Amatör arkadaş grupları. Keyfine troll dublaj yapıyorlar, örneğin "Sıfır Bir"den bir kesitin İngilizce versiyonu. Akşamları evde, kulaklıkla çalışıyorlar. Bir kişi uygulamayı bilgisayarında açıyor, diğerleri oda linkiyle telefondan katılıyor.
+**Kimin için:** Amatör arkadaş grupları. Keyfine troll dublaj yapıyorlar, örneğin "Sıfır Bir"den bir kesitin İngilizce versiyonu. Akşamları evde, kulaklıkla çalışıyorlar. Uygulamayı kuran herkes kendi odasını açabiliyor; diğerleri oda linkiyle telefondan ya da tarayıcıdan katılıyor.
 
 **Ana işler:**
-- Konuşmaları ayırmak; müzik, efekt ve kuş, rüzgar gibi ortam seslerini korumak.
-- Konuşmayı yazıya dökmek, kişilere bölmek ve çevirmek.
-- Her repliği zamanında kaydetmek (bip sesleri, otomatik hizalama).
-- Miksi yapıp altyazılı 9:16 video olarak dışa aktarmak.
+- Videoyu bırakınca her şeyi kendisi hazırlamak: konuşmaları ayırmak (müzik, efekt ve ortam seslerini korumak), yazıya dökmek, kişilere bölmek, çevirmek.
+- Her repliği zamanında kaydetmek (akış çizgisi, bip sesleri, büyük ritim şeridi, otomatik hizalama), işlenmemiş temiz mikrofon sesiyle.
+- Miksi yapıp altyazılı 9:16 video ya da görüntüsü yeniden kodlanmamış bir kopya olarak dışa aktarmak.
+
+**Ücret:** Hiçbir şey ücretli değil. Oda Cloudflare'in ücretsiz geçici tüneli, yapay zeka yerel, çeviri varsayılan olarak ücretsiz Google. Anahtarlı dil modelleri isteğe bağlı.
 
 ## Marka kararı
 
-- **Görünüm:** Klasik video editörü, olduğu gibi ve CapCut / DaVinci Resolve özeninde: grafit paneller, tek mavi vurgu, sistem yazı tipi. Kullanıcı bunu 31 Ekim 2026'da üç özgün yön arasından seçti (Altyazı, Yeşilçam afişi, TV yayını).
-- **Kaçınılanlar:** AI slop işaretleri. Degrade ya da cam efekti yok, neon parlama yok, ikon yerine emoji yok, başlık üstü küçük etiket yok, aynı boy ikonlu kart ızgarası yok, renkli kalın sol kenarlık yok.
-- **Hareket:** Bol animasyon var ama her biri bir durumu ya da geçişi anlatıyor:
-  - sayfalar iş akışı yönünde kayıyor,
-  - video resmi sayfalar arasında yerine süzülüyor,
-  - ses seviyesi göstergeleri canlı,
-  - kayıtta geri sayım var,
-  - kayıt düğmesi biçim değiştiriyor.
+- **Görünüm:** "Kayıt Masası" (DESIGN.md): stüdyo konsolu ve senaryo kâğıdı. Sıcak grafit paneller, tek marka rengi sinyal sarısı, IBM Plex. Klasik editör düzeni korunuyor (kullanıcı 31 Ekim 2026'da editör düzenini seçmişti), ama hazır şablon görünümünden çıkmak için kendine ait bir dil kuruldu.
+- **Kaçınılanlar:** AI slop işaretleri. Degrade ya da cam efekti yok, neon parlama yok, ikon yerine emoji yok, başlık üstü küçük etiket yok, aynı boy ikonlu kart ızgarası yok, renkli kalın sol kenarlık yok, hap biçimli durum rozeti yok.
+- **Hareket:** Bol animasyon, her biri bir durumu anlatıyor. Ayarlardan Tam / Azaltılmış / Kapalı seçilebiliyor.
 - **Çalışma şekli:** Kullanıcının isteğiyle tek ajan olarak geliştiriliyor ve test ediliyor.

@@ -219,12 +219,16 @@ function FramePlayer({ p, ex }) {
 
 function Scrub({ dur, onSeek }) {
   const ref = useRef(null);
-  useEffect(() => player.on(() => {
-    if (ref.current && document.activeElement !== ref.current) {
-      ref.current.value = Math.max(0, player.time);
-      ref.current.style.setProperty('--p', (clamp(player.time / dur, 0, 1) * 100) + '%');
-    }
-  }), [dur]);
+  useEffect(() => {
+    const sync = () => {
+      if (ref.current && document.activeElement !== ref.current) {
+        ref.current.value = Math.max(0, player.time);
+        ref.current.style.setProperty('--p', (clamp(player.time / dur, 0, 1) * 100) + '%');
+      }
+    };
+    sync();
+    return player.on(sync);
+  }, [dur]);
   return html`<input ref=${ref} class="scrub grow" type="range" min="0" max=${dur} step="0.01" defaultValue="0"
     onInput=${(e) => { e.target.style.setProperty('--p', (e.target.value / dur) * 100 + '%'); onSeek(Number(e.target.value)); }} />`;
 }

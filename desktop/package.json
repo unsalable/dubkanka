@@ -1,0 +1,93 @@
+{
+  "name": "dubkanka",
+  "productName": "DubKanka",
+  "version": "1.1.0",
+  "description": "Arkadaşlarınla dublaj stüdyosu",
+  "author": "unsalable",
+  "license": "UNLICENSED",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "fetch-uv": "node scripts/fetch-uv.mjs",
+    "icon": "node scripts/make-icon.mjs",
+    "dist": "node scripts/fetch-uv.mjs && electron-builder --win --x64 --publish never",
+    "release": "node scripts/fetch-uv.mjs && electron-builder --win --x64 --publish always"
+  },
+  "dependencies": {
+    "electron-updater": "6.8.10"
+  },
+  "devDependencies": {
+    "electron": "44.9.3",
+    "electron-builder": "26.17.0",
+    "png-to-ico": "3.0.2",
+    "sharp": "0.35.5"
+  },
+  "build": {
+    "appId": "com.unsalable.dubkanka",
+    "productName": "DubKanka",
+    "copyright": "DubKanka",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "lib/**/*",
+      "setup/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "extraResources": [
+      {
+        "from": "../dubkanka",
+        "to": "app/dubkanka",
+        "filter": ["**/*", "!**/__pycache__/**", "!**/*.pyc"]
+      },
+      {
+        "from": "../web",
+        "to": "app/web"
+      },
+      {
+        "from": "../requirements.lock",
+        "to": "app/requirements.lock"
+      },
+      {
+        "from": "resources/uv.exe",
+        "to": "bin/uv.exe"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "executableName": "DubKanka"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "allowElevation": false,
+      "artifactName": "DubKanka-Setup-${version}.${ext}",
+      "shortcutName": "DubKanka",
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "unsalable",
+        "repo": "dubkanka",
+        "releaseType": "release"
+      }
+    ]
+  }
+}

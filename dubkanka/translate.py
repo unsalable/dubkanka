@@ -588,9 +588,12 @@ def registry_status(settings):
     out = []
     for p in PROVIDERS:
         cfg = provider_config(settings, p["id"])
+        saved = (settings.get("providers") or {}).get(p["id"]) or {}
         configured = p["id"] == "google" or (
             (not p.get("needsKey") or bool(cfg.get("key"))) and (not p.get("needsUrl") or bool(cfg.get("url")))
             and (p["kind"] == "mt" or bool(cfg.get("model"))))
+        if p["id"] == "libre":  # the public default server wants a key: only count it once something was set up
+            configured = bool(saved.get("url") or saved.get("key"))
         out.append({"id": p["id"], "name": p["name"], "kind": p["kind"], "local": bool(p.get("local")),
                     "needsKey": bool(p.get("needsKey")), "needsUrl": bool(p.get("needsUrl")), "keyUrl": p.get("keyUrl"),
                     "note": p.get("note", ""), "configured": configured, "hasKey": bool(cfg.get("key")),
