@@ -1,0 +1,182 @@
+export const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+export const db2gain = (db) => Math.pow(10, (db || 0) / 20);
+export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+export const cls = (...a) => a.filter(Boolean).join(' ');
+
+export function fmtTime(t, decimals = 1) {
+  if (t == null || isNaN(t)) return '--:--';
+  const neg = t < 0;
+  t = Math.abs(t);
+  const m = Math.floor(t / 60);
+  const s = t - m * 60;
+  const ss = decimals ? s.toFixed(decimals).padStart(3 + decimals, '0') : String(Math.floor(s)).padStart(2, '0');
+  return (neg ? '-' : '') + String(m).padStart(2, '0') + ':' + ss;
+}
+
+export function parseTime(str) {
+  const parts = String(str).trim().replace(',', '.').split(':');
+  if (!parts.length || parts.length > 3) return null;
+  let t = 0;
+  for (const p of parts) {
+    const n = Number(p);
+    if (p === '' || isNaN(n)) return null;
+    t = t * 60 + n;
+  }
+  return t;
+}
+
+export function fmtBytes(n) {
+  if (!n) return '0 MB';
+  if (n > 2 ** 30) return (n / 2 ** 30).toFixed(1) + ' GB';
+  return (n / 2 ** 20).toFixed(n > 100 * 2 ** 20 ? 0 : 1) + ' MB';
+}
+
+export function timeAgo(ts) {
+  const d = Date.now() / 1000 - ts;
+  if (d < 60) return 'az önce';
+  if (d < 3600) return Math.floor(d / 60) + ' dk önce';
+  if (d < 86400) return Math.floor(d / 3600) + ' saat önce';
+  return new Date(ts * 1000).toLocaleDateString('tr-TR');
+}
+
+export function debounce(fn, ms) {
+  let t;
+  const d = (...a) => {
+    clearTimeout(t);
+    t = setTimeout(() => fn(...a), ms);
+  };
+  d.flush = (...a) => {
+    clearTimeout(t);
+    fn(...a);
+  };
+  return d;
+}
+
+const VOWELS = /[aeiouyıöüâîûéèêàáíóúäëï]+/gi;
+export function syllables(text) {
+  let n = 0;
+  for (const w of String(text || '').toLowerCase().split(/\s+/)) {
+    if (!/[a-zçğıöşüâîû]/i.test(w)) continue;
+    const m = w.match(VOWELS);
+    let k = m ? m.length : 1;
+    if (k > 1 && /[^aeiouy]e$/.test(w) && /^[a-z]+$/.test(w)) k -= 1; // silent English e
+    n += Math.max(1, k);
+  }
+  return n;
+}
+
+export function selectedTake(line) {
+  if (!line || !line.take) return null;
+  return (line.takes || []).find((t) => t.id === line.take) || null;
+}
+
+export function readyTake(line) {
+  const t = selectedTake(line);
+  return t && t.status === 'ready' && t.file ? t : null;
+}
+
+export function encodeWav(samples, sampleRate) {
+  const n = samples.length;
+  const buf = new ArrayBuffer(44 + n * 2);
+  const v = new DataView(buf);
+  const w = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF');
+  v.setUint32(4, 36 + n * 2, true);
+  w(8, 'WAVE');
+  w(12, 'fmt ');
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, sampleRate, true);
+  v.setUint32(28, sampleRate * 2, true);
+  v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true);
+  w(36, 'data');
+  v.setUint32(40, n * 2, true);
+  let o = 44;
+  for (let i = 0; i < n; i++, o += 2) {
+    const s = Math.max(-1, Math.min(1, samples[i]));
+    v.setInt16(o, s < 0 ? s * 0x8000 : s * 0x7fff, true);
+  }
+  return new Blob([buf], { type: 'audio/wav' });
+}
+
+const peakCache = new WeakMap();
+export const PEAK_RATE = 200;
+/** Max-abs envelope of an AudioBuffer at PEAK_RATE values per second (cached). */
+export function peaksOf(buffer) {
+  if (!buffer) return null;
+  let p = peakCache.get(buffer);
+  if (p) return p;
+  const step = buffer.sampleRate / PEAK_RATE;
+  const n = Math.ceil(buffer.length / step);
+  p = new Float32Array(n);
+  for (let c = 0; c < buffer.numberOfChannels; c++) {
+    const d = buffer.getChannelData(c);
+    for (let i = 0; i < n; i++) {
+      const a = Math.floor(i * step);
+      const b = Math.min(d.length, Math.floor((i + 1) * step));
+      let m = p[i];
+      for (let j = a; j < b; j += 2) {
+        const x = d[j] < 0 ? -d[j] : d[j];
+        if (x > m) m = x;
+      }
+      p[i] = m;
+    }
+  }
+  peakCache.set(buffer, p);
+  return p;
+}
+
+/** Draw a waveform of `buffer` for project-time window [t0, t1] where the buffer starts at `at`. */
+export function drawWave(canvas, buffer, at, t0, t1, color, gain = 1) {
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  const peaks = peaksOf(buffer);
+  if (!peaks || t1 <= t0) return;
+  ctx.fillStyle = color;
+  const mid = H / 2;
+  const spp = (t1 - t0) / W;
+  for (let x = 0; x < W; x++) {
+    const a = Math.floor((t0 + x * spp - at) * PEAK_RATE);
+    const b = Math.max(a + 1, Math.floor((t0 + (x + 1) * spp - at) * PEAK_RATE));
+    if (b <= 0 || a >= peaks.length) continue;
+    let m = 0;
+    for (let i = Math.max(0, a); i < Math.min(peaks.length, b); i++) if (peaks[i] > m) m = peaks[i];
+    const h = Math.max(1, Math.min(1, Math.sqrt(m * gain)) * (H * 0.48));
+    ctx.fillRect(x, mid - h, 1, h * 2);
+  }
+}
+
+export async function copyText(text) {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return ok;
+  }
+}
+
+export const LS = {
+  get(k, d) {
+    try {
+      const v = localStorage.getItem('dk.' + k);
+      return v == null ? d : JSON.parse(v);
+    } catch {
+      return d;
+    }
+  },
+  set(k, v) {
+    try {
+      localStorage.setItem('dk.' + k, JSON.stringify(v));
+    } catch {}
+  },
+};

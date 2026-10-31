@@ -1,0 +1,20 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Local data (never commit: personal projects, rendered videos, downloaded models and tools)
+models/
+projeler/
+Videolar/
+bin/
+logs/
+settings.json
+*.part
+*.tmp
+
+# Desktop app build output
+desktop/node_modules/
+desktop/dist/
+desktop/resources/uv.exe
+desktop/resources/app/

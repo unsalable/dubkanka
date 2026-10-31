@@ -1,0 +1,13 @@
+# torch is installed separately by kurulum.ps1 (CUDA build when an NVIDIA GPU is present)
+fastapi
+uvicorn
+numpy
+scipy
+soundfile
+demucs
+faster-whisper
+sherpa-onnx
+anthropic
+edge-tts
+segno
+yt-dlp[default]
