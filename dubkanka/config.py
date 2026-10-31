@@ -32,8 +32,7 @@ DEFAULT_SETTINGS = {
     "openBrowser": True,
     "projectsDir": "",  # empty = default folder; a change applies after a restart
     "exportsDir": "",
-    "defaultDstLang": "en",  # dub language for scenes prepared automatically
-    "autoPrepare": True,  # a dropped video is prepared right away with automatic settings
+    "defaultDstLang": "en",  # dub language a new scene starts with: the one picked for the last scene
     "onboarded": None,  # the first-run feature picker was answered (None: not decided yet, see features.boot)
 }
 
@@ -56,7 +55,7 @@ def load_settings():
 
 
 def _migrate(s):
-    """1.0 kept only a Claude key; 1.1 has a list of translation providers."""
+    """1.0 kept only a Claude key; 1.1 has a list of translation providers; 1.3 has no automatic preparation."""
     s["providers"] = {k: dict(v) for k, v in (s.get("providers") or {}).items() if isinstance(v, dict)}
     key, model = s.pop("anthropicKey", ""), s.pop("claudeModel", "")
     if key or model:
@@ -67,6 +66,7 @@ def _migrate(s):
             a["model"] = model
     if s.get("translator") == "claude":
         s["translator"] = "anthropic"
+    s.pop("autoPrepare", None)  # 1.2: a dropped video could skip the scene picker; now the scene is always chosen
     return s
 
 

@@ -149,7 +149,7 @@ def projects_list(request: Request):
 
 
 @app.post("/api/projects/upload")
-async def projects_upload(request: Request, filename: str = "video.mp4", name: str = "", auto: int = 0):
+async def projects_upload(request: Request, filename: str = "video.mp4", name: str = ""):
     host_only(request)
     ext = (Path(filename).suffix or ".mp4").lower()
     if not re.fullmatch(r"\.[a-z0-9]{1,5}", ext):
@@ -162,8 +162,8 @@ async def projects_upload(request: Request, filename: str = "video.mp4", name: s
         store.delete(p["id"])
         raise
     from .pipeline import run_import_file
-    job = jobs.submit("import", p["id"], "Video okunuyor",
-                      lambda j: run_import_file(j, p["id"], dst, filename, bool(auto)), heavy=False)
+    job = jobs.submit("import", p["id"], "Video okunuyor", lambda j: run_import_file(j, p["id"], dst, filename),
+                      heavy=False)
     return {"project": store.get(p["id"]), "job": job.to_dict()}
 
 
@@ -176,9 +176,7 @@ async def projects_url(request: Request):
         raise HTTPException(400, "Geçerli bir bağlantı yapıştır (https://...).")
     p = store.create(str(body.get("name") or "").strip() or "Yeni proje")
     from .pipeline import run_import_url
-    auto = bool(body.get("auto"))
-    job = jobs.submit("import", p["id"], "Video indiriliyor", lambda j: run_import_url(j, p["id"], url, auto),
-                      heavy=False)
+    job = jobs.submit("import", p["id"], "Video indiriliyor", lambda j: run_import_url(j, p["id"], url), heavy=False)
     return {"project": store.get(p["id"]), "job": job.to_dict()}
 
 
@@ -224,6 +222,15 @@ async def project_prepare(pid: str, request: Request):
     if jobs.active(pid, "prepare"):
         raise HTTPException(409, "Bu proje zaten hazırlanıyor.")
     opts = await body_json(request)
+    # the next scene starts from the dub language and translator chosen here
+    from . import translate
+    remember = {}
+    if isinstance(opts.get("dstLang"), str) and opts["dstLang"]:
+        remember["defaultDstLang"] = opts["dstLang"]
+    if translate.ALIASES.get(opts.get("translator"), opts.get("translator")) in translate.REGISTRY:
+        remember["translator"] = opts["translator"]
+    if remember:
+        save_settings(remember)
     from .pipeline import PREP_STEPS, run_prepare
     job = jobs.submit("prepare", pid, "Sahne hazırlanıyor", lambda j: run_prepare(j, pid, opts), steps=PREP_STEPS)
     return job.to_dict()

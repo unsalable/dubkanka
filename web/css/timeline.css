@@ -1,5 +1,5 @@
 /* ---------- timeline: sunk lanes, clips in the character's highlighter colour, a white playhead with a yellow cap ---------- */
-.tl { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; user-select: none; }
+.tl { display: flex; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); overflow: clip; user-select: none; }
 .tl-heads { width: var(--head-w); flex: none; border-right: 1px solid var(--line); background: var(--panel); }
 .tl-corner { display: flex; align-items: center; justify-content: center; gap: 2px; border-bottom: 1px solid var(--line); }
 .tl-corner .iconbtn { width: 26px; height: 20px; }

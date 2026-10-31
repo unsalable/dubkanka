@@ -14,8 +14,8 @@ from .mixer import render, selected_take, take_window
 from .projects import store
 
 FORMATS = {
-    "vertical_blur": "TikTok / Reels 9:16 - bulanık arka plan",
-    "vertical_crop": "TikTok / Reels 9:16 - ekranı doldur (kırp)",
+    "vertical_blur": "Dikey 9:16 - bulanık arka plan",
+    "vertical_crop": "Dikey 9:16 - ekranı doldur (kırp)",
     "square": "Kare 1:1",
     "original": "Orijinal boyut",
 }
@@ -29,8 +29,9 @@ EXPORT_DEFAULTS = {"format": "vertical_blur", "subs": "dub", "subMode": "burn", 
                    "subPos": None, "subColor": "white", "credits": True, "creditsText": "", "mix": "dub",
                    "preset": "tiktok", "container": "mp4", "video": VIDEO_DEFAULTS, "audio": AUDIO_DEFAULTS}
 
+# "tiktok" is the id the standard preset had from the start: saved projects keep pointing at it
 PRESETS = {
-    "tiktok": {"label": "TikTok / Reels", "summary": "H.264 High · CRF 18 · kaynak fps (en fazla 60) · AAC 192k · -14 LUFS",
+    "tiktok": {"label": "Standart", "summary": "H.264 High · CRF 18 · kaynak fps (en fazla 60) · AAC 192k · -14 LUFS",
                "settings": {"container": "mp4", "subMode": "burn",
                             "video": {**VIDEO_DEFAULTS},
                             "audio": {**AUDIO_DEFAULTS}}},
@@ -38,7 +39,7 @@ PRESETS = {
              "settings": {"container": "mp4", "subMode": "burn",
                           "video": {**VIDEO_DEFAULTS, "quality": 14, "preset": "slow"},
                           "audio": {**AUDIO_DEFAULTS, "bitrate": 320}}},
-    "small": {"label": "Küçük dosya", "summary": "H.265 · CRF 26 · 720p · AAC 128k (WhatsApp için)",
+    "small": {"label": "Küçük dosya", "summary": "H.265 · CRF 26 · 720p · AAC 128k",
               "settings": {"container": "mp4", "subMode": "burn",
                            "video": {**VIDEO_DEFAULTS, "codec": "hevc", "quality": 26, "height": 720},
                            "audio": {**AUDIO_DEFAULTS, "bitrate": 128}}},
@@ -553,7 +554,7 @@ def run_export(job, pid, opts):
         msg = f"Video oluşturuluyor ({enc['label']})..."
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    short = "Kaynak" if copying else {"vertical_blur": "TikTok", "vertical_crop": "TikTok-kirp", "square": "Kare",
+    short = "Kaynak" if copying else {"vertical_blur": "Dikey", "vertical_crop": "Dikey-kirp", "square": "Kare",
                                       "original": "Orijinal"}[fmt]
     tag = {"dub": "", "clean": " - Konusmasiz", "original": " - Orijinal ses"}[ex["mix"]]
     name = f"{_safe_name(p['name'])} - {short}{tag} - {stamp}.{box}"

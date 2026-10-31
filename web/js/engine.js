@@ -24,7 +24,13 @@ export const engine = {
   cache: new Map(),
   ensure() {
     if (!this.ctx) {
-      this.ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: 'interactive' });
+      const AC = window.AudioContext || window.webkitAudioContext;
+      try {
+        // 48 kHz everywhere: what microphones deliver, and what RNNoise needs in the booth
+        this.ctx = new AC({ latencyHint: 'interactive', sampleRate: 48000 });
+      } catch {
+        this.ctx = new AC({ latencyHint: 'interactive' });
+      }
       this.master = this.ctx.createGain();
       this.out = this.ctx.createGain();
       this.out.gain.value = outGain();

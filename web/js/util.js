@@ -156,6 +156,19 @@ export function drawWave(canvas, buffer, at, t0, t1, color, gain = 1) {
   }
 }
 
+/** Bring `el` into view inside its own scrolling list. Unlike scrollIntoView, the page and the panes around the list
+ *  never move. */
+export function revealInList(el, smooth = true) {
+  if (!el) return;
+  let box = el.parentElement;
+  while (box && !/(auto|scroll)/.test(getComputedStyle(box).overflowY)) box = box.parentElement;
+  if (!box) return;
+  const b = box.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  const d = r.top < b.top + 6 ? r.top - b.top - 6 : r.bottom > b.bottom - 6 ? r.bottom - b.bottom + 6 : 0;
+  if (d) box.scrollBy({ top: d, behavior: smooth && document.documentElement.dataset.motion !== 'off' ? 'smooth' : 'auto' });
+}
+
 export async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);

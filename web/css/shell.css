@@ -67,13 +67,14 @@ html.desktop .topbar a, html.desktop .topbar button, html.desktop .topbar input,
 .panel { padding: 18px; margin-bottom: 10px; }
 .panel > h2, .panel > h3 { margin-bottom: 12px; }
 .panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-.pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden; }
+.pane { display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: clip; }
 .pane-head { flex: none; display: flex; align-items: center; gap: 6px; height: 42px; padding: 0 8px 0 14px; border-bottom: 1px solid var(--line); }
 .pane-head h3 { white-space: nowrap; font-size: 13px; font-weight: 600; color: var(--text); }
 .pane-head .count { color: var(--text-3); font: 500 12px var(--mono); }
 .pane-body { padding: 14px; flex: none; }
 .pane-body + .pane-body { border-top: 1px solid var(--line); }
 .pane-scroll { flex: 1; min-height: 0; overflow: auto; overscroll-behavior: contain; }
+.pane-scroll > * { flex-shrink: 0; }
 .sep { height: 1px; background: var(--line); margin: 14px -14px; }
 
 @media (max-width: 860px) {

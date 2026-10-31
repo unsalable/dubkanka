@@ -1,11 +1,11 @@
 // Settings: one page per topic with a sidebar, like the system settings of an OS. The gear (an × here) or Esc goes
 // back to where you came from.
-import { html, useEffect, useState } from '../../vendor/preact-htm.js';
+import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api } from '../api.js';
-import { Btn, Field, Icon, Lamp, Segmented, Select, Toggle } from '../components.js';
+import { Btn, Field, Icon, Lamp, Segmented, Select, Toggle, useIndicator } from '../components.js';
 import { desktop, useUpdate } from '../desktop.js';
 import { FeatureRow } from '../feature-ui.js';
-import { backFromSettings, closeProject, motion, MOTION_LEVELS, refreshFeatures, setMotion, setState, toast, toastError, useStore } from '../state.js';
+import { ask, backFromSettings, closeProject, motion, MOTION_LEVELS, refreshFeatures, setMotion, setState, toast, toastError, useStore } from '../state.js';
 import { cls } from '../util.js';
 
 const PAGES = [
@@ -109,20 +109,11 @@ function ProviderRow({ t, open, onToggle, onSaved }) {
   </div>`;
 }
 
-function GeneralPage({ sys, save }) {
-  const st = sys.settings;
+function GeneralPage() {
   const [mot, setMot] = useState(motion());
   return html`
-    <${Group} title="Yeni video">
-      <${Row} label="Bırakınca hazırla" hint="15 dakikadan kısa videolar baştan sona hazırlanır, bitince senaryo açılır.">
-        <${Toggle} checked=${st.autoPrepare !== false} onChange=${(v) => save({ autoPrepare: v })} label="" />
-      </${Row}>
-      <${Row} label="Dublaj dili" hint="Otomatik hazırlanan sahneler bu dile çevrilir.">
-        <${Select} value=${st.defaultDstLang || 'en'} onChange=${(v) => save({ defaultDstLang: v })} options=${sys.languages || []} />
-      </${Row}>
-    </${Group}>
-    <${Group} title="Görünüm" note=${mot === 'full' ? 'Sayfa geçişleri, kayan göstergeler ve kayıt animasyonları açık.' : mot === 'reduced' ? 'Süreler kısalır; kayma ve büyüme yerine kısa bir solma.' : 'Hiçbir şey hareket etmez, sadece yükleme ve kayıt lambası çalışır. Zayıf bilgisayarlar için.'}>
-      <${Row} label="Animasyonlar">
+    <${Group} title="Görünüm">
+      <${Row} label="Animasyonlar" hint=${mot === 'off' ? 'Zayıf bilgisayarlar için: hiçbir şey hareket etmez.' : null}>
         <${Segmented} value=${mot} onChange=${(v) => { setMotion(v); setMot(v); }} options=${MOTION_LEVELS} />
       </${Row}>
     </${Group}>`;
@@ -132,7 +123,6 @@ function FeaturesPage({ sys, save }) {
   const st = sys.settings;
   const gpu = sys.gpu || {};
   return html`
-    <p class="spage-lead">İlk açılışta sadece stüdyonun kendisi indi. Yapay zeka özelliklerini ihtiyacın oldukça ekle; hepsi bu bilgisayarda çalışır, ücret çıkmaz.</p>
     <div class="feats">
       <${FeatureRow} id="speech">
         <div class="feat-opts"><${Row} label="Model" hint="Değiştirirsen yeni model ilk kullanımda iner.">
@@ -147,7 +137,7 @@ function FeaturesPage({ sys, save }) {
       <${FeatureRow} id="room" />
       <${FeatureRow} id="cleanup" />
     </div>
-    <${Group} title="İşlemci" note=${gpu.available ? `Ekran kartı: ${gpu.name}${gpu.memoryGB ? ` (${gpu.memoryGB} GB)` : ''}. Ses ayırma onu kullanır; yazıya dökme de, Müziği koru yüklüyse.` : 'Ekran kartı bulunamadı; yapay zeka işlemcide çalışır (daha yavaş).'}>
+    <${Group} title="İşlemci" note=${gpu.available ? `Ekran kartı: ${gpu.name}${gpu.memoryGB ? ` (${gpu.memoryGB} GB)` : ''}` : 'Ekran kartı yok; yapay zeka işlemcide çalışır.'}>
       <${Row} label="Yapay zekayı nerede çalıştır">
         <${Select} value=${st.device} onChange=${(v) => save({ device: v })} options=${[['auto', 'Ekran kartı varsa onda'], ['cpu', 'Sadece işlemcide']]} />
       </${Row}>
@@ -178,12 +168,11 @@ function TranslatePage({ sys, save }) {
     }
   };
   return html`
-    <p class="spage-lead">Google Çeviri ücretsizdir ve anahtar istemez. Dil modelleri satırları süresine sığacak, doğal ya da troll tarzında uyarlar; anahtarlı olanlar kendi hesabından ücretlendirilir.</p>
     <${Group}>
       <${Row} label="Yeni sahnelerde">
         <${Select} value=${st.translator} onChange=${(v) => save({ translator: v })} options=${translators.map((t) => [t.id, t.name + (t.configured ? '' : ' (ayarlanmadı)')])} />
       </${Row}>
-      <${Row} label="Otomatik bul" hint="Bu bilgisayardaki Ollama / LM Studio'yu ve ortam değişkenlerindeki API anahtarlarını bulur.">
+      <${Row} label="Otomatik bul" hint="Ollama, LM Studio ve kayıtlı API anahtarları.">
         <${Btn} small icon="bolt" onClick=${detect} disabled=${found && found.busy}>${found && found.busy ? 'Aranıyor…' : 'Ara'}</${Btn}>
       </${Row}>
       ${found && !found.busy && html`<div class="found">${found.found.length === 0
@@ -199,7 +188,7 @@ function TranslatePage({ sys, save }) {
 
 function FoldersPage({ sys, save }) {
   const pick = async (k, current) => {
-    const path = desktop ? await desktop.pickFolder({ title: 'Klasör seç', defaultPath: current }) : prompt('Klasör yolu', current);
+    const path = desktop ? await desktop.pickFolder({ title: 'Klasör seç', defaultPath: current }) : await ask({ title: 'Klasör yolu', input: current, ok: 'Kaydet' });
     if (path == null) return;
     await save({ [k]: path.trim() }, 'Kaydedildi. Yeni klasör uygulama yeniden açılınca kullanılır.').catch(() => {});
   };
@@ -210,7 +199,7 @@ function FoldersPage({ sys, save }) {
       ${key && html`<${Btn} small onClick=${() => pick(key, dir)}>Değiştir</${Btn}>`}</div>
   </div>`;
   return html`
-    <${Group} note="Klasör değişikliği uygulama yeniden açılınca geçerli olur.">
+    <${Group} note="Değişiklik uygulama yeniden açılınca geçerli olur.">
       ${row('Videolar', sys.dirs.exports, 'exports', 'exportsDir')}
       ${row('Projeler', sys.dirs.projects, 'projects', 'projectsDir')}
       ${row('Yapay zeka modelleri', sys.dirs.models, 'models')}
@@ -230,10 +219,10 @@ function UpdatesPage() {
     none: 'Güncel', error: `Hata: ${u && u.error}`, disabled: 'Geliştirme sürümünde kapalı',
   }[(u && u.state) || 'idle'];
   return html`
-    <${Group} note="Güncellemeler GitHub'daki DubKanka sürümlerinden gelir; projelerin, özelliklerin ve modellerin olduğu gibi kalır.">
+    <${Group}>
       <${Row} label="Sürüm"><span class="tc">${desktop.version}</span></${Row}>
       <${Row} label="Durum"><span>${state}</span></${Row}>
-      ${prefs && html`<${Row} label="Arka planda indir" hint="Yeni sürüm hazır olunca üst çubukta haber verir.">
+      ${prefs && html`<${Row} label="Otomatik güncelle" hint="Her açılışta yeni sürüm varsa indirip kurar. Projelerin olduğu gibi kalır.">
         <${Toggle} checked=${prefs.auto} onChange=${(v) => desktop.updates.setPrefs({ auto: v }).then(setPrefs)} label="" /></${Row}>`}
     </${Group}>
     <div class="row">
@@ -260,18 +249,20 @@ function SystemPage({ sys }) {
     </${Group}>
     ${rt && html`<div class="row">
       <${Btn} small kind="ghost" icon="folder" onClick=${() => desktop.showItemInFolder(rt.logs)}>Günlükler</${Btn}>
-      <${Btn} small onClick=${() => confirm('Python ve stüdyonun paketleri kontrol edilip eksikler yeniden kurulacak. Uygulama yeniden başlar. Devam?') && desktop.runtime.repair()}>Kurulumu onar</${Btn}>
+      <${Btn} small onClick=${async () => (await ask({ title: 'Kurulum onarılsın mı?', text: 'Eksik parçalar yeniden kurulur ve uygulama yeniden başlar. Projelerin olduğu gibi kalır.', ok: 'Onar' })) && desktop.runtime.repair()}>Kurulumu onar</${Btn}>
     </div>`}`;
 }
 
 export function SettingsView({ page }) {
   const s = useStore();
   const sys = s.system;
+  const nav = useRef(null);
+  const ind = useRef(null);
   useEffect(() => closeProject(), []);
   useEffect(() => {
     // Esc leaves settings (unless it belongs to a field or an open menu)
     const k = (e) => {
-      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('.popover, .modal')) return;
+      if (e.key !== 'Escape' || e.defaultPrevented || document.querySelector('.popover, .modal, .dialog-bg')) return;
       if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement && document.activeElement.tagName)) return document.activeElement.blur();
       location.hash = backFromSettings();
     };
@@ -280,6 +271,8 @@ export function SettingsView({ page }) {
   }, []);
   const pages = PAGES.filter(([id]) => id !== 'updates' || desktop);
   const cur = pages.find(([id]) => id === page) || pages[0];
+  // the selection is a pill that slides to the new row, like the steps in the top bar
+  useIndicator(nav, ind, '.set-link.on', [cur[0], !!sys], 'y');
   if (!sys) return html`<div class="page settings"><div class="skel" style=${{ height: '320px', gridColumn: '1 / -1' }}></div></div>`;
   const save = async (patch, msg = 'Kaydedildi') => {
     try {
@@ -295,8 +288,9 @@ export function SettingsView({ page }) {
   };
   const View = { general: GeneralPage, features: FeaturesPage, translate: TranslatePage, folders: FoldersPage, updates: UpdatesPage, system: SystemPage }[cur[0]];
   return html`<div class="page settings">
-    <nav class="set-nav" aria-label="Ayarlar">
+    <nav class="set-nav" aria-label="Ayarlar" ref=${nav}>
       <h1>Ayarlar</h1>
+      <i class="set-ind" ref=${ind}></i>
       ${pages.map(([id, label, icon]) => html`<a key=${id} class=${cls('set-link', id === cur[0] && 'on')} href=${'#/settings/' + id}
         aria-current=${id === cur[0] ? 'page' : undefined}><span class="set-ico"><${Icon} name=${icon} size=${15} /></span>${label}</a>`)}
     </nav>

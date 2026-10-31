@@ -6,7 +6,7 @@
 .mixer-side { max-height: calc(44vh + 49px); }
 .mixer .tl { flex: 1; }
 .inspector-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.inspector-head .hl { font-stretch: var(--cond); text-transform: uppercase; letter-spacing: 0.03em; font-size: 12px; }
+.inspector-head .hl { font-size: 13px; }
 .inspector-text { font-size: 14px; font-weight: 500; margin-bottom: 12px; line-height: 1.4; animation: line-in var(--t-slow) var(--ease-out) both; }
 .inspector-empty { color: var(--text-2); font-size: 12.5px; display: flex; gap: 10px; align-items: flex-start; }
 .inspector-empty .icon { color: var(--text-3); margin-top: 1px; }
@@ -19,7 +19,7 @@
 .nudges { gap: 4px; margin: 4px 0 8px; }
 .nudges .btn { min-width: 44px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .charfx { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.charfx .hl { font-size: 12px; font-stretch: var(--cond); text-transform: uppercase; letter-spacing: 0.03em; }
+.charfx .hl { font-size: 13px; }
 .charfx select { width: 170px; }
 .master { display: flex; flex-direction: column; gap: 3px; width: 76px; margin-left: 4px; }
 .master .label { font-size: 10px; }
@@ -29,3 +29,5 @@
   .mixer-ws { grid-template-columns: 1fr; }
   .mixer-side { max-height: none; }
 }
+.inspector-offer { flex-wrap: wrap; margin: 8px 0; }
+.inspector-offer .offer-act { max-width: none; margin-left: 46px; }

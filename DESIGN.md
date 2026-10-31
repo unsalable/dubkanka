@@ -29,14 +29,14 @@ Zemin hafif sıcak bir grafit. Tek marka rengi **sinyal sarısı**: fosforlu kal
 | `--rec` | `#ff3b30` | Sadece kayıt: REC lambası, kayıt düğmesi, "Konuş" işareti |
 | `--ok` / `--warn` / `--bad` | `#3dd68c` / `#ff9f43` / `#ff5a52` | Durum. Uyarı turuncu, sarı ile karışmasın diye |
 
-**Karakter renkleri** (`dubkanka/projects.py`, `COLORS`): fosforlu kalem tonları. Hepsi aynı parlaklıkta, hiçbiri sarıya ya da kayıt kırmızısına yakın değil. Karakter rengi içerik içindir (klip, kalem izi, renk noktası); arayüz durumu için kullanılmaz.
+**Karakter renkleri** (`dubkanka/projects.py`, `COLORS`): fosforlu kalem tonları. Hepsi aynı parlaklıkta, hiçbiri sarıya ya da kayıt kırmızısına yakın değil. Karakter rengi içerik içindir (klip, ad etiketinin noktası, renk noktası); arayüz durumu için kullanılmaz.
 
 ## Yazı
 
 Tek aile: **IBM Plex** (`web/fonts`, SIL OFL). Türkçe karakterlerin hepsi var.
 
 - **Arayüz:** `IBM Plex Sans` (değişken, `--font`). Temel 13 px, satır yüksekliği 1.5.
-- **Dar hal** (`--cond`, `font-stretch: 80%`): sadece senaryodaki karakter adlarında, REC lambasında ve geri sayım yazısında. Kontrol grubu başlıkları artık düz cümle harfiyle yazılır.
+- **Dar hal** (`--cond`, `font-stretch: 80%`): sadece REC lambasında, "Konuş" işaretinde ve geri sayım yazısında. Karakter adları ve kontrol grubu başlıkları düz yazılır.
 - **Sayı:** `IBM Plex Mono` (`--mono`). Zaman kodu, PIN, dB, boyut, codec bilgisi, dosya yolu. Hep tablo rakamı.
 
 | Rol | Boyut / ağırlık |
@@ -61,18 +61,21 @@ Tek aile: **IBM Plex** (`web/fonts`, SIL OFL). Türkçe karakterlerin hepsi var.
 
 ## Ekranlar
 
-- **İlk açılış** (`desktop/setup`): sadece stüdyo kurulur (Python, stüdyo paketleri, ffmpeg; yaklaşık 200 MB). Tek kart, tek ilerleme çubuğu.
-- **Karşılama** (`web/js/views/onboarding.js`): tek soru, "DubKanka'yla ne yapmak istiyorsun?". Bir kontrol listesi: kendi sesinle dublaj (dahil), yazıya dök ve çevir, müziği ve efektleri koru, arkadaşlarla kaydet; her satırda gerçek indirme boyutu, altta toplam ve "Başla". Seçilenler arka planda iner; üst çubukta dolan bir halka (`.dlpill`) gösterir.
-- **Özellik teklifi** (`.offer`, `feature-ui.js`): bir ekran yüklü olmayan bir özelliği kullanacaksa, ne kazandırdığını tek cümleyle söyler ve yerinde "Ekle · boyut" düğmesi sunar; inerken aynı yerde ilerleme gösterir.
+- **Açılış** (`desktop/setup`): her açılışta önce yeni sürüm sorulur ("Güncelleme kontrol ediliyor…"); varsa aynı kartta "DubKanka x.y.z indiriliyor", ilerleme çubuğu ve hayalet "Şimdilik atla" düğmesi; inince kendiliğinden kurulup yeni sürümle açılır. İlk kurulumda sadece stüdyo kurulur (Python, stüdyo paketleri, ffmpeg; yaklaşık 200 MB). Tek kart, tek ilerleme çubuğu.
+- **Karşılama** (`web/js/views/onboarding.js`): tek soru, "DubKanka'yla ne yapmak istiyorsun?". İki grup: **Temel** (kendi sesinle dublaj; seçili ve kilitli, "Dahil") ve **Ek özellikler** (yazıya dök ve çevir, müziği koru, arkadaşlarla kaydet, kayıt temizleme; boş gelir, her satırda gerçek indirme boyutu). Altta toplam ve "Başla". Seçilenler arka planda iner; üst çubukta dolan bir halka (`.dlpill`) gösterir.
+- **Özellik teklifi** (`.offer`, `feature-ui.js`): bir ekran indirilmemiş bir özelliği kullanacaksa, ne kazandırdığını tek cümleyle söyler ve tam orada "İndir · boyut" düğmesi sunar; inerken aynı yerde ilerleme gösterir. Ayarlar → Özellikler indirilebilen her şeyin listesidir.
+- **Soru penceresi** (`.dialog`, `ask()`): silme gibi geri alınamayan işler uygulamanın içinde küçük, yumuşak bir kartla sorulur; tarayıcının ya da Windows'un kendi `confirm()` kutusu hiç kullanılmaz. Başlık soru cümlesi, altında tek satır sonuç, sağda "Vazgeç" ve eylem düğmesi (hap). Yıkıcı eylem kırmızı değil, hata uyarısının yumuşak tonunda (`.btn-destroy`); odak "Vazgeç"te başlar, Enter tek başına bir şey silmez. Esc ve dışarı tıklama iptal eder.
+- **Kabin → Gürültü engelleme:** sesli sohbet uygulamalarındaki gibi bir segment kontrolü: Standart (tarayıcı), RNNoise (canlı, gömülü), DPDFNet (kayıttan sonra, Kayıt temizleme özelliği), Kapalı. Altında seçilenin ne yaptığını söyleyen tek satır; DPDFNet indirilmemişse orada özellik teklifi.
 - **Ayarlar:** solda sayfa listesi (Genel, Özellikler, Çeviri, Klasörler, Güncellemeler, Sistem), sağda o sayfa: yuvarlak kartlarda satırlar, solda etiket ve açıklama, sağda kontrol. Dişli düğmesi ayarlardayken × olur ve gelinen sayfaya döner; Esc de aynı şeyi yapar. Oda düğmesi de böyle çalışır.
-- **Paylaş:** karar sırasıyla numaralı dört adım (1 Biçim, 2 Ses, 3 Altyazı, 4 Kalite). Altyazı stili ve teknik ayarlar kapalı gelir, isteyen açar. Sağda önizleme, altında düz yazıyla özet ve hap biçimli "Videoyu oluştur".
+- **Paylaş:** karar sırasıyla numaralı dört adım (1 Biçim, 2 Ses, 3 Altyazı, 4 Kalite). Kalite seçenekleri platform adı taşımaz ve "önerilen" etiketi yoktur: Standart, Yüksek kalite, Küçük dosya, Kaynak kopyası; her biri ne kazandırıp neye mal olduğunu tek cümleyle söyler. Altyazı stili ve teknik ayarlar kapalı gelir, isteyen açar. Sağda önizleme, altında düz yazıyla özet (codec ayrıntısı ipucunda) ve hap biçimli "Videoyu oluştur".
 
 ## İmza parçalar
 
 - **Zaman kodu ekranı** (`.tc-lcd`): `--sunk` kuyu, içte kıl çizgisi, mono rakamlar; ayırıcılar daha sönük.
 - **LED seviye göstergesi** (`.meter`): bölmeli; -18 dB'ye kadar yeşil, -6 dB'ye kadar sarı, üstü kırmızı. Tepe noktası 1 sn asılı kalır, 0 dB'yi geçince kırmızı "CLIP" yanar.
 - **REC lambası** (`.tally`): kırmızı, dar yazıyla `REC`. Sadece kayıt sürerken yanar.
-- **Kalem izi** (`.hl`): karakter adının arkasında, karakter renginde yarı saydam, hafif eğik bir fosforlu kalem şeridi. Senaryo, kabin ve oda ekranlarında aynı karakter aynı izi taşır.
+- **Ad etiketi** (`.hl`): karakter adının solunda, karakter renginde 8 px yuvarlak bir nokta ve etrafında aynı rengin soluk halkası; ad düz yazıyla. Senaryo, kabin, mikser ve oda ekranlarında aynı karakter aynı noktayı taşır. (Eski fosforlu kalem şeridi net okunmuyordu, 31 Ekim 2026'da kaldırıldı.)
+- **Senaryo satırı:** sadece gereken: numara, ad etiketi, orijinal (küçük, sönük), dublaj (büyük, yazılabilir). Zaman kodu ve süre zaman çizelgesinde ve numaranın ipucunda durur; uygunluk lambası yok, sadece dublaj belirgin uzunsa turuncu "uzun" yazar; kaydı olan satırda küçük yeşil tik. Dinle / kaydet düğmeleri üzerine gelince ya da satır seçiliyken görünür.
 - **Akış çizgisi** (kabin): kayıttan önce videonun üstünde soldan sağa geçen dikey çizgi; sağ kenara tam replik başladığında varır. Profesyonel dublajdaki "streamer".
 - **Zaman çizelgesi:** şeritler kuyu renginde; klipler karakter renginde dolu, yuvarlak köşeli, içte kıl çizgisi. Seçili klip 2 px sarı çerçeve. Oynatma çizgisi beyaz, başında sarı bir işaret.
 - **Adım çubuğu:** üst çubuğun ortasında tek bir hap; içinde beş adım numarasıyla, seçili adımın arkasında yayla kayan bir hap, numarası sarı dairede.
@@ -83,8 +86,9 @@ Animasyondan vazgeçmiyoruz, ama her animasyon bir durumu ya da yer değişimini
 
 | Ne oluyor | Nasıl hareket eder |
 |---|---|
-| Yer değişiyor (ana sayfa, bir adım, ayarlar, oda) | Sayfa tek parça halinde, geldiği yönden 20 px kayarak gelir. Üst çubuk hiç kıpırdamaz. Eski ve yeni sayfa aynı süre ve eğriyle karışır, saydamlıkları hep toplam bire eşittir: iki sayfada ortak olan yer (ayarların kenar çubuğu, panel kenarları) yerinde durur, arkadan pencere görünmez. |
-| Aynı yerin içinde sayfa değişiyor (ayar sayfaları, kabindeki Satırlar / Kabin) | Kaymaz; içerik yerinde çapraz geçiş yapar. |
+| Yer değişiyor (ana sayfa, bir adım, ayarlar, oda) | Sayfa tek parça halinde, geldiği yönden kayarak gelir (yeni sayfa 36 px, eskisi 24 px; 380 ms, `--ease-page`). Üst çubuk hiç kıpırdamaz. Eski ve yeni sayfa aynı süre ve eğriyle karışır, saydamlıkları hep toplam bire eşittir: iki sayfada ortak olan yer (panel kenarları) yerinde durur, arkadan pencere görünmez. |
+| Başka bir ayar sayfası | Kenar çubuğu yerinde durur, seçim hapı yeni satıra yayla kayar; sayfanın kendisi listede bulunduğu yönden dikey kayarak gelir (aşağı inerken alttan, yukarı çıkarken üstten). |
+| Aynı yerin içinde sekme değişiyor (kabindeki Satırlar / Kabin) | Kaymaz; içerik yerinde çapraz geçiş yapar. |
 | Bir şey açılıyor (açılır bölüm, servis satırı, teknik ayarlar, yazı stili) | Hep aynı `drop`: hafif yukarıdan yerine oturur, 200 ms. |
 | Açık sayfaya yeni bir şey geliyor (yeni kayıt, yeni video, bildirim, oda açılınca link ve PIN) | Yayla düşer (`take-in`). Sadece gerçekten yeni olan; sayfa açılınca zaten orada olanlar kıpırdamaz. |
 | Seçim değişiyor (adım çubuğu, segment kontrolü) | Hap yayla kayar. |
@@ -93,9 +97,11 @@ Animasyondan vazgeçmiyoruz, ama her animasyon bir durumu ya da yer değişimini
 Bir sayfa gelirken içindeki satırlar, kartlar ve klipler kendi başına animasyon yapmaz. Tek istisna ilk karşılama ekranı: uygulamanın tek "an"ı.
 
 - **Eğriler:** `--ease-out` (0.16, 1, 0.3, 1) ana eğri, `--ease-in` çıkışlar için, `--spring` hafif taşmalı yay (kayan haplar, açma/kapama, yeni gelenler).
-- **Süreler:** `--t-fast` 120 ms (basma, üzerine gelme), `--t` 200 ms (durum, açılma), `--t-slow` 300 ms (menü, pencere), `--t-page` 300 ms (sayfa).
+- **Süreler:** `--t-fast` 120 ms (basma, üzerine gelme), `--t` 200 ms (durum, açılma), `--t-slow` 300 ms (menü, pencere), `--t-page` 380 ms (sayfa). Sayfa eğrisi `--ease-page` (0.25, 0.75, 0.25, 1) kontrol eğrisinden yumuşaktır: kayma görülür, göz kırpması gibi geçmez.
+- **Geçiş atlanmaz:** ağır bir sayfanın (uzun senaryo, kabin) resmi birkaç kare sürebilir; geçiş sadece pencere gerçekten çizmiyorsa (küçültülmüş, donmuş) 900 ms sonra atlanır. Kullanıcı 31 Ekim 2026'da "senaryodan geçerken animasyon yok" dedi: sebep 250 ms'lik bekçinin ağır sayfalarda geçişi iptal etmesiydi.
 - **Video resmi** (`view-transition-name: viewer`) adımlar arasında yeni yerine sayfayla aynı saatte süzülür.
-- **Kabin:** geri sayım halkası bip seslerine eş zamanlı, akış çizgisi, kayıt düğmesi daireden yuvarlak köşeli kareye döner, yeni kayıt listeye yayla düşer, konuşan karakter değişince kalem izi yeniden çekilir.
+- **Kabin:** geri sayım halkası bip seslerine eş zamanlı, akış çizgisi, kayıt düğmesi daireden yuvarlak köşeli kareye döner, yeni kayıt listeye yayla düşer, konuşan karakter değişince ad etiketinin noktası yayla belirir.
+- **Soru penceresi:** arka plan solarak, kart yayla hafif büyüyerek gelir; kapanırken 150 ms'de söner.
 - **Göstergeler:** bütün seviye göstergeleri tek bir animasyon döngüsünden beslenir.
 
 ### Animasyon ayarı
@@ -113,10 +119,16 @@ CSS'te süreler `calc(var(--m) * …)` ile yazılır: `full` için `--m: 1`, `re
 ## Yazı tonu
 
 - Türkçe, kısa, düz. Ünlem, emoji, "Harika!" yok (WhatsApp davet mesajı hariç).
-- Önce sade söz, teknik ad gerekirse yanında: kalite ayarları "Telefonda net, hızlı yüklenir" der, `CRF 18` teknik ayarlarda ve ipucunda durur.
-- Ekranda sadece o an karar vermeye yarayan bilgi durur. Uzun açıklama `title` ipucuna ya da kapalı gelen bir bölüme gider.
-- Boyutlar gerçek: indirme düğmesi ne kadar ineceğini yazar (`Ekle · 1.7 GB`).
+- Önce sade söz, teknik ad gerekirse yanında: kalite ayarları "İyi görüntü, orta boy dosya" der, `CRF 18` teknik ayarlarda ve ipucunda durur. Platform adı (TikTok, Reels) seçenek adı ya da öneri olmaz.
+- **Gereksiz bilgi yok** (kullanıcının açık isteği, 31 Ekim 2026: "gereksiz bilgilerin hepsini kaldır, sevmiyorum"). Ekranda sadece o an karar vermeye yarayan bilgi durur: açıklayıcı paragraf, alt başlık, kısayol şeridi, "nasıl çalışıyor" kutusu, sistem bilgisi satırı yok. Bir ayarın altında ancak yanlış anlaşılırsa zarar verecekse tek kısa satır durur ("Sadece kulaklıkla."). Uzun açıklama `title` ipucuna gider.
+- Boyutlar gerçek: indirme düğmesi ne kadar ineceğini yazar (`İndir · 1.7 GB`).
 
 ## Kaçınılanlar
 
-Degrade, cam efekti, neon parlama, ikon yerine emoji, başlık üstü küçük etiket, aynı boy ikonlu kart ızgarası, renkli kalın sol kenarlık, hap biçimli durum rozetleri, sert (bulanıklıksız) gölge, her yeri büyük harfle yazan etiketler, her şeyi ortalayan boş açılış ekranları, kapalı olması gerekirken açık gelen teknik ayarlar.
+Degrade, cam efekti, neon parlama, ikon yerine emoji, başlık üstü küçük etiket, aynı boy ikonlu kart ızgarası, renkli kalın sol kenarlık, hap biçimli durum rozetleri, sert (bulanıklıksız) gölge, her yeri büyük harfle yazan etiketler, her şeyi ortalayan boş açılış ekranları, kapalı olması gerekirken açık gelen teknik ayarlar, isimlerin arkasında boya / kalem izi, sistemin kendi `confirm()` / `alert()` kutuları, ekrana açıklama paragrafları.
+
+## Sağlamlık kuralları
+
+- **Kaydırılmayan kap kaydırılamaz:** paneller ve kartlar `overflow: clip` kullanır, `hidden` değil. `hidden` bir kap odak ya da `scrollIntoView` ile kodla kaydırılabilir ve içeriği geri getirilemez biçimde kayar (kabinde rollerin ve Satırlar / Kabin sekmesinin bir anahtara tıklayınca kaybolması buydu). Gizli onay kutusu (`.toggle input`) etiketinin içinde konumlanır.
+- **Liste içinde gösterme:** bir satırı görünür yapmak için `revealInList` (`util.js`): sadece satırın kendi listesini kaydırır, sayfayı ve panelleri hiç oynatmaz.
+- **Kaydırılan sütunun çocukları büzülmez:** `.pane-scroll > * { flex-shrink: 0 }`; yoksa açılan bir bölüm (paylaşta teknik ayarlar) kendi içine sıkışır ve alta inilemez.

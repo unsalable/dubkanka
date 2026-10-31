@@ -12,7 +12,7 @@ const FONTS = ['Arial Black', 'Impact', 'Arial', 'Segoe UI', 'Verdana', 'Comic S
 const FORMAT_NAMES = { vertical_blur: ['9:16', 'Bulanık arka plan'], vertical_crop: ['9:16', 'Ekranı doldur'], square: ['1:1', 'Kare'], original: ['Kaynak', 'Orijinal boyut'] };
 const CODECS = [['h264', 'H.264 / AVC'], ['hevc', 'H.265 / HEVC'], ['av1', 'AV1']];
 const ABITRATES = [96, 128, 160, 192, 256, 320];
-const LUFS = [['-14', '-14 LUFS · TikTok, YouTube'], ['-16', '-16 LUFS · Apple, podcast'], ['-23', '-23 LUFS · EBU R128 yayın']];
+const LUFS = [['-14', '-14 LUFS · internet videoları'], ['-16', '-16 LUFS · podcast'], ['-23', '-23 LUFS · EBU R128 yayın']];
 
 const isObj = (v) => v && typeof v === 'object' && !Array.isArray(v);
 function merged(def, ex) {
@@ -249,12 +249,13 @@ function SourceInfo({ info }) {
   </div>`;
 }
 
-// Plain words for the presets; their technical summary stays in the tooltip and in "Teknik ayarlar".
+// Plain words for the presets: what you get and what it costs. The technical summary stays in the tooltip and in
+// "Teknik ayarlar". ("tiktok" is the standard preset's id from the first version on.)
 const PRESET_TEXT = {
-  tiktok: 'Telefonda net, hızlı yüklenir',
-  high: 'En temiz görüntü, daha büyük dosya',
-  small: "WhatsApp'tan göndermeye uygun",
-  copy: 'Görüntü hiç değişmez, sadece ses eklenir',
+  tiktok: 'İyi görüntü, orta boy dosya',
+  high: 'En iyi görüntü, büyük dosya',
+  small: 'Daha düşük kalite, kolay gönderilir',
+  copy: 'Görüntü aynen kalır, sadece ses değişir',
 };
 const SUB_CHOICES = [['none', 'Yok'], ['dub', 'Dublaj'], ['orig', 'Orijinal'], ['both', 'İkisi']];
 
@@ -299,9 +300,8 @@ export function ExportView({ p }) {
   const applyPreset = (id) => {
     const pr = (sys.exportPresets || {})[id];
     if (!pr) return;
-    // TikTok means 9:16; the other presets keep the chosen framing (stream copy forces the original size itself)
-    const framing = id === 'tiktok' && !ex.format.startsWith('vertical') ? { format: 'vertical_blur' } : {};
-    patch({ ...pr.settings, ...framing, preset: id });
+    // a quality never changes the chosen shape (stream copy forces the original size itself)
+    patch({ ...pr.settings, preset: id });
   };
   const setCodec = (c) => {
     const [, , q] = (sys.qualityRange || {})[c] || [0, 0, 20];
@@ -328,7 +328,7 @@ export function ExportView({ p }) {
     <div class="ws export-grid">
       <section class="pane export-settings">
         <div class="pane-scroll xsteps">
-          <${Step} n=${1} title="Biçim" hint="Videonun şekli">
+          <${Step} n=${1} title="Biçim">
             <div class="choices formats" role="radiogroup">${Object.keys(FORMAT_NAMES).map((k) => html`<button key=${k} role="radio" aria-checked=${ex.format === k}
               class=${cls('choice formatcard', ex.format === k && 'on')} disabled=${copying && k !== 'original'} title=${copying && k !== 'original' ? 'Kaynak kopyasında görüntü değişmez' : ''}
               onClick=${() => patch({ format: k })}><span class=${'shape shape-' + k}></span><b>${FORMAT_NAMES[k][0]}</b><small>${FORMAT_NAMES[k][1]}</small></button>`)}</div>
@@ -337,14 +337,14 @@ export function ExportView({ p }) {
           <${Step} n=${2} title="Ses">
             <${Segmented} value=${ex.mix} onChange=${(m) => patch({ mix: m })}
               options=${[['dub', 'Dublaj'], ...(unseparated ? [] : [['clean', 'Konuşmasız']]), ['original', 'Orijinal']]} />
-            ${ex.mix === 'clean' && html`<p class="xnote">Sadece müzik, efekt ve ortam sesleri: kendi seslendirmen için.</p>`}
+            ${ex.mix === 'clean' && html`<p class="xnote">Sadece müzik ve efektler.</p>`}
           </${Step}>
 
           <${Step} n=${3} title="Altyazı">
             <${Segmented} value=${ex.subs} onChange=${(x) => patch({ subs: x })} options=${SUB_CHOICES} />
             ${ex.subs !== 'none' && html`<div class="xsub">
               <${Toggle} checked=${burn} disabled=${copying} onChange=${(on) => patch({ subMode: on ? 'burn' : 'soft' })}
-                label=${html`<span class="toggle-text">Videonun üstüne yazılsın<small>${burn ? 'TikTok ve her oynatıcıda görünür.' : 'Ayrı iz: oynatıcıda açılıp kapanır, TikTok göstermez.'}</small></span>`} />
+                label="Videonun üstüne yazılsın" />
               ${burn && html`<button class=${cls('xdisclose', style && 'open')} aria-expanded=${style} onClick=${() => setStyle(!style)}>
                 <${Icon} name="chevron" size=${13} />Yazı stili <span class="dim">${ex.subFont} · %${Math.round((ex.subSize || 1) * 100)}</span></button>
                 ${style && html`<div class="xstyle">
@@ -367,9 +367,9 @@ export function ExportView({ p }) {
             <div class="choices presets" role="radiogroup">
               ${Object.entries(presets).map(([id, pr]) => html`<button key=${id} role="radio" aria-checked=${ex.preset === id} title=${pr.summary}
                 class=${cls('choice', ex.preset === id && 'on')} onClick=${() => applyPreset(id)}>
-                <b>${pr.label}${id === 'tiktok' ? html` <span class="xrec">önerilen</span>` : ''}</b><small>${PRESET_TEXT[id] || pr.summary}</small></button>`)}
+                <b>${pr.label}</b><small>${PRESET_TEXT[id] || pr.summary}</small></button>`)}
             </div>
-            ${ex.preset === 'custom' && html`<p class="xnote">Özel: teknik ayarlarda değiştirdiklerin kullanılıyor. Bir hazır ayar seçersen onlar geri gelir.</p>`}
+            ${ex.preset === 'custom' && html`<p class="xnote">Teknik ayarlarda değiştirdiklerin kullanılıyor.</p>`}
           </${Step}>
 
           <section class=${cls('xadv', adv && 'open')}>
@@ -436,7 +436,7 @@ export function ExportView({ p }) {
         <div class="make">
           ${problem && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${problem}</div>`}
           <div class="make-row">
-            <div class="make-sum"><span>${plainLine}</span><span class="mono dim">${techLine}</span></div>
+            <div class="make-sum" title=${techLine}><span>${plainLine}</span></div>
             <${Btn} kind="primary" class="make-go" icon="film" onClick=${make} disabled=${running || !!problem}>${running ? 'Oluşturuluyor…' : 'Videoyu oluştur'}</${Btn}>
           </div>
           ${job && (running || job.status === 'error') && html`<div class="make-job"><${JobPanel} bare job=${job} /></div>`}

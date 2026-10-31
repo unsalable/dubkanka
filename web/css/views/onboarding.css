@@ -4,7 +4,9 @@
 .onboard-mark { display: block; width: 58px; height: 58px; margin: 0 0 26px; filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55));
   animation: modal-in calc(600ms * var(--m)) var(--ease-out) both; }
 .onboard h1 { font-size: 32px; letter-spacing: -0.025em; line-height: 1.15; margin-bottom: 12px; }
-.onboard-lead { color: var(--text-2); font-size: 15px; max-width: 54ch; margin-bottom: 28px; }
+.onboard-lead { color: var(--text-2); font-size: 15px; max-width: 54ch; margin-bottom: 24px; }
+.onboard-group { font-size: 13px; font-weight: 600; color: var(--text-2); margin: 22px 4px 8px; }
+.onboard-lead + .onboard-group { margin-top: 0; }
 
 .picklist { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); padding: 6px; display: flex; flex-direction: column; gap: 2px;
   box-shadow: var(--shadow-card); }

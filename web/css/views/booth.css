@@ -24,9 +24,9 @@
 /* the cue: who speaks, the dub line large, the original small */
 .cue { padding: 12px 16px 10px; border-top: 1px solid var(--line); }
 .cue-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.cue-head .hl { font-stretch: var(--cond); letter-spacing: 0.03em; text-transform: uppercase; font-size: 13px; }
-/* the highlighter swipes in when the next speaker takes over: the one place the mark itself moves */
-.cue-head .hl::before { animation: swipe calc(380ms * var(--m)) var(--ease-out) both; }
+.cue-head .hl { font-size: 15px; }
+/* the speaker's dot pops in when the next speaker takes over: the one place the tag itself moves */
+.cue-head .hl::before { width: 10px; height: 10px; animation: dot-in calc(420ms * var(--m)) var(--spring) both; }
 .cue-text { font: 600 clamp(22px, 2.3vw, 34px)/1.25 var(--font); text-wrap: balance; animation: line-in var(--t-slow) var(--ease-out) both; min-height: 1.25em; }
 .cw { color: var(--text); transition: color calc(120ms * var(--m)), background-color calc(120ms * var(--m)); border-radius: 2px; }
 .cw.on { color: var(--accent-ink); background: var(--accent); }
@@ -76,8 +76,6 @@
 .mon-levels { gap: 6px 16px; flex-wrap: wrap; }
 .mon-lvl { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--text-2); cursor: pointer; }
 .mon-lvl input[type='range'] { width: 84px; }
-.booth-hint { text-align: center; padding: 0 8px 12px; color: var(--text-3); display: flex; flex-wrap: wrap; justify-content: center; gap: 4px 14px; font-size: 12px; }
-.booth-hint span { display: inline-flex; align-items: center; gap: 5px; }
 
 /* takes */
 .takes-pane { flex: 1; min-height: 140px; }
@@ -97,7 +95,7 @@
   background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; transition: background-color var(--t-fast), box-shadow var(--t-fast); }
 .role:hover { background: rgba(255, 250, 235, 0.03); }
 .role.on { background: color-mix(in srgb, var(--c, var(--accent)) 12%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--accent)) 40%, transparent); }
-.role-name { font-weight: 600; font-size: 12px; font-stretch: var(--cond); letter-spacing: 0.03em; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.role-name { min-width: 0; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .role-who { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .role-who .lamp::before { margin: 0; }
 .side-tabs { padding: 10px 12px; border-bottom: 1px solid var(--line); }
@@ -119,9 +117,12 @@
 .boothsettings .seclabel:first-child { margin-top: 0; }
 .mic-pick { margin-bottom: 8px; }
 .mic-test { display: flex; align-items: center; gap: 10px; margin: 6px 0; }
-.mic-info { font-size: 11px; color: var(--text-3); margin: 2px 0 6px; }
-.subtoggles { padding: 4px 12px; background: var(--panel-2); border-radius: var(--r); margin: 0 0 8px; transition: opacity var(--t); }
-.subtoggles.off { opacity: 0.55; }
+/* noise suppression engines side by side, like a voice chat app; one line about the picked one under them */
+.noise-pick .segmented { display: flex; }
+.noise-pick .segmented button { flex: 1; padding: 0 6px; }
+.noise-note { margin: 7px 2px 10px; font-size: 12px; color: var(--text-3); }
+.boothsettings .offer { flex-wrap: wrap; margin-bottom: 8px; }
+.boothsettings .offer .offer-act { max-width: none; margin-left: 46px; }
 .boothsettings .alert { margin: 6px 0; }
 .bulk { display: flex; flex-direction: column; max-height: 50vh; overflow: auto; border: 1px solid var(--line); border-radius: var(--r); }
 .bulk-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(200px, 1.4fr) 100px; gap: 10px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); }
@@ -133,7 +134,6 @@
 }
 @media (max-width: 760px) {
   .cue-text { font-size: 21px; }
-  .booth-hint { display: none; }
   .rhythm { height: 76px; }
   .booth-controls { grid-template-columns: 1fr; justify-items: center; }
 }

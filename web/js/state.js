@@ -12,6 +12,7 @@ export const store = {
   jobs: [],
   room: null,
   toasts: [],
+  dialog: null, // the open question of ask()
   online: true,
 };
 
@@ -64,10 +65,13 @@ export const backFromSettings = () => '#/' + before.settings.join('/');
 export const backFromRoom = (pid) => '#/' + (before.room[pid] || ['p', pid]).join('/');
 const calm = () => document.hidden || !document.startViewTransition || motion() === 'off';
 
-/** Apply a route change inside a view transition: the page slides, the video picture glides to its new spot. */
-export function transition(update, dir = 1) {
+/** Apply a route change inside a view transition: the page slides, the video picture glides to its new spot.
+ *  kind 'settings': only the settings body moves (vertically, from the side of the list the page lies on). */
+export function transition(update, dir = 1, kind = 'page') {
   if (calm()) return update();
-  document.documentElement.style.setProperty('--vt-dir', dir);
+  const root = document.documentElement;
+  root.style.setProperty('--vt-dir', dir);
+  root.dataset.vt = kind;
   let done = false;
   const run = () => {
     if (!done) {
@@ -75,11 +79,12 @@ export function transition(update, dir = 1) {
       update();
     }
   };
-  // a window that is not painting (minimised, throttled) never starts the transition: never wait on it
+  // a window that is not painting (minimised, throttled) never starts the transition: never wait on it. A heavy page
+  // (a long cue sheet, the booth) can take a few frames to be pictured, so this only catches a window that is stuck.
   const guard = setTimeout(() => {
     run();
     vt.skipTransition();
-  }, 250);
+  }, 900);
   // resolve after a macrotask: Preact has committed the new page by then
   const vt = document.startViewTransition(() => {
     clearTimeout(guard);
@@ -87,15 +92,26 @@ export function transition(update, dir = 1) {
     return new Promise((r) => setTimeout(r, 0));
   });
   for (const pr of [vt.ready, vt.finished, vt.updateCallbackDone]) pr.catch(() => {});
+  const seq = ++vtSeq; // a newer transition owns data-vt from here on
+  vt.finished.finally(() => seq === vtSeq && delete root.dataset.vt);
   return vt;
+}
+let vtSeq = 0;
+
+/** Down the settings list (1) or up (-1), from where the pages sit in the sidebar. */
+function settingsDir(from, to) {
+  const links = [...document.querySelectorAll('.set-link')].map((a) => a.getAttribute('href'));
+  const at = (r) => Math.max(0, links.indexOf('#/settings/' + (r[1] || '')));
+  return at(to) >= at(from) ? 1 : -1;
 }
 
 window.addEventListener('hashchange', () => {
   const route = parseRoute();
-  remember(store.route, route);
-  // a new place slides in from the side it lies on; another page of the same place (settings) only crossfades
-  const dir = route[0] === 'settings' && store.route[0] === 'settings' ? 0 : place(route) >= place(store.route) ? 1 : -1;
-  transition(() => setState({ route }), dir);
+  const from = store.route;
+  remember(from, route);
+  // a new place slides in from the side it lies on; another settings page slides in from its side of the list
+  if (route[0] === 'settings' && from[0] === 'settings') transition(() => setState({ route }), settingsDir(from, route), 'settings');
+  else transition(() => setState({ route }), place(route) >= place(from) ? 1 : -1);
 });
 export const go = (path) => (location.hash = '#/' + path);
 
@@ -111,6 +127,21 @@ export function toast(text, type = 'info', ms = 4200, action = null) {
   setTimeout(() => dismissToast(id), ms);
 }
 export const toastError = (e) => toast(e && e.message ? e.message : String(e), 'error', 6000);
+
+/** Ask inside the app instead of the browser's confirm()/prompt() windows (the Dialog component draws it).
+ *  Resolves true or false; with `input` (the starting text) it resolves the typed text, or null when cancelled. */
+export function ask({ title, text = '', ok = 'Tamam', cancel = 'Vazgeç', danger = false, input = null }) {
+  if (store.dialog) store.dialog.close(store.dialog.input != null ? null : false); // one question at a time
+  return new Promise((resolve) => {
+    const close = (answer) => {
+      if (!store.dialog || store.dialog.close !== close || store.dialog.leaving) return;
+      resolve(answer);
+      setState({ dialog: { ...store.dialog, leaving: true } });
+      setTimeout(() => store.dialog && store.dialog.close === close && setState({ dialog: null }), 160);
+    };
+    setState({ dialog: { title, text, ok, cancel, danger, input, close } });
+  });
+}
 
 /** Apply a local change to the current project immediately (the server copy follows via watch). */
 export function patchLocal(fn) {

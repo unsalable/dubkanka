@@ -1,10 +1,10 @@
 // Features in the interface: a row per feature in Ayarlar → Özellikler, and a small inline offer wherever a screen
-// would use a feature that is not installed ("Yazıya dökme yüklü değil · Ekle 1.7 GB").
+// would use a feature that is not downloaded yet ("Yazıya dökme ve çeviri · İndir 1.7 GB"), right where it is needed.
 import { html, useRef, useState } from '../vendor/preact-htm.js';
 import { api } from './api.js';
 import { Btn, Icon, Popover, Progress } from './components.js';
 import { desktop } from './desktop.js';
-import { featureOf, installFeatures, setState, toast, toastError, useStore } from './state.js';
+import { ask, featureOf, installFeatures, setState, toast, toastError, useStore } from './state.js';
 import { cls, fmtSize } from './util.js';
 
 export const FEATURE_ICON = { speech: 'text', separate: 'music', room: 'users', cleanup: 'wave' };
@@ -21,7 +21,7 @@ async function act(id, action) {
 }
 
 async function removeFeature(f) {
-  if (!confirm(`“${f.name}” kaldırılsın mı? Paketleri ve modelleri silinir; istersen sonra yeniden eklersin.`)) return;
+  if (!(await ask({ title: `${f.name} kaldırılsın mı?`, text: 'İndirilen dosyaları silinir. İstediğin zaman yeniden indirebilirsin.', ok: 'Kaldır', danger: true }))) return;
   const r = await act(f.id, 'remove');
   if (r && r.restart) toast('Kullanımda olduğu için uygulama yeniden başlayınca kaldırılacak.', 'info', 7000);
 }
@@ -52,9 +52,9 @@ function FeatureAction({ f, compact }) {
       ${menu && html`<${Popover} anchor=${more.current} onClose=${() => setMenu(false)}>
         <button class="popitem danger" onClick=${() => { setMenu(false); removeFeature(f); }}><${Icon} name="trash" size=${14} />Kaldır</button>
       </${Popover}>`}</div>`;
-  const label = f.state === 'partial' ? 'Modeli indir' : f.state === 'error' ? 'Tekrar dene' : 'Ekle';
+  const label = f.state === 'partial' ? 'Modeli indir' : f.state === 'error' ? 'Tekrar dene' : 'İndir';
   return html`<div class="row nowrap feat-acts">
-    ${f.state === 'error' && !compact && html`<span class="small feat-err" title=${(j && j.error) || ''}>Eklenemedi</span>`}
+    ${f.state === 'error' && !compact && html`<span class="small feat-err" title=${(j && j.error) || ''}>İndirilemedi</span>`}
     <${Btn} small kind=${compact ? 'primary' : ''} icon="download" onClick=${() => installFeatures([f.id])}>${label} · ${fmtSize(f.mb)}</${Btn}>
   </div>`;
 }

@@ -96,6 +96,13 @@ async function boot() {
   booting = true;
   try {
     send({ type: 'phase', phase: 'starting' });
+    updater.init(() => {
+      quitting = true;
+      server.stop();
+    });
+    // every launch asks for a new version first; when there is one it is installed and the app reopens on it
+    if (await updater.onLaunch(send)) return;
+    send({ type: 'phase', phase: 'starting' });
     const python = process.env.DUBKANKA_PYTHON || (await runtime.ensure(send));
     send({ type: 'phase', phase: 'server' });
     const port = await freePort(8765);
@@ -103,10 +110,7 @@ async function boot() {
     await server.waitReady();
     if (!win) return;
     await win.loadURL(`http://127.0.0.1:${port}/`);
-    updater.init(() => {
-      quitting = true;
-      server.stop();
-    });
+    updater.watch();
   } catch (e) {
     send({ type: 'error', message: e.message, tail: (e.tail || server.tail || []).slice(-40) });
   } finally {
@@ -136,6 +140,7 @@ ipcMain.handle('dk:update:get', () => updater.getState());
 ipcMain.handle('dk:update:check', () => updater.check());
 ipcMain.handle('dk:update:download', () => updater.download());
 ipcMain.handle('dk:update:install', () => updater.install());
+ipcMain.handle('dk:update:skip', () => updater.skip());
 ipcMain.handle('dk:update:prefs', (_e, p) => (p ? updater.setPrefs(p) : updater.getPrefs()));
 updater.onState((s) => win && !win.isDestroyed() && win.webContents.send('dk:update', s));
 ipcMain.handle('dk:open-external', (_e, url) => /^https?:\/\//i.test(String(url)) && shell.openExternal(String(url)));

@@ -1,11 +1,11 @@
 import { html, useEffect, useMemo, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P } from '../api.js';
-import { Btn, Field, Icon, JobPanel, Lamp, Modal, PlayButton, Popover, Select, TimeReadout, Toggle, usePlaying, VideoPane, VolumeControl } from '../components.js';
+import { Btn, Field, Icon, JobPanel, Modal, PlayButton, Popover, Select, TimeReadout, Toggle, usePlaying, VideoPane, VolumeControl } from '../components.js';
 import { engine, player, stemUrls } from '../engine.js';
 import { FeatureOffer } from '../feature-ui.js';
-import { featureReady, go, jobOf, patchLocal, toast, toastError, useStore } from '../state.js';
+import { ask, featureReady, go, jobOf, patchLocal, toast, toastError, useStore } from '../state.js';
 import { fitZoom, Timeline } from '../timeline.js';
-import { cls, copyText, debounce, fmtTime, syllables } from '../util.js';
+import { cls, copyText, debounce, fmtTime, revealInList, syllables } from '../util.js';
 
 function useStem(p, key) {
   const [buf, setBuf] = useState(null);
@@ -23,24 +23,21 @@ export function playOriginal(p, original, from, to) {
   player.play({ from, to, items: [{ buffer: original, at: 0 }] });
 }
 
-/** Does the dub fit the mouth? Syllables of the dub against the original. */
-function Fit({ orig, text }) {
-  if (!text || !text.trim()) return html`<${Lamp} title="Dublaj metni boş">boş</${Lamp}>`;
+/** Only says something when the dub is clearly longer than the original: then it will not fit the mouth. */
+function TooLong({ orig, text }) {
+  if (!text || !text.trim()) return null;
   const so = syllables(orig);
   const sd = syllables(text);
-  const r = sd / Math.max(1, so);
-  const title = `Orijinal ${so} hece, dublaj ${sd} hece.`;
-  if (r > 1.35) return html`<${Lamp} tone="bad" title=${title + ' Kısaltırsan ağız hareketine daha iyi oturur.'}>uzun</${Lamp}>`;
-  if (r < 0.6) return html`<${Lamp} tone="warn" title=${title}>kısa</${Lamp}>`;
-  return html`<${Lamp} tone="ok" title=${title}>uygun</${Lamp}>`;
+  if (sd / Math.max(1, so) <= 1.35) return null;
+  return html`<span class="toolong" title=${`Orijinal ${so} hece, dublaj ${sd} hece. Kısaltırsan ağza daha iyi oturur.`}>uzun</span>`;
 }
 
-/** Character tag of a line: the highlighter mark; click to give the line to someone else. */
+/** Who says the line: the character's name tag; click to give the line to someone else. */
 function CharTag({ p, line, c, onPick }) {
   const btn = useRef(null);
   const [open, setOpen] = useState(false);
-  return html`<button ref=${btn} class="chartag" title="Bu satırı kim söylüyor?" onClick=${(e) => { e.stopPropagation(); setOpen(!open); }}>
-      <span class="hl" style=${{ '--c': c ? c.color : '#8c897f' }}>${c ? c.name : '?'}</span><${Icon} name="chevron" size=${11} class="chev" /></button>
+  return html`<button ref=${btn} class="chartag" title="Bu satırı kim söylüyor?" aria-expanded=${open} onClick=${(e) => { e.stopPropagation(); setOpen(!open); }}>
+      <span class="hl" style=${{ '--c': c ? c.color : '#8c897f' }}>${c ? c.name : 'Kim?'}</span><${Icon} name="chevron" size=${11} class="chev" /></button>
     ${open && html`<${Popover} anchor=${btn.current} align="start" title="Söyleyen" onClose=${() => setOpen(false)}>
       ${p.characters.map((ch) => html`<button key=${ch.id} class="popitem" onClick=${() => { setOpen(false); onPick(ch.id); }}>
         <span class="swatch" style=${{ '--c': ch.color }}></span><span class="grow">${ch.name}</span>${ch.id === line.char && html`<${Icon} name="check" size=${14} />`}</button>`)}
@@ -79,27 +76,34 @@ function LineRow({ p, line, idx, selected, onSelect, onPlay, chars }) {
     patchLocal((pp) => (pp.lines.find((l) => l.id === line.id).char = cid));
     api.patch(P(p.id, `/lines/${line.id}`), { char: cid }).catch(toastError);
   };
-  return html`<div class=${cls('linerow', selected && 'sel', flash && 'flash')} style=${{ '--c': c ? c.color : '#8c897f', '--i': idx }}
+  // the cue sheet shows only what the line needs: who says it, the original, the dub; timing lives in the timeline
+  return html`<div class=${cls('linerow', selected && 'sel', flash && 'flash')} style=${{ '--c': c ? c.color : '#8c897f' }}
     onClick=${() => onSelect(line)} id=${'line-' + line.id}>
-    <div class="linerow-num">${idx + 1}</div>
+    <div class="linerow-num" title=${`${fmtTime(line.start)} · ${(line.end - line.start).toFixed(1)} sn`}>${idx + 1}</div>
     <div class="linerow-main">
       <div class="linerow-meta">
         <${CharTag} p=${p} line=${line} c=${c} onPick=${setChar} />
-        <span class="tc">${fmtTime(line.start)}</span><span class="tc dim">${(line.end - line.start).toFixed(1)} sn</span>
+        <${TooLong} orig=${line.orig} text=${text} />
         <span class="grow"></span>
-        ${recorded && html`<${Lamp} tone="ok" title="Seçili bir kaydı var">kayıtlı</${Lamp}>`}
-        <${Fit} orig=${line.orig} text=${text} />
+        <span class="linerow-acts">
+          <button class="iconbtn sm" title="Orijinali dinle" onClick=${(e) => { e.stopPropagation(); onPlay(line); }}><${Icon} name="headphones" size=${15} /></button>
+          <button class="iconbtn sm" title="Bu satırı kaydet" onClick=${(e) => { e.stopPropagation(); go(`p/${p.id}/record/${line.id}`); }}><${Icon} name="mic" size=${15} /></button>
+        </span>
+        ${recorded && html`<span class="linerow-done" title="Kaydı var"><${Icon} name="check" size=${14} /></span>`}
       </div>
-      <div class="orig" title="Orijinal">${line.orig || html`<em>orijinal metin yok</em>`}</div>
+      ${line.orig && html`<div class="orig">${line.orig}</div>`}
       <textarea ref=${area} class="input dubtext" rows="1" placeholder="Dublaj repliğini yaz…" value=${text}
         onFocus=${() => { focused.current = true; onSelect(line); }}
         onBlur=${(e) => { focused.current = false; save.flush(e.target.value); }}
         onInput=${(e) => { setText(e.target.value); save(e.target.value); }}
-        onKeyDown=${(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); const next = document.querySelector(`#line-${p.lines[idx + 1]?.id} textarea`); if (next) next.focus(); else e.target.blur(); } }}></textarea>
-    </div>
-    <div class="linerow-acts">
-      <button class="iconbtn" title="Orijinali dinle" onClick=${(e) => { e.stopPropagation(); onPlay(line); }}><${Icon} name="headphones" size=${16} /></button>
-      <button class="iconbtn" title="Bu satırı kaydet" onClick=${(e) => { e.stopPropagation(); go(`p/${p.id}/record/${line.id}`); }}><${Icon} name="mic" size=${16} /></button>
+        onKeyDown=${(e) => {
+          if (e.key !== 'Enter' || e.shiftKey) return;
+          e.preventDefault();
+          const next = document.querySelector(`#line-${p.lines[idx + 1]?.id} textarea`);
+          if (!next) return e.target.blur();
+          next.focus({ preventScroll: true });
+          revealInList(next.closest('.linerow'));
+        }}></textarea>
     </div>
   </div>`;
 }
@@ -152,7 +156,7 @@ function TranslatePanel({ p, onClose }) {
   const options = translators.map((t) => [t.id, t.name + (t.configured ? '' : ' (ayarlanmadı)')]);
   return html`<${Modal} title="Satırları çevir" onClose=${onClose}>
     <${Field} label="Çeviri servisi"><${Select} value=${engineName} onChange=${setEngine} options=${options.length ? options : [['google', 'Google Çeviri']]} /></${Field}>
-    ${ENGINE_KIND(sys, engineName) === 'llm' && html`<${Field} label="Tarz" hint="Troll: sahne aynı kalır, replikler komik ya da absürt yeniden yazılır.">
+    ${ENGINE_KIND(sys, engineName) === 'llm' && html`<${Field} label="Tarz">
       <${Select} value=${style} onChange=${setStyle} options=${Object.entries(sys.styles || {})} /></${Field}>`}
     ${!tr.configured && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${tr.name} henüz ayarlanmadı. <a href="#/settings">Ayarlar → Çeviri</a></div>`}
     <${Toggle} checked=${onlyEmpty} onChange=${setOnlyEmpty} label="Sadece boş satırları çevir (yazdıklarım kalsın)" />
@@ -175,8 +179,8 @@ export function scriptText(p, cid) {
 function ShareScript({ p, onClose }) {
   const [cid, setCid] = useState(p.characters[0] ? p.characters[0].id : '');
   const txt = scriptText(p, cid);
-  return html`<${Modal} title="Senaryoyu arkadaşına gönder" onClose=${onClose} wide>
-    <p class="muted">Odaya bağlanamayan arkadaşına bu metni WhatsApp'tan gönder. Kayıtlarını sana atınca <b>Kayıt</b> ekranındaki <b>Toplu yükle</b> ile eklersin; zamanlamayı uygulama ayarlar.</p>
+  return html`<${Modal} title="Senaryoyu gönder" onClose=${onClose} wide>
+    <p class="muted">Arkadaşın kendi repliklerini kaydedip sana atar; dosyaları <b>Kayıt</b> ekranında <b>Toplu yükle</b> ile eklersin.</p>
     <${Field} label="Kimin için?"><${Select} value=${cid} onChange=${setCid} options=${[...p.characters.map((c) => [c.id, c.name]), ['', 'Tüm senaryo']]} /></${Field}>
     <textarea class="input sharetext" readonly value=${txt}></textarea>
     <div class="modal-actions"><${Btn} icon="copy" kind="primary" onClick=${async () => { await copyText(txt); toast('Kopyalandı', 'ok'); }}>Kopyala</${Btn}></div>
@@ -212,8 +216,7 @@ export function ScriptView({ p }) {
   const select = (l) => {
     setSel(l.id);
     if (!player.playing) player.seek(l.start);
-    const el = document.getElementById('line-' + l.id);
-    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    revealInList(document.getElementById('line-' + l.id));
   };
   const patchLine = (lid, body) => {
     patchLocal((pp) => Object.assign(pp.lines.find((l) => l.id === lid), body));
@@ -225,15 +228,17 @@ export function ScriptView({ p }) {
     if (l) setSel(l.id);
   };
   const split = () => selLine && api.post(P(p.id, `/lines/${selLine.id}/split`), { at: player.time }).catch(toastError);
-  const mergeNext = () => {
+  const mergeNext = async () => {
     if (!selLine) return;
-    const hasTakes = (selLine.takes || []).length;
-    if (hasTakes && !confirm('Birleştirince sonraki satırın kayıtları silinir. Devam?')) return;
+    const next = p.lines[p.lines.indexOf(selLine) + 1];
+    if (next && (next.takes || []).length &&
+      !(await ask({ title: 'Satırlar birleştirilsin mi?', text: 'Sonraki satırın kayıtları silinir.', ok: 'Birleştir', danger: true }))) return;
     api.post(P(p.id, `/lines/${selLine.id}/merge-next`)).catch(toastError);
   };
-  const delLine = () => {
+  const delLine = async () => {
     if (!selLine) return;
-    if ((selLine.takes || []).length && !confirm('Bu satırın kayıtları da silinecek. Emin misin?')) return;
+    if ((selLine.takes || []).length &&
+      !(await ask({ title: `${p.lines.indexOf(selLine) + 1}. satır silinsin mi?`, text: 'Satırın kayıtları da silinir.', ok: 'Sil', danger: true }))) return;
     api.del(P(p.id, `/lines/${selLine.id}`)).catch(toastError);
   };
 
@@ -284,15 +289,15 @@ export function ScriptView({ p }) {
         </section>
       </div>
       <section class="pane lines-pane">
-        <div class="pane-head"><h3>Senaryo</h3><span class="count">${p.lines.length} satır · ${recorded} kayıtlı</span><span class="grow"></span>
+        <div class="pane-head"><h3>Senaryo</h3><span class="count" title=${`${recorded} satırın kaydı var`}>${p.lines.length}</span><span class="grow"></span>
           <${Btn} small kind="ghost" icon="sparkle" onClick=${() => setModal('translate')}>Çevir</${Btn}>
-          <${Btn} small kind="ghost" icon="copy" onClick=${() => setModal('share')} title="Senaryoyu WhatsApp'tan göndermek için kopyala">Paylaş</${Btn}>
+          <${Btn} small kind="ghost" icon="copy" onClick=${() => setModal('share')} title="Senaryoyu WhatsApp'tan arkadaşına gönder">Gönder</${Btn}>
           <${Btn} small kind="primary" icon="mic" onClick=${() => go(`p/${p.id}/record`)}>Kayda geç</${Btn}></div>
         ${empty
           ? featureReady('speech')
-            ? html`<div class="empty"><h3>Bu sahnede konuşma bulunamadı</h3><p class="muted">Videoyu oynatıp “Satır ekle” ile replikleri kendin ekleyebilirsin.</p></div>`
-            : html`<div class="empty"><h3>Satırları sen yaz</h3><p class="muted">Videoyu oynat, bir replik başlayınca “Satır ekle”ye bas ve metni yaz. Kenarlarından sürükleyip süresini ayarlarsın.</p>
-                <${FeatureOffer} id="speech" text="Ekleyip sahneyi yeniden hazırlarsan satırlar kendiliğinden yazılır ve çevrilir." class="empty-offer" /></div>`
+            ? html`<div class="empty"><h3>Bu sahnede konuşma bulunamadı</h3><p class="muted">“Satır ekle” ile kendin ekleyebilirsin.</p></div>`
+            : html`<div class="empty"><h3>Satırları sen yaz</h3><p class="muted">Bir replik başlayınca “Satır ekle”ye bas ve metni yaz.</p>
+                <${FeatureOffer} id="speech" text="İndirip sahneyi yeniden hazırlarsan satırlar kendiliğinden yazılır." class="empty-offer" /></div>`
           : html`<div class="pane-scroll lines">${p.lines.map(
               (l, i) => html`<${LineRow} key=${l.id} p=${p} line=${l} idx=${i} selected=${l.id === sel} chars=${chars} onSelect=${select} onPlay=${playLine} />`
             )}</div>`}

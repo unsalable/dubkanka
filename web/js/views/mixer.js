@@ -5,7 +5,7 @@ import { buildMix, loadMixBuffers, player, takeSpan } from '../engine.js';
 import { FeatureOffer } from '../feature-ui.js';
 import { featureReady, go, jobOf, patchLocal, toast, toastError, useStore } from '../state.js';
 import { fitZoom, Timeline } from '../timeline.js';
-import { cls, db2gain, fmtTime, readyTake, selectedTake } from '../util.js';
+import { cls, db2gain, readyTake, selectedTake } from '../util.js';
 
 function MuteBtn({ muted, onClick, title = 'Sessize al' }) {
   return html`<button class=${cls('mutebtn', muted && 'on')} title=${title} aria-pressed=${!!muted} onClick=${onClick}>M</button>`;
@@ -34,8 +34,7 @@ function TakeInspector({ p, line, onChanged }) {
         options=${[...line.takes.map((x, i) => [x.id, `${String(i + 1).padStart(2, '0')} · ${x.by}${x.source === 'tts' ? ' (yapay zeka)' : ''}`]), ['', 'Hiçbiri (orijinal ses)']]} />
     </${Field}>`}
     ${!t
-      ? html`<p class="muted small">Bu satırın kaydı yok${p.mix.fillMissing ? '; orijinal ses çalıyor' : ''}. Karakter izindeki boş kutunun kenarlarından tutup satırı uzatabilir ya da kısaltabilirsin.</p>
-          <div class="kv"><span>Satır</span><span class="tc">${fmtTime(line.start, 2)} → ${fmtTime(line.end, 2)}</span></div>
+      ? html`<p class="muted small">Bu satırın kaydı yok.</p>
           <${Btn} small icon="mic" onClick=${() => go(`p/${p.id}/record/${line.id}`)}>Bu satırı kaydet</${Btn}>`
       : t.status !== 'ready'
       ? html`<p class="muted small">${t.status === 'error' ? 'Kayıt işlenemedi: ' + t.error : 'Kayıt işleniyor…'}</p>`
@@ -50,14 +49,14 @@ function TakeInspector({ p, line, onChanged }) {
         </div>
         <div class="kv"><span>Baştan / sondan kırpılan</span><span class="tc">${ms(t.trimIn || 0)} / ${ms(t.trimOut || 0)}</span></div>
         ${trimmed && html`<${Btn} small kind="ghost" icon="trim" onClick=${() => patch({ trimIn: 0, trimOut: 0 })}>Kırpmayı geri al</${Btn}>`}
-        <span class="field-hint">Kutuyu sürükleyerek kaydır; kenarlarından tutup baştan ya da sondan kırp.</span>
         <div class="seclabel">İşlem</div>
         ${t.recStart != null && html`<${Toggle} checked=${t.align !== 'recorded'} onChange=${(v) => patch({ align: v ? 'auto' : 'recorded' })} label="Başlangıcı orijinale hizala" />`}
         <${Toggle} checked=${!!t.fit} onChange=${(v) => patch({ fit: v })} label=${`Satır süresine sığdır${t.fit && t.tempo && t.tempo !== 1 ? ` (x${t.tempo})` : ''}`} />
         <${Toggle} checked=${t.matchLevel !== false} onChange=${(v) => patch({ matchLevel: v })} label="Seviyeyi orijinale eşitle" />
         <${Toggle} checked=${!!t.hpf} onChange=${(v) => patch({ hpf: v })} label="Alçak kesme 80 Hz" />
-        <${Toggle} checked=${!!t.denoise} disabled=${!t.denoise && !denoiseReady()} onChange=${(v) => patch({ denoise: v })}
-          label=${denoiseReady() ? 'Yapay zeka gürültü temizleme' : html`<span class="toggle-text">Yapay zeka gürültü temizleme<small>Ayarlar → Özellikler'den Kayıt temizleme'yi ekle</small></span>`} />
+        ${denoiseReady()
+          ? html`<${Toggle} checked=${!!t.denoise} onChange=${(v) => patch({ denoise: v })} label="Gürültü temizleme (DPDFNet)" />`
+          : html`<${FeatureOffer} id="cleanup" text="Bu kaydı yapay zekayla temizlemek için indir." class="inspector-offer" />`}
         <${Field} label="Ses efekti">
           <${Select} value=${t.effect || ''} onChange=${(v) => patch({ effect: v || null })} options=${[['', `Karakterinki (${(s.system?.effects || {})[c.effect || 'none'] || 'yok'})`], ...effects]} />
         </${Field}>
@@ -96,7 +95,7 @@ function TtsModal({ p, onClose }) {
     await api.post(P(p.id, '/tts'), { voices: pick }).catch(toastError);
   };
   return html`<${Modal} title="Boş satırları yapay zeka sesiyle doldur" onClose=${onClose}>
-    <p class="muted">Kaydı olmayan ${missing.length} satır için geçici bir ses (edge-tts, ücretsiz, internet gerekir) oluşturulur ve satır süresine sığdırılır. Arkadaşın kaydedince onun kaydı seçilir.</p>
+    <p class="muted">Kaydı olmayan ${missing.length} satır geçici bir yapay zeka sesiyle doldurulur. Biri kaydedince onun kaydı kullanılır.</p>
     ${p.characters.map((c) => html`<${Field} label=${html`<${Swatch} color=${c.color} /> ${c.name}`}>
       <${Select} value=${pick[c.id]} onChange=${(v) => setPick({ ...pick, [c.id]: v })} options=${voices} />
     </${Field}>`)}
@@ -178,7 +177,7 @@ export function MixerView({ p }) {
     if (!file) return;
     try {
       await upload(P(p.id, `/sfx?start=${Math.max(0, player.time).toFixed(3)}&filename=${encodeURIComponent(file.name)}`), file);
-      toast('Ses oynatma çizgisine eklendi; sürükleyerek taşıyabilirsin', 'ok');
+      toast('Ses eklendi', 'ok');
     } catch (e) {
       toastError(e);
     }
@@ -214,7 +213,7 @@ export function MixerView({ p }) {
       id: 'orig', label: trackTitle('#8c897f', 'Orijinal konuşma', 'fill'), height: 50, buffer: bufs && bufs.voices, waveColor: 'rgba(214,210,198,0.26)',
       clips: p.lines.map((l) => ({ id: 'o' + l.id, start: l.start, end: l.end, color: (chars.find((c) => c.id === l.char) || {}).color,
         label: `${lineNo(l)}`, dim: dubbed.has(l.id) || !mix.fillMissing, className: 'origclip', title: l.orig, resizable: true })),
-      controls: html`<div class="tl-ctrl"><${Toggle} checked=${mix.fillMissing} onChange=${(v) => { patchMix({ fillMissing: v }); restartIfPlaying(); }} label="Kaydı olmayan satırlarda çalsın" /></div>`,
+      controls: html`<div class="tl-ctrl"><${Toggle} checked=${mix.fillMissing} onChange=${(v) => { patchMix({ fillMissing: v }); restartIfPlaying(); }} label="Kaydı yoksa çalsın" /></div>`,
     }]),
     ...chars.map((c) => ({
       id: 'c' + c.id, label: trackTitle(c.color, c.name, 'char:' + c.id), color: c.color, height: 60, muted: c.mute,
@@ -296,19 +295,19 @@ export function MixerView({ p }) {
           <div class="pane-body">
             ${selLine ? html`<${TakeInspector} p=${p} line=${selLine} onChanged=${restartIfPlaying} />`
               : selSfx ? html`<${SfxInspector} p=${p} sfx=${selSfx} onChanged=${restartIfPlaying} />`
-              : html`<div class="inspector-empty"><${Icon} name="info" size=${16} /><span>Bir kutuya tıkla. Kayıtları sürükleyerek kaydır, kenarlarından kırp; kaydı olmayan satırların kutusunu uzatıp kısaltabilirsin.</span></div>`}
+              : html`<div class="inspector-empty"><span>Ayarlamak için zaman çizelgesinde bir kutuya tıkla.</span></div>`}
           </div>
           <div class="pane-body">
             <div class="seclabel">Miks</div>
             ${unsep && html`<div class="unsep">
-              <p class="small muted">Bu sahnede konuşmalar fondan ayrılmadı: orijinal ses dublajın altında kısılarak çalıyor.</p>
+              <p class="small muted">Bu sahnede konuşmalar fondan ayrılmadı.</p>
               ${featureReady('separate')
                 ? sepRunning
                   ? html`<${JobPanel} bare job=${sepJob} />`
                   : html`<${Btn} small icon="music" onClick=${() => api.post(P(p.id, '/separate')).catch(toastError)}>Konuşmaları fondan ayır</${Btn}>`
                 : html`<${FeatureOffer} id="separate" text="Ekleyince bu sahnede konuşmaları tek tıkla ayırırsın; satırlar ve kayıtlar olduğu gibi kalır." />`}
             </div>`}
-            <${Field} label=${html`${unsep ? 'Konuşurken orijinali kıs' : 'Konuşurken fonu kıs'} <span class="tc">${mix.duck || 0} dB</span>`} hint=${unsep ? 'Dublaj konuşurken orijinal ses bu kadar kısılır.' : 'Dublajı öne çıkarır; ortam sesleri de birlikte kısılır.'}>
+            <${Field} label=${html`${unsep ? 'Konuşurken orijinali kıs' : 'Konuşurken fonu kıs'} <span class="tc">${mix.duck || 0} dB</span>`}>
               <${Range} min=${0} max=${15} step=${1} value=${mix.duck || 0} onChange=${(v) => { patchMix({ duck: v }); restartIfPlaying(); }} />
             </${Field}>
             <${GainSlider} label="Tüm dublaj" value=${mix.dubGain || 0} onCommit=${(v) => { patchMix({ dubGain: v }); restartIfPlaying(); }} />
@@ -323,7 +322,6 @@ export function MixerView({ p }) {
               <select class="input" value=${c.effect || 'none'} onChange=${(e) => patchChar(c.id, { effect: e.target.value })}>
                 ${effects.map(([k, v]) => html`<option value=${k} selected=${(c.effect || 'none') === k}>${v}</option>`)}
               </select></div>`)}
-            <span class="field-hint">Efekt değişince o karakterin kayıtları yeniden işlenir.</span>
           </div>
         </div>
       </aside>

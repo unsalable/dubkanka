@@ -17,7 +17,6 @@ PREP_STEPS = [
 ]
 _WEIGHTS = {"cut": 0.08, "separate": 0.32, "transcribe": 0.36, "speakers": 0.11, "translate": 0.13}
 LITE_SR = 22050
-AUTO_MAX = 900  # longer videos wait on the scene picker: preparing a whole episode is rarely what anyone wants
 # Without the "separate" feature the scene's own audio stays under the dub, turned down while someone speaks (and the
 # original voice is already in it, so it is never added again for lines nobody recorded).
 SEPARATED_MIX = {"duck": 0.0, "fillMissing": True}
@@ -47,27 +46,13 @@ def set_source(pid, path, original_name, job=None):
     return info
 
 
-def auto_prepare(pid):
-    """Start preparing the whole video with automatic settings, right after it was imported. Returns the job or
-    None when the video is too long to guess the scene."""
-    from .jobs import jobs
-    info = store.get(pid)["source"]["info"]
-    if info["duration"] > AUTO_MAX:
-        return None
-    app = load_settings()
-    opts = {"start": 0.0, "end": info["duration"], "srcLang": "auto", "dstLang": app.get("defaultDstLang") or "en",
-            "speakers": 0, "translator": app.get("translator") or "google", "style": "natural"}
-    return jobs.submit("prepare", pid, "Sahne hazırlanıyor", lambda j: run_prepare(j, pid, opts), steps=PREP_STEPS)
-
-
-def run_import_file(job, pid, path, original_name, auto=False):
+def run_import_file(job, pid, path, original_name):
+    # the scene picker opens next: the part to dub is always chosen before anything is prepared
     set_source(pid, path, original_name, job)
-    # queued before this job ends, so the page goes straight from "reading" to "preparing"
-    prep = auto_prepare(pid) if auto else None
-    return {"projectId": pid, "autoPrepare": bool(prep)}
+    return {"projectId": pid}
 
 
-def run_import_url(job, pid, url, auto=False):
+def run_import_url(job, pid, url):
     import yt_dlp
 
     d = store.dir(pid)
@@ -104,8 +89,7 @@ def run_import_url(job, pid, url, auto=False):
     title = (info or {}).get("title") or "Video"
     store.mutate(pid, lambda p: p.update(name=p["name"] if p["name"] != "Yeni proje" else title[:60]))
     set_source(pid, files[0], title, job)
-    prep = auto_prepare(pid) if auto else None
-    return {"projectId": pid, "autoPrepare": bool(prep)}
+    return {"projectId": pid}
 
 
 def _stepper(job, base, key):

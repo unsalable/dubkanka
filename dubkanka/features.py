@@ -39,24 +39,24 @@ STATE = HOME / "features.json"
 FEATURES = {
     "speech": {
         "name": "Yazıya dökme ve çeviri",
-        "summary": "Kim ne zaman ne diyor bulunur; satırlar kendiliğinden yazılır, kişilere bölünür ve çevrilir.",
+        "summary": "Satırlar kendiliğinden yazılır, kişilere bölünür ve çevrilir.",
         "packages": ["faster-whisper", "sherpa-onnx"], "modules": ["faster_whisper", "ctranslate2", "sherpa_onnx"],
         "models": ["whisper", "diarize"], "mb": 95,
     },
     "separate": {
         "name": "Müziği ve efektleri koru",
-        "summary": "Orijinal konuşmalar çıkarılır; müzik, efektler ve ortam sesleri dublajın altında kalır.",
+        "summary": "Orijinal konuşmalar çıkar; müzik ve efektler dublajın altında kalır.",
         "packages": ["demucs", "sherpa-onnx"], "modules": ["torch", "demucs", "sherpa_onnx"], "torch": True,
         "models": ["demucs", "denoise"], "mb": 45,
     },
     "room": {
         "name": "Arkadaşlarla oda",
-        "summary": "Arkadaşların bir linkle telefondan ya da tarayıcıdan katılır, kendi rolünü kaydeder.",
+        "summary": "Arkadaşların linkle telefondan katılıp kendi rolünü kaydeder.",
         "tools": ["cloudflared"],
     },
     "cleanup": {
-        "name": "Kayıt temizleme",
-        "summary": "Kayıtlardaki oda gürültüsü, uğultu ve fan sesi yapay zekayla silinir.",
+        "name": "Kayıt temizleme (DPDFNet)",
+        "summary": "Kayıtlardaki oda gürültüsü ve fan sesi yapay zekayla silinir.",
         "packages": ["sherpa-onnx"], "modules": ["sherpa_onnx"], "models": ["denoise"], "mb": 20,
     },
 }
@@ -365,7 +365,7 @@ def install(ids):
             _save_state(s)
         if ready(fid):
             continue
-        started.append(jobs.submit("feature", None, f"{FEATURES[fid]['name']} ekleniyor",
+        started.append(jobs.submit("feature", None, f"{FEATURES[fid]['name']} indiriliyor",
                                    lambda j, fid=fid: run_install(j, fid), meta={"feature": fid}, pool="setup"))
     bus.notify()
     return started

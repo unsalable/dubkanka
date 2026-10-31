@@ -9,6 +9,8 @@
    Nothing on a page animates by itself while the page arrives, and only live work loops. */
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes fade { from { opacity: 0; } }
+@keyframes fade-out { to { opacity: 0; } }
+@keyframes dialog-out { to { opacity: 0; transform: scale(calc(1 - 0.03 * var(--mv))); } }
 @keyframes rise { from { opacity: 0; transform: translateY(calc(8px * var(--mv))); } }
 @keyframes drop { from { opacity: 0; transform: translateY(calc(-6px * var(--mv))); } }
 @keyframes line-in { from { opacity: 0; transform: translateY(calc(10px * var(--mv))); } }
@@ -19,7 +21,7 @@
 @keyframes life { from { transform: scaleX(1); } to { transform: scaleX(0); } }
 @keyframes take-in { from { opacity: 0; transform: translateY(calc(-8px * var(--mv))); } }
 @keyframes flip-in { from { opacity: 0; transform: perspective(300px) rotateX(calc(-80deg * var(--mv))); } }
-@keyframes swipe { from { clip-path: inset(0 100% 0 0); } }
+@keyframes dot-in { from { opacity: 0; transform: scale(calc(1 - 0.6 * var(--mv))); } }
 @keyframes draw { to { stroke-dashoffset: 0; } }
 @keyframes blink { 50% { opacity: 0.25; } }
 @keyframes breathe { 50% { opacity: 0.55; } }
@@ -29,19 +31,29 @@
 @keyframes online { 0%, 100% { box-shadow: 0 0 0 0 rgba(61, 214, 140, 0.45); } 60% { box-shadow: 0 0 0 4px rgba(61, 214, 140, 0); } }
 @keyframes recpulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255, 59, 48, 0.45); } 60% { box-shadow: 0 0 0 10px rgba(255, 59, 48, 0); } }
 @keyframes cue { from { opacity: 0; transform: translate(-50%, calc(-8px * var(--mv))) scale(calc(1 - 0.1 * var(--mv))); } }
-@keyframes vt-out { to { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * -20px * var(--mv))); } }
-@keyframes vt-in { from { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * 20px * var(--mv))); } }
+@keyframes vt-out { to { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * -24px * var(--mv))); } }
+@keyframes vt-in { from { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * 36px * var(--mv))); } }
+@keyframes vs-out { to { opacity: 0; transform: translateY(calc(var(--vt-dir, 1) * -12px * var(--mv))); } }
+@keyframes vs-in { from { opacity: 0; transform: translateY(calc(var(--vt-dir, 1) * 22px * var(--mv))); } }
 
 /* Page changes. Old and new page run on the same clock and curve, so their opacities always add up to one: whatever
-   both pages share (the settings sidebar, a pane's edge) stays solid and the window never shows through. Inside one
-   place --vt-dir is 0 and the content only crossfades. The video picture glides to its new spot on the same clock. */
+   both pages share (a pane's edge) stays solid and the window never shows through. The curve is gentler than the
+   control curve so the slide is seen, not just a blink. The video picture glides to its new spot on the same clock. */
 ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
-::view-transition-old(page) { animation: vt-out var(--t-page) var(--ease-out) both; }
-::view-transition-new(page) { animation: vt-in var(--t-page) var(--ease-out) both; }
-::view-transition-group(viewer) { animation-duration: var(--t-page); animation-timing-function: var(--ease-out); }
+::view-transition-old(page) { animation: vt-out var(--t-page) var(--ease-page) both; }
+::view-transition-new(page) { animation: vt-in var(--t-page) var(--ease-page) both; }
+::view-transition-group(viewer) { animation-duration: var(--t-page); animation-timing-function: var(--ease-page); }
 ::view-transition-old(viewer), ::view-transition-new(viewer) { height: 100%; object-fit: cover; }
-::view-transition-group(topbar) { animation-duration: 0s; }
+/* the top bar never moves, and stays above anything that slides under it */
+::view-transition-group(topbar) { animation-duration: 0s; z-index: 2; }
 html[data-motion='reduced'] ::view-transition-group(viewer) { animation-duration: 0s; }
+/* Another settings page: the sidebar stays put while its pill slides to the new row (CSS, settings.css), and the body
+   slides in from the side of the list the page lies on: from below going down the list, from above going up. */
+html[data-vt='settings'] .main { view-transition-name: none; }
+html[data-vt='settings'] .set-body { view-transition-name: setbody; }
+::view-transition-old(setbody) { animation: vs-out var(--t-page) var(--ease-page) both; }
+::view-transition-new(setbody) { animation: vs-in var(--t-page) var(--ease-page) both; }
+::view-transition-group(setbody) { animation-duration: 0s; }
 
 /* "Kapalı": nothing moves except what reports live work (spinners, recording) */
 html[data-motion='off'] *, html[data-motion='off'] *::before, html[data-motion='off'] *::after {

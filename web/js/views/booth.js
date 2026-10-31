@@ -2,12 +2,12 @@
 // takes, instant review. The side holds the roles, the line list and the booth settings (microphone, processing).
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P, upload } from '../api.js';
-import { Btn, Field, Icon, Kbd, Lamp, LevelMeter, Modal, PlayButton, Range, Segmented, Select, Toggle, VideoPane, VolumeControl } from '../components.js';
+import { Btn, Field, Icon, Lamp, LevelMeter, Modal, PlayButton, Range, Segmented, Select, Toggle, VideoPane, VolumeControl } from '../components.js';
 import { buildMix, engine, loadMixBuffers, player, stemUrls, takeUrl } from '../engine.js';
-import { listMics, micPrefs, onMicPrefs, recorder, setMicPref } from '../recorder.js';
+import { listMics, micPrefs, NOISE_ENGINES, onMicPrefs, recorder, setMicPref } from '../recorder.js';
 import { FeatureOffer } from '../feature-ui.js';
-import { featureReady, toast, toastError, useStore } from '../state.js';
-import { clamp, cls, db2gain, drawWave, encodeWav, LS, selectedTake, sleep, syllables, timeAgo } from '../util.js';
+import { ask, featureReady, toast, toastError, useStore } from '../state.js';
+import { clamp, cls, db2gain, drawWave, encodeWav, LS, revealInList, selectedTake, sleep, syllables, timeAgo } from '../util.js';
 
 // bed: level of the background (music, effects, ambience) under everything the booth plays; guide: the original
 // dialogue in your ears while you record. Both 0..1, set from the listening strip under the controls.
@@ -18,7 +18,7 @@ const RING = 2 * Math.PI * 60;
 /** Dub text as words that light up in turn: each word gets a share of the line in proportion to its syllables. */
 function CueText({ line }) {
   const words = (line.text || '').split(/\s+/).filter(Boolean);
-  if (!words.length) return html`<em class="dim">Dublaj metni boş. Orijinali okuyabilir ya da doğaçlama yapabilirsin.</em>`;
+  if (!words.length) return html`<em class="dim">Dublaj metni boş.</em>`;
   const weights = words.map((w) => Math.max(1, syllables(w)));
   const total = weights.reduce((a, b) => a + b, 0);
   const dur = line.end - line.start;
@@ -65,9 +65,12 @@ function RhythmLane({ line, buffer, t0, t1, color }) {
 }
 
 function TakeList({ p, line, me, guest, onPlay }) {
-  if (!line.takes || !line.takes.length) return html`<div class="takes-empty dim">Bu satır için henüz kayıt yok. <${Kbd}>Boşluk</${Kbd}> ile ilkini al.</div>`;
+  if (!line.takes || !line.takes.length) return html`<div class="takes-empty dim">Henüz kayıt yok.</div>`;
   const sel = (tid) => api.post(P(p.id, `/lines/${line.id}/select`), { take: tid }).catch(toastError);
-  const del = (t) => confirm('Bu kayıt silinsin mi?') && api.del(P(p.id, `/lines/${line.id}/takes/${t.id}`)).catch(toastError);
+  const del = async (t, n) => {
+    if (await ask({ title: `${n}. kayıt silinsin mi?`, text: `${t.by} · ${timeAgo(t.created)}`, ok: 'Sil', danger: true }))
+      api.del(P(p.id, `/lines/${line.id}/takes/${t.id}`)).catch(toastError);
+  };
   return html`<div class="takes">${[...line.takes].reverse().map((t, i) => {
     const n = line.takes.length - i;
     const mine = !guest || t.by === me;
@@ -80,7 +83,7 @@ function TakeList({ p, line, me, guest, onPlay }) {
       <div class="take-info"><strong>${t.by}</strong><span class="dim small">${timeAgo(t.created)}${t.source === 'tts' ? ' · yapay zeka' : t.source === 'upload' ? ' · dosya' : ''}${t.denoise ? ' · temizlendi' : ''}</span></div>
       ${label && html`<${Lamp} tone=${tone}>${label}</${Lamp}>`}
       ${line.take === t.id ? html`<${Lamp} tone="ok">seçili</${Lamp}>` : html`<${Btn} small kind="ghost" onClick=${() => sel(t.id)} disabled=${t.status !== 'ready'}>Kullan</${Btn}>`}
-      ${mine && html`<button class="iconbtn" title="Sil" onClick=${() => del(t)}><${Icon} name="trash" size=${15} /></button>`}
+      ${mine && html`<button class="iconbtn" title="Sil" onClick=${() => del(t, n)}><${Icon} name="trash" size=${15} /></button>`}
     </div>`;
   })}</div>`;
 }
@@ -179,6 +182,7 @@ function BoothSettings({ settings, set, guest, name, setName, onTestRec, testing
   };
   const toggleTest = () => (recorder.ready ? recorder.close() : recorder.open().catch(toastError));
   const headset = info ? info.headset : (mics.find((m) => m.id === pr.deviceId) || {}).headset;
+  const cleanOk = canClean(guest);
   return html`<div class="boothsettings">
     <div class="seclabel">Mikrofon</div>
     ${!guest && html`<${Field} label="Kaydı yapan"><input class="input" value=${name} onInput=${(e) => setName(e.target.value)} /></${Field}>`}
@@ -190,41 +194,47 @@ function BoothSettings({ settings, set, guest, name, setName, onTestRec, testing
       <${Btn} small kind=${open ? 'primary' : ''} icon=${open ? 'stop' : 'mic'} onClick=${toggleTest}>${open ? 'Testi durdur' : 'Mikrofonu test et'}</${Btn}>
       <${LevelMeter} />
     </div>
-    ${info && html`<div class="mic-info mono">${Math.round(info.sampleRate / 100) / 10} kHz · ${info.channels === 1 ? 'mono' : info.channels + ' kanal'} · ${info.echo || info.noise || info.agc ? [info.echo && 'yankı eng.', info.noise && 'gürültü bast.', info.agc && 'oto kazanç'].filter(Boolean).join(', ') : 'işlemsiz'}</div>`}
-    ${headset && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />Bluetooth kulaklık mikrofonu telefon kalitesinde (16 kHz) kaydeder, ses boğuk çıkar. Kablolu ya da USB mikrofon seç.</div>`}
+    ${headset && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />Bluetooth kulaklık mikrofonu sesi boğuk kaydeder. Kablolu ya da USB mikrofon seç.</div>`}
     <${Toggle} checked=${pr.monitor} onChange=${(v) => { setMicPref('monitor', v); setPr(micPrefs()); recorder.setMonitor(v); if (v && !recorder.ready) recorder.open().catch(toastError); }}
-      label=${html`<span class="toggle-text">Kendimi duy<small>Sesin kulaklığına gelir. Hoparlörle açma, çınlar.</small></span>`} />
+      label=${html`<span class="toggle-text">Kendimi duy<small>Sadece kulaklıkla.</small></span>`} />
     ${pr.monitor && html`<${Field} label=${`Dinleme seviyesi: %${Math.round(pr.monitorGain * 100)}`}>
       <${Range} min=${0} max=${1.5} step=${0.05} value=${pr.monitorGain} onInput=${(v) => { setMicPref('monitorGain', v); setPr(micPrefs()); recorder.setMonitor(true, v); }} />
     </${Field}>`}
     <${Btn} small icon=${testing ? 'stop' : 'rec'} kind=${testing ? 'rec' : ''} onClick=${onTestRec} disabled=${testing}>${testing ? 'Kaydediliyor… 5 sn' : '5 sn deneme kaydı al ve dinle'}</${Btn}>
 
-    <div class="seclabel">Ses işleme</div>
-    <${Toggle} checked=${pr.raw} onChange=${(v) => change('raw', v)} label=${html`<span class="toggle-text">Saf ses<small>Tarayıcı sese dokunmaz. Kulaklıkla en temiz kayıt budur.</small></span>`} />
-    <div class=${cls('subtoggles', pr.raw && 'off')}>
-      <${Toggle} disabled=${pr.raw} checked=${!pr.raw && pr.echoCancellation} onChange=${(v) => change('echo', v)} label="Yankı engelleme (hoparlörle kayıtta)" />
-      <${Toggle} disabled=${pr.raw} checked=${!pr.raw && pr.noiseSuppression} onChange=${(v) => change('noise', v)} label="Gürültü bastırma (tarayıcı)" />
-      <${Toggle} disabled=${pr.raw} checked=${!pr.raw && pr.autoGainControl} onChange=${(v) => change('agc', v)} label="Otomatik kazanç" />
-    </div>
-    <${Toggle} checked=${pr.hpf} onChange=${(v) => change('hpf', v, false)} label=${html`<span class="toggle-text">Alçak kesme 80 Hz<small>Masa vuruşu, uğultu ve "p" patlamalarını alır, sesi boğmaz.</small></span>`} />
-    ${guest || featureReady('cleanup') || featureReady('separate')
-      ? html`<${Toggle} checked=${pr.denoise} onChange=${(v) => change('denoise', v, false)} label=${html`<span class="toggle-text">Yapay zeka gürültü temizleme<small>Kayıttan sonra DPDFNet ile oda gürültüsü ve fan sesi silinir.</small></span>`} />`
-      : html`<${FeatureOffer} id="cleanup" text="Kayıttan sonra oda gürültüsü ve fan sesi yapay zekayla silinir." />`}
+    <div class="seclabel">Gürültü engelleme</div>
+    <div class="noise-pick"><${Segmented} value=${pr.noise} onChange=${(v) => change('ns', v)} options=${NOISE_ENGINES} /></div>
+    <p class="noise-note">${NOISE_NOTE[pr.noise]}</p>
+    ${pr.noise === 'dpdfnet' && !cleanOk && html`<${FeatureOffer} id="cleanup" text="DPDFNet için bunu indirmen gerekiyor. O zamana kadar Standart kullanılır." />`}
+    ${pr.noise === 'rnnoise' && open && info && info.noise !== 'rnnoise' && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />
+      RNNoise açılamadı; ${info.noise === 'standard' ? 'Standart kullanılıyor.' : 'ses işlenmeden kaydediliyor.'}</div>`}
+    <${Toggle} checked=${pr.echoCancellation} onChange=${(v) => change('ec', v)} label="Yankı engelleme" />
+    <${Toggle} checked=${pr.autoGainControl} onChange=${(v) => change('agc', v)} label="Otomatik kazanç" />
+    <${Toggle} checked=${pr.hpf} onChange=${(v) => change('hpf', v, false)} label="Alçak kesme 80 Hz" />
 
     <div class="seclabel">Kayıt</div>
-    <${Field} label="Geri sayım" hint="Fon ve orijinal sesin seviyesi kayıt düğmesinin altında.">
+    <${Field} label="Geri sayım">
       <${Select} value=${String(settings.preroll)} onChange=${(v) => set('preroll', Number(v))} options=${[['1', '1 sn'], ['2', '2 sn'], ['3', '3 sn'], ['4', '4 sn']]} />
     </${Field}>
-    <${Toggle} checked=${settings.streamer} onChange=${(v) => set('streamer', v)} label="Akış çizgisi (ekranda girişe kayan çizgi)" />
+    <${Toggle} checked=${settings.streamer} onChange=${(v) => set('streamer', v)} label="Akış çizgisi" />
     <${Toggle} checked=${settings.beeps} onChange=${(v) => set('beeps', v)} label="3 bip" />
     <${Toggle} checked=${settings.autoStop} onChange=${(v) => set('autoStop', v)} label="Satır bitince kaydı durdur" />
     <${Toggle} checked=${settings.autoReview} onChange=${(v) => set('autoReview', v)} label="Kayıttan sonra dinlet" />
     <${Toggle} checked=${settings.align === 'auto'} onChange=${(v) => set('align', v ? 'auto' : 'recorded')} label="Konuşmayı orijinal girişe hizala" />
-    <${Field} label=${html`Gecikme düzeltme <span class="tc">${pr.latencyMs} ms</span>`} hint="Kayıtlar hep geç oturuyorsa artır (Bluetooth: 150-250 ms).">
+    <${Field} label=${html`Gecikme düzeltme <span class="tc">${pr.latencyMs} ms</span>`} hint="Kayıtlar hep geç oturuyorsa artır.">
       <${Range} min=${-200} max=${400} step=${10} value=${pr.latencyMs} onInput=${(v) => change('latency', v, false)} />
     </${Field}>
   </div>`;
 }
+
+const NOISE_NOTE = {
+  standard: 'Tarayıcının kendi gürültü bastırması.',
+  rnnoise: 'Canlı yapay zeka: fan ve uğultu kayıt sırasında silinir.',
+  dpdfnet: 'En temiz sonuç: kayıt bitince yapay zekayla temizlenir.',
+  off: 'Ses olduğu gibi kaydedilir.',
+};
+// DPDFNet comes with "Kayıt temizleme" (or "Müziği koru", which uses it too); a guest's takes are cleaned by the host
+const canClean = (guest) => guest || featureReady('cleanup') || featureReady('separate');
 
 const WHATSAPP = /^(PTT|AUD|VID|WA)[-_]|WA\d{4}/i;
 /** Line number hidden in a file name: "3.m4a", "satır 3", "Ali 12"; WhatsApp's own names carry none. */
@@ -262,7 +272,7 @@ function BulkDialog({ p, files, name, onClose }) {
       }
     }
     setBusy(false);
-    if (ok) toast(`${ok} kayıt eklendi; sessizlikler kesilip her biri kendi yerine hizalanıyor.`, 'ok');
+    if (ok) toast(`${ok} kayıt eklendi`, 'ok');
   };
   const opts = [['', 'Atla'], ...p.lines.map((l, i) => [String(i + 1), `${i + 1}. ${(p.characters.find((c) => c.id === l.char) || {}).name || ''} · ${(l.text || l.orig || '').slice(0, 40)}`])];
   const assigned = plan.filter((x) => x.line).length;
@@ -322,6 +332,13 @@ export function BoothView({ p, guest = false }) {
   const chars = Object.fromEntries(p.characters.map((c) => [c.id, c]));
   const c = line ? chars[line.char] : null;
   const roomOpen = s.room && s.room.status === 'on' && (guest || s.room.projectId === p.id);
+  // DPDFNet picked but not downloaded: the microphone uses the browser's suppression until it is
+  const cleanOk = canClean(guest);
+  useEffect(() => {
+    if (recorder.canClean === cleanOk) return;
+    recorder.canClean = cleanOk;
+    if (recorder.ready && micPrefs().noise === 'dpdfnet') recorder.open(true).catch(() => {});
+  }, [cleanOk]);
 
   useEffect(() => {
     let alive = true;
@@ -472,7 +489,7 @@ export function BoothView({ p, guest = false }) {
     setPhase('upload');
     try {
       const q = `?recStart=${recStart.toFixed(4)}&source=booth&align=${settings.align}&by=${encodeURIComponent(name || 'Ben')}` +
-        `&hpf=${pr.hpf ? 1 : 0}&denoise=${pr.denoise ? 1 : 0}`;
+        `&hpf=${pr.hpf ? 1 : 0}&denoise=${recorder.noiseEngine(pr) === 'dpdfnet' ? 1 : 0}`;
       const r = await upload(P(p.id, `/lines/${info.lineId}/takes${q}`), encodeWav(rec.samples, rec.sampleRate));
       pending.current = { takeId: r.takeId, lineId: info.lineId };
       setPhase('process');
@@ -532,8 +549,7 @@ export function BoothView({ p, guest = false }) {
     setPhase(pending.current ? 'process' : 'idle');
     setLineId(l.id);
     player.seek(Math.max(0, l.start - 0.2));
-    const el = document.getElementById('bl-' + l.id);
-    if (el) el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    revealInList(document.getElementById('bl-' + l.id));
   };
   const next = () => idx + 1 < lines.length && goTo(lines[idx + 1]);
   const prev = () => idx > 0 && goTo(lines[idx - 1]);
@@ -685,10 +701,6 @@ export function BoothView({ p, guest = false }) {
           </div>
         </div>
         <${Listening} settings=${settings} setLevel=${setLevel} />
-        <div class="booth-hint">
-          <span><${Kbd}>Boşluk</${Kbd}> kaydet</span><span><${Kbd}>K</${Kbd}> oynat</span><span><${Kbd}>P</${Kbd}> orijinal</span>
-          <span><${Kbd}>L</${Kbd}> kaydım</span><span><${Kbd}>Enter</${Kbd}> sonraki</span><span><${Kbd}>Esc</${Kbd}> durdur</span>
-        </div>
       </section>
       ${line && html`<section class="pane takes-pane">
         <div class="pane-head"><h3>Kayıtlar</h3><span class="count">${(line.takes || []).length}</span><span class="grow"></span>

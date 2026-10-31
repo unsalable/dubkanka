@@ -1,6 +1,6 @@
 import { html, render, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { api, P } from './api.js';
-import { Icon, Toasts, useIndicator } from './components.js';
+import { Dialog, Icon, Toasts, useIndicator } from './components.js';
 import { desktop, useUpdate } from './desktop.js';
 import { player } from './engine.js';
 import { backFromRoom, backFromSettings, go, openProject, setState, startWatch, store, toastError, useStore } from './state.js';
@@ -147,7 +147,7 @@ function App() {
     return html`<div class="boot error"><img class="boot-mark" src="/web/icon.svg" alt="" />${s.bootError}
       <button class="btn" onClick=${() => location.reload()}>Tekrar dene</button></div>`;
   if (!s.role) return html`<div class="boot"><img class="boot-mark" src="/web/icon.svg" alt="" />Bağlanıyor…</div>`;
-  if (s.role !== 'host') return html`<${GuestApp} /><${Toasts} />`;
+  if (s.role !== 'host') return html`<${GuestApp} /><${Toasts} /><${Dialog} />`;
   // nothing until the system info is here: a first start must open on the feature picker, not flash the home page
   if (!s.system) return html`<div class="boot"><img class="boot-mark" src="/web/icon.svg" alt="" />Açılıyor…</div>`;
   const [a, b, c] = s.route;
@@ -156,7 +156,7 @@ function App() {
   else if (a === 'p' && b) view = html`<${ProjectShell} pid=${b} tab=${c} />`;
   else if (a === 'settings') view = html`<${Shell}><${SettingsView} page=${b} /></${Shell}>`;
   else view = html`<${Shell}><${HomeView} /></${Shell}>`;
-  return html`${view}<${Toasts} />${!s.online && html`<div class="offline" role="alert"><${Icon} name="alert" size=${16} />
+  return html`${view}<${Toasts} /><${Dialog} />${!s.online && html`<div class="offline" role="alert"><${Icon} name="alert" size=${16} />
     Uygulamayla bağlantı koptu. DubKanka açık mı?</div>`}`;
 }
 

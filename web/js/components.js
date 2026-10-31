@@ -86,6 +86,57 @@ export function Toasts() {
   )}</div>`;
 }
 
+/** The question of ask() (state.js): a card in the app, never a system window. Enter answers, Esc or a click outside
+ *  cancels, and while it is open the screen's own shortcuts (Space records in the booth) stay quiet. */
+export function Dialog() {
+  const s = useStore();
+  const d = s.dialog;
+  const [val, setVal] = useState('');
+  const okBtn = useRef(null);
+  const noBtn = useRef(null);
+  const field = useRef(null);
+  const typed = d && d.input != null;
+  const cancel = () => d && d.close(typed ? null : false);
+  useEffect(() => {
+    if (!d || d.leaving) return;
+    const back = document.activeElement;
+    setVal(d.input || '');
+    // a destructive question starts on "Vazgeç": Enter alone never deletes anything
+    requestAnimationFrame(() => {
+      const el = typed ? field.current : d.danger ? noBtn.current : okBtn.current;
+      if (el) {
+        el.focus();
+        if (typed) el.select();
+      }
+    });
+    const key = (e) => {
+      e.stopPropagation(); // the default actions (typing, Enter on the focused button) still happen
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        d.close(typed ? null : false);
+      }
+    };
+    addEventListener('keydown', key, true);
+    return () => {
+      removeEventListener('keydown', key, true);
+      if (back && back.isConnected && back.focus) back.focus({ preventScroll: true });
+    };
+  }, [d && d.close, d && d.leaving]);
+  if (!d) return null;
+  return html`<div class=${cls('dialog-bg', d.leaving && 'leaving')} onMouseDown=${(e) => e.target === e.currentTarget && cancel()}>
+    <form class="dialog" role="alertdialog" aria-modal="true" aria-labelledby="dk-dialog-title"
+      onSubmit=${(e) => { e.preventDefault(); d.close(typed ? val : true); }}>
+      <h3 id="dk-dialog-title">${d.title}</h3>
+      ${d.text && html`<p>${d.text}</p>`}
+      ${typed && html`<input ref=${field} class="input" value=${val} onInput=${(e) => setVal(e.target.value)} />`}
+      <div class="dialog-actions">
+        <button type="button" class="btn" ref=${noBtn} onClick=${cancel}>${d.cancel}</button>
+        <button type="submit" ref=${okBtn} class=${cls('btn', d.danger ? 'btn-destroy' : 'btn-primary')}>${d.ok}</button>
+      </div>
+    </form>
+  </div>`;
+}
+
 /** Renders children into a layer on <body>: menus and popovers are never clipped by a scrolling pane. */
 export function Portal({ children }) {
   const host = useRef(null);
@@ -234,8 +285,8 @@ export function GainSlider({ value, onInput, onCommit, min = -24, max = 12, step
   </div>`;
 }
 
-/** Slide an indicator under the active child of a container (tabs, segmented controls). */
-export function useIndicator(box, ind, selector, deps) {
+/** Slide an indicator under the active child of a container (tabs, segmented controls; a vertical list with 'y'). */
+export function useIndicator(box, ind, selector, deps, axis = 'x') {
   useLayoutEffect(() => {
     const place = () => {
       const b = box.current;
@@ -247,8 +298,13 @@ export function useIndicator(box, ind, selector, deps) {
         return;
       }
       i.style.opacity = '1';
-      i.style.width = a.offsetWidth + 'px';
-      i.style.transform = `translateX(${a.offsetLeft}px)`;
+      if (axis === 'y') {
+        i.style.height = a.offsetHeight + 'px';
+        i.style.transform = `translateY(${a.offsetTop}px)`;
+      } else {
+        i.style.width = a.offsetWidth + 'px';
+        i.style.transform = `translateX(${a.offsetLeft}px)`;
+      }
       // first placement without animation, every later move glides
       if (!i.classList.contains('ready')) requestAnimationFrame(() => i.classList.add('ready'));
     };

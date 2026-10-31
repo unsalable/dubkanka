@@ -26,7 +26,6 @@
 .xdisclose .icon { transition: transform var(--t) var(--ease-out); }
 .xdisclose.open .icon { transform: rotate(90deg); }
 .xstyle { margin-top: 8px; padding: 14px 14px 4px; border-radius: var(--r); background: var(--panel-2); border: 1px solid var(--line); animation: drop var(--t) var(--ease-out); }
-.xrec { font: 600 10.5px var(--font); color: var(--accent); margin-left: 4px; }
 
 /* the shapes: what the output frame looks like */
 .formats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
@@ -45,7 +44,7 @@
 .presets { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 
 /* technical settings: one row that opens, everything technical behind it */
-.xadv { margin: 10px 6px 4px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel-2); overflow: hidden; }
+.xadv { margin: 10px 6px 4px; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel-2); overflow: clip; }
 .xadv-head { display: flex; align-items: center; gap: 12px; width: 100%; padding: 13px 14px; border: 0; background: transparent; color: var(--text-2); font: inherit; text-align: left;
   cursor: pointer; transition: background-color var(--t-fast); }
 .xadv-head:hover { background: rgba(255, 250, 235, 0.03); }
@@ -60,6 +59,7 @@
 .xadv-body .seclabel { margin-top: 16px; }
 .srcinfo { margin-top: 16px; }
 .srcinfo .srcline { margin: 3px 0; }
+.srcinfo .lamp { white-space: normal; align-items: baseline; }
 
 .export-side { min-width: 0; }
 .fp { flex: 1; display: flex; flex-direction: column; min-height: 0; }

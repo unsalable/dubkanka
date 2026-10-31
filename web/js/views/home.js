@@ -1,7 +1,7 @@
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P, upload } from '../api.js';
-import { Btn, Icon, Lamp, Popover, Progress, Select, Toggle } from '../components.js';
-import { closeProject, featureReady, go, openProject, setState, toastError, useStore } from '../state.js';
+import { Btn, Icon, Lamp, Popover, Progress } from '../components.js';
+import { ask, closeProject, go, openProject, toastError, useStore } from '../state.js';
 import { cls, fmtTime, timeAgo } from '../util.js';
 
 const VIDEO_EXT = /\.(mp4|mkv|mov|webm|m4v|avi|flv|wmv|ts|mts|3gp)$/i;
@@ -59,7 +59,6 @@ function ProjectRow({ p, i, onDelete }) {
 export function HomeView() {
   const s = useStore();
   const sys = s.system;
-  const st = (sys && sys.settings) || {};
   const [projects, setProjects] = useState(null);
   const [up, setUp] = useState(null);
   const [url, setUrl] = useState('');
@@ -70,21 +69,14 @@ export function HomeView() {
     closeProject();
     load();
   }, []);
-  const auto = st.autoPrepare !== false;
-  const saveSetting = async (patch) => {
-    try {
-      setState({ system: { ...sys, settings: await api.post('/api/settings', patch) } });
-    } catch (e) {
-      toastError(e);
-    }
-  };
 
+  // a new video always opens on the scene picker: the part to dub is chosen before anything is prepared
   const onFile = async (file) => {
     if (!file || up) return;
     setUp({ name: file.name, progress: 0 });
     try {
       const base = file.name.replace(/\.[^.]+$/, '');
-      const q = `filename=${encodeURIComponent(file.name)}&name=${encodeURIComponent(base)}&auto=${auto ? 1 : 0}`;
+      const q = `filename=${encodeURIComponent(file.name)}&name=${encodeURIComponent(base)}`;
       const r = await upload(`/api/projects/upload?${q}`, file, (f) => setUp({ name: file.name, progress: f }));
       go(`p/${r.project.id}/prepare`);
     } catch (e) {
@@ -118,27 +110,24 @@ export function HomeView() {
       window.removeEventListener('dragover', over);
       window.removeEventListener('drop', drop);
     };
-  }, [up, auto]);
+  }, [up]);
 
   const onUrl = async (e) => {
     e.preventDefault();
     if (!url.trim()) return;
     try {
-      const r = await api.post('/api/projects/url', { url: url.trim(), auto });
+      const r = await api.post('/api/projects/url', { url: url.trim() });
       go(`p/${r.project.id}/prepare`);
     } catch (err) {
       toastError(err);
     }
   };
   const del = async (p) => {
-    if (!confirm(`"${p.name}" projesi ve tüm kayıtları silinsin mi?`)) return;
+    const ok = await ask({ title: 'Proje silinsin mi?', text: `“${p.name}” ve içindeki bütün kayıtlar silinir. Bu geri alınamaz.`, ok: 'Projeyi sil', danger: true });
+    if (!ok) return;
     await api.del(P(p.id)).catch(toastError);
     load();
   };
-  const tr = ((sys && sys.translators) || []).find((t) => t.id === (st.translator || 'google'));
-  // what "prepare on drop" will do with the features this PC has
-  const autoText = [featureReady('separate') ? 'Konuşmalar fondan ayrılır' : 'Sahne kesilir',
-    featureReady('speech') ? 'yazıya dökülür ve çevrilir' : 'satırları sen eklersin'].join(', ');
 
   return html`<div class="page home">
     ${sys && !sys.ffmpeg && html`<div class="alert error"><${Icon} name="alert" /> ffmpeg bulunamadı. Kurulumu onarıp uygulamayı yeniden aç.</div>`}
@@ -151,30 +140,16 @@ export function HomeView() {
           ? html`<div class="dw-up">
               <div class="row nowrap"><strong class="grow ellipsis">${up.name}</strong><span class="tc muted">%${Math.round(up.progress * 100)}</span></div>
               <${Progress} value=${up.progress} live />
-              <span class="muted small">${auto ? 'Yükleniyor; bitince sahne kendiliğinden hazırlanır.' : 'Yükleniyor; bitince sahneyi seçeceksin.'}</span></div>`
+            </div>`
           : html`<span class="dw-ico"><${Icon} name="upload" size=${22} /></span>
               <strong class="dw-title">Videoyu buraya bırak</strong>
-              <span class="muted">ya da tıklayıp bilgisayarından seç</span>
-              <span class="mono dim small dw-types">mp4 · mkv · mov · webm · avi</span>`}
+              <span class="muted">ya da tıklayıp seç</span>`}
       </div>
-      <div class="intake-side">
-        <form class="intake-cell" onSubmit=${onUrl}>
-          <label class="intake-label" for="dk-url">Bağlantıdan getir</label>
-          <div class="row nowrap">
-            <input id="dk-url" class="input" placeholder="https://youtube.com/…" value=${url} onInput=${(e) => setUrl(e.target.value)} />
-            <${Btn} type="submit" disabled=${!url.trim()}>Getir</${Btn}>
-          </div>
-          <span class="field-hint">YouTube, X, Instagram ve benzerleri.</span>
-        </form>
-        <div class="intake-cell">
-          <${Toggle} checked=${auto} onChange=${(v) => saveSetting({ autoPrepare: v })} label=${html`<span class="toggle-text">Bırakınca hazırla<small>${autoText}</small></span>`} />
-          ${featureReady('speech') && html`<div class="row nowrap intake-lang">
-            <span class="muted small">Dublaj dili</span>
-            <${Select} class="grow" value=${st.defaultDstLang || 'en'} disabled=${!auto} onChange=${(v) => saveSetting({ defaultDstLang: v })} options=${(sys && sys.languages) || [['en', 'İngilizce']]} />
-          </div>
-          ${tr && html`<span class="field-hint">Çeviri: ${tr.name} · <a href="#/settings/translate">değiştir</a></span>`}`}
-        </div>
-      </div>
+      <form class="linkbar" onSubmit=${onUrl}>
+        <${Icon} name="link" size=${16} />
+        <input class="linkbar-input" aria-label="Video bağlantısı" placeholder="ya da bir bağlantı yapıştır: YouTube, X, Instagram…" value=${url} onInput=${(e) => setUrl(e.target.value)} />
+        <${Btn} type="submit" small kind=${url.trim() ? 'primary' : ''} disabled=${!url.trim()}>Getir</${Btn}>
+      </form>
     </section>
 
     <section class="plist-wrap">
@@ -182,13 +157,9 @@ export function HomeView() {
       ${projects === null
         ? html`<div class="plist">${[0, 1, 2].map((i) => html`<div key=${i} class="prow skelrow"><div class="skel prow-thumb"></div><div class="skel" style=${{ height: '14px', width: '40%' }}></div></div>`)}</div>`
         : projects.length === 0
-        ? html`<div class="plist plist-empty"><p class="muted">Henüz proje yok. Bir dizi ya da film sahnesi bırak; sahneyi seçersin, herkes kendi repliğini kaydeder, altyazılı videoyu paylaşırsın.</p></div>`
+        ? html`<div class="plist plist-empty"><p class="muted">Henüz proje yok.</p></div>`
         : html`<div class="plist">${projects.map((p, i) => html`<${ProjectRow} key=${p.id} p=${p} i=${i} onDelete=${del} />`)}</div>`}
     </section>
-    ${sys && html`<footer class="sysinfo">
-      <span class=${cls('lamp', sys.gpu && sys.gpu.available ? 'ok' : 'warn')}>${sys.gpu && sys.gpu.available ? `${sys.gpu.name}${sys.gpu.memoryGB ? ` · ${sys.gpu.memoryGB} GB` : ''}` : 'Ekran kartı yok, yapay zeka işlemcide çalışır'}</span>
-      <span class="dim">Videolar</span><span class="mono dim">${sys.exportsDir}</span>
-    </footer>`}
-    ${veil && html`<div class="dropveil"><div class="dropveil-card"><${Icon} name="upload" size=${28} />Bırak${auto ? ', gerisi otomatik' : ''}</div></div>`}
+    ${veil && html`<div class="dropveil"><div class="dropveil-card"><${Icon} name="upload" size=${28} />Bırak</div></div>`}
   </div>`;
 }

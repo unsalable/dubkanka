@@ -9,7 +9,7 @@ import threading
 import time
 from pathlib import Path
 
-from .config import PROJECTS_DIR
+from .config import PROJECTS_DIR, load_settings
 from .jobs import bus
 
 # Clip colours for characters: even brightness on the editor's graphite, none close to the blue accent or REC red.
@@ -92,6 +92,8 @@ class ProjectStore:
     def create(self, name):
         pid = new_id()
         p = default_project(pid, name or "Yeni proje")
+        app = load_settings()  # a new scene starts from the dub language and translator used last
+        p["settings"].update(dstLang=app.get("defaultDstLang") or "en", translator=app.get("translator") or "google")
         with self.lock(pid):
             (self.dir(pid) / "media").mkdir(parents=True, exist_ok=True)
             (self.dir(pid) / "takes").mkdir(exist_ok=True)
