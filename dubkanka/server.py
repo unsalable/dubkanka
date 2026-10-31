@@ -165,8 +165,9 @@ async def project_patch(pid: str, request: Request):
             if isinstance(body.get(k), dict):
                 p[k].update({kk: vv for kk, vv in body[k].items() if kk != "sfx"})
         if isinstance(body.get("export"), dict):  # nested video/audio options: merge, do not replace
-            from .export import EXPORT_DEFAULTS, merge
+            from .export import EXPORT_DEFAULTS, merge, normalize_export
             merge(p["export"], {kk: vv for kk, vv in body["export"].items() if kk in EXPORT_DEFAULTS})
+            p["export"] = normalize_export(p["export"])
     mutate(pid, fn)
     return store.get(pid)
 
