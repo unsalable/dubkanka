@@ -16,12 +16,12 @@ from . import media
 from . import __version__
 from .config import DESKTOP, EXPORTS_DIR, HOME, MODELS_DIR, PROJECTS_DIR, RUNTIME, WEB_DIR, load_settings, public_settings, save_settings
 from .gpu import gpu_info
+from .access import GUEST_COOKIE, body_json, host_only, is_remote, member, mutate, project_or_404, save_body, who
 from .jobs import bus, jobs
 from .projects import add_character, find_char, find_line, find_take, new_id, sort_lines, store
 from .room import download_cloudflared, room
 
 VERSION = __version__
-GUEST_COOKIE = "dk_guest"
 _SPLIT_TEXT = re.compile(r"\s+")
 
 
@@ -43,75 +43,6 @@ class _RevalidatedStatic(StaticFiles):
 
 app = FastAPI(title="DubKanka", lifespan=lifespan, docs_url=None, redoc_url=None)
 app.mount("/web", _RevalidatedStatic(directory=str(WEB_DIR)), name="web")
-
-
-# ---------------------------------------------------------------- access control
-def is_remote(request: Request):
-    h = request.headers
-    if "cf-ray" in h or "cf-connecting-ip" in h:
-        return True
-    host = request.client.host if request.client else ""
-    return host not in ("127.0.0.1", "::1", "localhost")
-
-
-def who(request: Request):
-    if not is_remote(request):
-        return "host", None
-    g = room.guest(request.cookies.get(GUEST_COOKIE))
-    return ("guest", g) if g else ("anon", None)
-
-
-def host_only(request: Request):
-    if is_remote(request):
-        raise HTTPException(403, "Bu işlem sadece odayı açan bilgisayardan yapılabilir.")
-
-
-def member(request: Request, pid):
-    role, g = who(request)
-    if role == "host":
-        return role, g
-    if role == "guest" and pid == room.project_id:
-        return role, g
-    raise HTTPException(403, "Odaya katılman gerekiyor.")
-
-
-def project_or_404(pid):
-    try:
-        return store.get(pid)
-    except KeyError:
-        raise HTTPException(404, "Proje bulunamadı")
-
-
-def mutate(pid, fn):
-    try:
-        return store.mutate(pid, fn)
-    except KeyError as e:
-        raise HTTPException(404, str(e.args[0]) if e.args else "Bulunamadı")
-    except ValueError as e:
-        raise HTTPException(400, str(e))
-
-
-async def body_json(request: Request):
-    try:
-        return await request.json()
-    except Exception:
-        return {}
-
-
-async def save_body(request: Request, dst: Path, limit_mb=8000):
-    size = 0
-    with open(dst, "wb") as f:
-        async for chunk in request.stream():
-            size += len(chunk)
-            if size > limit_mb * 2**20:
-                f.close()
-                dst.unlink(missing_ok=True)
-                raise HTTPException(413, "Dosya çok büyük.")
-            f.write(chunk)
-    if size == 0:
-        dst.unlink(missing_ok=True)
-        raise HTTPException(400, "Boş dosya geldi.")
-    return size
 
 
 @app.exception_handler(media.MediaError)
@@ -181,7 +112,7 @@ def projects_list(request: Request):
 
 
 @app.post("/api/projects/upload")
-async def projects_upload(request: Request, filename: str = "video.mp4", name: str = ""):
+async def projects_upload(request: Request, filename: str = "video.mp4", name: str = "", auto: int = 0):
     host_only(request)
     ext = (Path(filename).suffix or ".mp4").lower()
     if not re.fullmatch(r"\.[a-z0-9]{1,5}", ext):
@@ -195,7 +126,7 @@ async def projects_upload(request: Request, filename: str = "video.mp4", name: s
         raise
     from .pipeline import run_import_file
     job = jobs.submit("import", p["id"], "Video okunuyor",
-                      lambda j: run_import_file(j, p["id"], dst, filename), heavy=False)
+                      lambda j: run_import_file(j, p["id"], dst, filename, bool(auto)), heavy=False)
     return {"project": store.get(p["id"]), "job": job.to_dict()}
 
 
@@ -208,7 +139,9 @@ async def projects_url(request: Request):
         raise HTTPException(400, "Geçerli bir bağlantı yapıştır (https://...).")
     p = store.create(str(body.get("name") or "").strip() or "Yeni proje")
     from .pipeline import run_import_url
-    job = jobs.submit("import", p["id"], "Video indiriliyor", lambda j: run_import_url(j, p["id"], url), heavy=False)
+    auto = bool(body.get("auto"))
+    job = jobs.submit("import", p["id"], "Video indiriliyor", lambda j: run_import_url(j, p["id"], url, auto),
+                      heavy=False)
     return {"project": store.get(p["id"]), "job": job.to_dict()}
 
 
@@ -447,9 +380,9 @@ async def char_patch(pid: str, cid: str, request: Request):
 
 
 @app.post("/api/projects/{pid}/characters/{cid}/claim")
-def char_claim(pid: str, cid: str, request: Request):
+async def char_claim(pid: str, cid: str, request: Request):
     role, g = member(request, pid)
-    name = g["name"] if g else "Ben"
+    name = g["name"] if g else (str((await body_json(request)).get("name") or "").strip()[:30] or "Ben")
 
     def fn(p):
         c = find_char(p, cid)
@@ -461,7 +394,7 @@ def char_claim(pid: str, cid: str, request: Request):
         c["actor"] = ", ".join(names)[:60]
         return c["name"]
     cname = mutate(pid, fn)
-    if g:
+    if g or room.project_id == pid:
         room.log(f"{name}, {cname} rolünü aldı")
     return {"ok": True}
 
@@ -517,7 +450,8 @@ def _reprocess_where(pid, pred):
 
 @app.post("/api/projects/{pid}/lines/{lid}/takes")
 async def take_upload(pid: str, lid: str, request: Request, recStart: float = None, source: str = "booth",
-                      by: str = "", align: str = "auto", fit: bool = False, filename: str = "kayit.wav"):
+                      by: str = "", align: str = "auto", fit: bool = False, filename: str = "kayit.wav",
+                      denoise: int = 0, hpf: int = -1):
     role, g = member(request, pid)
     p = project_or_404(pid)
     try:
@@ -535,7 +469,8 @@ async def take_upload(pid: str, lid: str, request: Request, recStart: float = No
         from .takes import add_take
         name = g["name"] if g else (by.strip() or "Ben")
         tid = await asyncio.to_thread(add_take, pid, lid, tmp, name, source if source in ("booth", "upload") else "upload",
-                                      recStart, fit, align if align in ("auto", "recorded") else "auto")
+                                      recStart, fit, align if align in ("auto", "recorded") else "auto", bool(denoise),
+                                      None if hpf < 0 else bool(hpf))
     finally:
         tmp.unlink(missing_ok=True)
     _submit_process(pid, lid, tid)
@@ -545,8 +480,9 @@ async def take_upload(pid: str, lid: str, request: Request, recStart: float = No
     return {"takeId": tid, "lineId": line["id"]}
 
 
-_TAKE_REPROCESS = {"effect": lambda v: v or None, "pitch": float, "fit": bool, "align": str, "matchLevel": bool}
-_TAKE_LIVE = {"gain": float, "nudge": float}
+_TAKE_REPROCESS = {"effect": lambda v: v or None, "pitch": float, "fit": bool, "align": str, "matchLevel": bool,
+                   "denoise": bool, "hpf": bool}
+_TAKE_LIVE = {"gain": float, "nudge": float, "trimIn": float, "trimOut": float}
 
 
 @app.patch("/api/projects/{pid}/lines/{lid}/takes/{tid}")
@@ -570,6 +506,10 @@ async def take_patch(pid: str, lid: str, tid: str, request: Request):
         for k, conv in _TAKE_LIVE.items():
             if k in b:
                 t[k] = round(conv(b[k]), 4)
+        dur = float(t.get("duration") or 0)
+        if dur and ("trimIn" in b or "trimOut" in b):  # always keep at least 50 ms of the take audible
+            t["trimIn"] = round(min(max(0.0, float(t.get("trimIn") or 0)), max(0.0, dur - 0.05)), 4)
+            t["trimOut"] = round(min(max(0.0, float(t.get("trimOut") or 0)), max(0.0, dur - t["trimIn"] - 0.05)), 4)
         if changed:
             t["status"] = "processing"
         return changed
@@ -792,7 +732,7 @@ async def watch(request: Request, project: str = "", v: int = -1):
         out["room"] = room.to_dict()
     else:
         r = room.to_dict()
-        out["room"] = {"status": r["status"], "guests": [x for x in r["guests"] if x["online"]]}
+        out["room"] = {"status": r["status"], "guests": [x for x in r["guests"] if x["online"]], "host": r["host"]}
     return out
 
 
@@ -854,7 +794,7 @@ async def guest_join(request: Request):
 @app.post("/api/guest/heartbeat")
 async def guest_heartbeat(request: Request):
     b = await body_json(request)
-    g = room.heartbeat(request.cookies.get(GUEST_COOKIE), b.get("view"), b.get("line"))
+    g = room.heartbeat(request.cookies.get(GUEST_COOKIE), b.get("view"), b.get("line"), b.get("char"))
     if not g:
         raise HTTPException(403, "Oda kapandı ya da oturum süresi doldu.")
     return {"ok": True}

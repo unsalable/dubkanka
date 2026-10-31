@@ -83,6 +83,12 @@ def _apply_filters(x, filters):
     return y
 
 
+def _highpass(x, sr, hz=80.0):
+    """Microphone low-cut: rumble, desk knocks and plosive thumps live below the voice."""
+    from scipy.signal import butter, sosfilt
+    return sosfilt(butter(2, hz, "highpass", fs=sr, output="sos"), x).astype(np.float32)
+
+
 def _trim_tail(x, sr, floor_db=-55.0):
     if not len(x):
         return x
@@ -94,18 +100,24 @@ def _trim_tail(x, sr, floor_db=-55.0):
     return x[:end]
 
 
-def add_take(pid, lid, upload_path, by="Ben", source="booth", rec_start=None, fit=False, align="auto"):
+def add_take(pid, lid, upload_path, by="Ben", source="booth", rec_start=None, fit=False, align="auto", denoise=False,
+             hpf=None):
     """Store an uploaded/recorded file as a new take on the line and select it. Returns the take id."""
     d = store.dir(pid)
     store.get(pid)  # raises KeyError for unknown projects
     tid = new_id("t", 7)
     raw = f"takes/{tid}.raw.wav"
     (d / "takes").mkdir(exist_ok=True)
-    media.to_wav(upload_path, d / raw, SAMPLE_RATE, 1)
+    try:
+        media.to_wav(upload_path, d / raw, SAMPLE_RATE, 1)
+    except media.MediaError as e:
+        (d / raw).unlink(missing_ok=True)
+        raise media.MediaError("Bu dosyada okunabilir bir ses yok. Ses kaydı ya da sesli bir video seç.") from e
     take = {
         "id": tid, "by": (by or "Ben")[:40], "created": time.time(), "source": source, "raw": raw,
         "file": None, "ver": 0, "recStart": rec_start, "align": align if rec_start is not None else "auto",
         "fit": bool(fit), "effect": None, "pitch": 0, "gain": 0.0, "nudge": 0.0, "matchLevel": True,
+        "denoise": bool(denoise), "hpf": source == "booth" if hpf is None else bool(hpf), "trimIn": 0.0, "trimOut": 0.0,
         "status": "processing", "error": None,
     }
 
@@ -130,6 +142,11 @@ def process_take(pid, lid, tid):
     raw, sr = media.read_audio(d / take["raw"], mono=True)
     if sr != SAMPLE_RATE:
         raw, sr = media.resample(raw, sr, SAMPLE_RATE), SAMPLE_RATE
+    if take.get("denoise") and len(raw):
+        from .ambience import denoise
+        raw = denoise(raw, sr)
+    if take.get("hpf") and len(raw):
+        raw = _highpass(raw, sr)
     total = len(raw) / sr
 
     from .transcribe import speech_regions
@@ -181,9 +198,13 @@ def process_take(pid, lid, tid):
     def fn(p_):
         t = find_take(find_line(p_, lid), tid)
         old = t.get("file")
-        t.update(file=fname, ver=ver, start=round(start, 4), duration=round(len(seg) / sr, 4),
-                 voiceOffset=round(voice_offset, 4), autoGain=round(float(auto_gain), 2), tempo=round(tempo, 3),
-                 silent=silent, status="ready", error=None)
+        dur = round(len(seg) / sr, 4)
+        # trims survive a reprocess, but never eat the whole (possibly shorter) new take
+        t_in = min(float(t.get("trimIn") or 0), max(0.0, dur - 0.05))
+        t_out = min(float(t.get("trimOut") or 0), max(0.0, dur - t_in - 0.05))
+        t.update(file=fname, ver=ver, start=round(start, 4), duration=dur, trimIn=round(t_in, 4),
+                 trimOut=round(t_out, 4), voiceOffset=round(voice_offset, 4), autoGain=round(float(auto_gain), 2),
+                 tempo=round(tempo, 3), silent=silent, status="ready", error=None)
         return old
     try:
         old = store.mutate(pid, fn)

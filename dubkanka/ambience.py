@@ -65,14 +65,21 @@ def _clean_speech(mono, sr, progress=None):
     wsum = np.zeros(len(x) + xf, np.float32)
     for a, y in parts:  # short crossfades hide the seams between chunks
         w = np.ones(len(y), np.float32)
+        k = min(xf, len(y))  # the last chunk can be a few ms long (a scene of 20.01 s)
         if a > 0:
-            w[:xf] = np.linspace(0, 1, xf)
+            w[:k] = np.linspace(0, 1, k)
         if a + len(y) < len(x):
-            w[-xf:] = np.linspace(1, 0, xf)
+            w[-k:] = np.linspace(1, 0, k)
         out[a:a + len(y)] += y * w
         wsum[a:a + len(y)] += w
     s = media.resample(out[: len(x)] / np.maximum(wsum[: len(x)], 1e-6), SE_SR, sr)
     return np.pad(s, (0, max(0, len(mono) - len(s))))[: len(mono)]
+
+
+def denoise(mono, sr):
+    """Room noise, hum and fan out of a recorded take: the same DPDFNet model, without the ambience split."""
+    with _lock:
+        return _clean_speech(np.asarray(mono, dtype=np.float32), sr)
 
 
 def _speech_gate(regions, n, sr, rate=100):

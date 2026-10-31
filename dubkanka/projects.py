@@ -13,11 +13,13 @@ from .config import PROJECTS_DIR
 from .jobs import bus
 
 # Clip colours for characters: even brightness on the editor's graphite, none close to the blue accent or REC red.
-COLORS = ["#3bb4c1", "#e3a13b", "#a07cf0", "#6bbf4e", "#e66b93", "#cdbd3d",
+# Highlighter tones for characters: even brightness on the graphite, none close to the yellow accent or REC red.
+COLORS = ["#3bb4c1", "#e3a13b", "#a07cf0", "#6bbf4e", "#e66b93", "#5fa8e8",
           "#4cc49b", "#e57b58", "#7f9cbb", "#c86bd6", "#b58a5c", "#8fb35a"]
-# The first palette, mapped one-to-one so older projects keep their characters apart.
+# Earlier palettes, mapped one-to-one so older projects keep their characters apart.
 _OLD_COLORS = dict(zip(["#ef4444", "#3b82f6", "#22c55e", "#f59e0b", "#a855f7", "#ec4899",
                         "#14b8a6", "#f97316", "#84cc16", "#06b6d4", "#e11d48", "#6366f1"], COLORS))
+_OLD_COLORS["#cdbd3d"] = "#5fa8e8"  # yellow-olive sat too close to the accent
 
 _ALPHABET = string.ascii_lowercase + string.digits
 

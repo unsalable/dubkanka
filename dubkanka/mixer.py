@@ -7,6 +7,7 @@ import numpy as np
 from . import media
 
 FILL_PRE, FILL_POST, FILL_FADE = 0.15, 0.25, 0.03
+TRIM_FADE = 0.004
 
 
 def _add(out, x, pos):
@@ -39,9 +40,18 @@ def selected_take(line):
 
 
 def take_window(t):
-    """(start, end) in project time of the audible voice of a take."""
+    """(start, end) in project time of the audible part of a take: its position, minus what was trimmed off."""
     s = float(t["start"]) + float(t.get("nudge") or 0)
-    return s, s + float(t.get("duration") or 0)
+    return s + float(t.get("trimIn") or 0), s + float(t.get("duration") or 0) - float(t.get("trimOut") or 0)
+
+
+def trimmed(x, sr, t):
+    """The audible slice of a processed take; short fades where a trim cuts into the voice."""
+    a = int(round(float(t.get("trimIn") or 0) * sr))
+    b = len(x) - int(round(float(t.get("trimOut") or 0) * sr))
+    if a <= 0 and b >= len(x):
+        return x
+    return _fade(x[max(0, a):max(a + 1, b)], sr, TRIM_FADE if a > 0 else 0, TRIM_FADE if b < len(x) else 0)
 
 
 def _duck_envelope(n, sr, windows, depth_db):
@@ -64,16 +74,23 @@ def dialog_stem(p):
 
 
 def render(p, d, mode="dub"):
-    """mode: 'dub' (final), 'original' (unchanged scene audio). Returns (n, 2) float32."""
+    """mode: 'dub' (final), 'original' (unchanged scene audio), 'clean' (music, effects and ambience: every voice
+    removed). Returns (n, 2) float32."""
     if mode == "original":
         x, _ = media.read_audio(d / p["stems"]["original"])
         return x
     bg, sr = media.read_audio(d / p["stems"]["background"])
-    voices, _ = media.read_audio(d / dialog_stem(p))
     n = len(bg)
     mix = p["mix"]
-    chars = {c["id"]: c for c in p["characters"]}
     out = np.zeros((n, 2), dtype=np.float32)
+    if mode == "clean":
+        if not mix.get("bgMute"):
+            out += bg * media.db_to_gain(mix.get("bgGain", 0.0))
+        if p["stems"].get("ambience") and not mix.get("ambMute"):
+            _add(out, media.read_audio(d / p["stems"]["ambience"])[0][:n] * media.db_to_gain(mix.get("ambGain", 0.0)), 0)
+        return out
+    voices, _ = media.read_audio(d / dialog_stem(p))
+    chars = {c["id"]: c for c in p["characters"]}
 
     windows = []
     for line in p["lines"]:
@@ -100,7 +117,7 @@ def render(p, d, mode="dub"):
             if tsr != sr:
                 x = media.resample(x, tsr, sr)
             g = media.db_to_gain(float(t.get("gain") or 0) + float(c.get("gain") or 0) + float(mix.get("dubGain", 0)))
-            _add(out, x * g, int(round(take_window(t)[0] * sr)))
+            _add(out, trimmed(x, sr, t) * g, int(round(take_window(t)[0] * sr)))
         elif mix.get("fillMissing", True) and not mix.get("fillMute"):
             a = max(0.0, line["start"] - FILL_PRE)
             b = min(n / sr, line["end"] + FILL_POST)

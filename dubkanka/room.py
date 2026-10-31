@@ -79,7 +79,8 @@ class Room:
         self.url = None
         self.status = "off"  # off | starting | on | error
         self.error = None
-        self.guests = {}  # token -> {name, joined, seen, view, line}
+        self.guests = {}  # token -> {name, joined, seen, view, line, char}
+        self.host = None  # what the PC that opened the room is doing: {name, char, line, view, seen}
         self.activity = []
         self._proc = None
         self._lock = threading.Lock()
@@ -90,6 +91,7 @@ class Room:
             if self.project_id != project_id:
                 self.guests.clear()
                 self.activity.clear()
+                self.host = None
             self.project_id = project_id
             self.pin = self.pin or f"{secrets.randbelow(9000) + 1000}"
             if self._proc and self._proc.poll() is None and self.url:
@@ -146,6 +148,7 @@ class Room:
             self.status, self.url, self.error = "off", None, None
             self.pin = None
             self.guests.clear()
+            self.host = None
         if proc and proc.poll() is None:
             proc.terminate()
             try:
@@ -169,7 +172,7 @@ class Room:
         name = re.sub(r"\s+", " ", (name or "").strip())[:30] or "Misafir"
         token = secrets.token_urlsafe(24)
         now = time.time()
-        self.guests[token] = {"name": name, "joined": now, "seen": now, "view": "", "line": None}
+        self.guests[token] = {"name": name, "joined": now, "seen": now, "view": "", "line": None, "char": None}
         self.log(f"{name} odaya katıldı")
         return token
 
@@ -180,14 +183,25 @@ class Room:
             return g
         return None
 
-    def heartbeat(self, token, view=None, line=None):
+    def heartbeat(self, token, view=None, line=None, char=None):
         g = self.guest(token)
         if g:
-            changed = g.get("view") != view or g.get("line") != line
-            g["view"], g["line"] = view, line
+            changed = (g.get("view"), g.get("line"), g.get("char")) != (view, line, char)
+            g["view"], g["line"], g["char"] = view, line, char
             if changed:
                 bus.notify()
         return g
+
+    def presence(self, project_id, name=None, char=None, line=None, view=None):
+        """The host records too: friends see which role the room's owner took and where they are."""
+        if project_id != self.project_id:
+            return
+        h = {"name": re.sub(r"\s+", " ", (name or "").strip())[:30] or "Oda sahibi", "char": char, "line": line,
+             "view": view}
+        changed = not self.host or any(self.host.get(k) != v for k, v in h.items())
+        self.host = {**h, "seen": time.time()}
+        if changed:
+            bus.notify()
 
     def log(self, text):
         self.activity.insert(0, {"t": time.time(), "text": text})
@@ -200,7 +214,9 @@ class Room:
             "status": self.status, "url": self.url, "pin": self.pin, "projectId": self.project_id,
             "error": self.error, "hasCloudflared": bool(cloudflared_path()),
             "guests": [{"name": g["name"], "online": now - g["seen"] < 20, "view": g.get("view"),
-                        "line": g.get("line")} for g in self.guests.values()],
+                        "line": g.get("line"), "char": g.get("char")} for g in self.guests.values()],
+            "host": {k: v for k, v in self.host.items() if k != "seen"} | {"online": now - self.host["seen"] < 20}
+            if self.host else None,
             "activity": self.activity[:30],
         }
 
