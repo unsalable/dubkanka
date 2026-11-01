@@ -9,7 +9,7 @@ Bir dizi ya da film sahnesini arkadaşlarınla dublajlayıp paylaşmak için Win
 
 ## İndir ve kur
 
-1. [Sürümler](https://github.com/unsalable/dubkanka/releases/latest) sayfasından **`DubKanka-Setup-x.y.z.exe`** dosyasını indir ve çalıştır. Yönetici izni istemez.
+1. **[DubKanka-Setup.exe](https://github.com/unsalable/dubkanka/releases/latest/download/DubKanka-Setup.exe)** dosyasını indir ve çalıştır (her zaman en yeni sürüm; ne değiştiği [Sürümler](https://github.com/unsalable/dubkanka/releases) sayfasında). Yönetici izni istemez.
 2. Windows "Bilgisayarınız korundu" derse: **Ek bilgi → Yine de çalıştır**. (Uygulama imzalı değil, o yüzden çıkıyor.)
 3. İlk açılışta DubKanka sadece stüdyonun kendisini kurar: Python, stüdyo paketleri ve ffmpeg. Yaklaşık **200 MB, birkaç dakika**.
 4. Sonra tek bir soru sorar: **ne yapmak istiyorsun?** Temel stüdyo seçili gelir; ek özellikler boş gelir, boyutlarıyla yazar. İşaretlediklerin arka planda iner, sen beklemeden başlarsın. Hiçbirini seçmesen de dublaj yaparsın: bir özelliği kullanmak istediğinde ekran orada **İndir · boyut** düğmesi çıkarır; hepsi **Ayarlar → Özellikler**'de de durur.
@@ -113,7 +113,7 @@ Uygulamayı kaldırmak projelere dokunmaz. Her şeyi silmek için kaldırdıktan
 .\scripts\release.ps1 1.2.0 "Kayıt ekranında yeni kısayollar"
 ```
 
-Sürümü `desktop/package.json`'a yazar, commit'ler, notu `v1.2.0` etiketine koyup gönderir. GitHub Actions `DubKanka-Setup-1.2.0.exe`'yi derleyip sürüm olarak yayınlar; kurulu uygulamalar kendini günceller.
+Sürümü `desktop/package.json`'a yazar, commit'ler, notu `v1.2.0` etiketine koyup gönderir. GitHub Actions `DubKanka-Setup.exe`'yi derleyip sürüm olarak yayınlar; kurulum dosyasının adı her sürümde aynıdır, sürüm numarası sürümün başlığında durur. Kurulu uygulamalar kendini günceller. Yayınlamadan önce `python scripts/check-i18n.py` 0 sorun demeli (iki dilin çevirileri).
 
 ## Geliştirme
 

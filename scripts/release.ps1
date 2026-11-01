@@ -1,6 +1,7 @@
 # Publish a new DubKanka version: .\scripts\release.ps1 1.2.0 "Bu sürümde ne değişti"
 # Sets the version in desktop/package.json, commits, tags v1.2.0 (the notes go into the tag) and pushes. GitHub
-# Actions then builds DubKanka-Setup-1.2.0.exe and publishes the release; installed apps update themselves from it.
+# Actions then builds DubKanka-Setup.exe (the same name in every release) and publishes the release; installed apps
+# update themselves from it. Before a release: python scripts\check-i18n.py must print 0 problems.
 param([Parameter(Mandatory = $true)][string]$Version, [string]$Notes = "")
 $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath (Split-Path -Parent $PSScriptRoot)

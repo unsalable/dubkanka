@@ -82,7 +82,7 @@
       "oneClick": true,
       "perMachine": false,
       "allowElevation": false,
-      "artifactName": "DubKanka-Setup-${version}.${ext}",
+      "artifactName": "DubKanka-Setup.${ext}",
       "shortcutName": "DubKanka",
       "createDesktopShortcut": "always",
       "createStartMenuShortcut": true,

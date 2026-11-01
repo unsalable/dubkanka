@@ -1,5 +1,7 @@
-# Push a tag like v1.2.0 (scripts/release.ps1 does it): Windows builds DubKanka-Setup-1.2.0.exe and publishes it with
-# latest.yml to a GitHub release. Installed apps read latest.yml and update themselves.
+# Push a tag like v1.2.0 (scripts/release.ps1 does it): Windows builds DubKanka-Setup.exe and publishes it with
+# latest.yml to a GitHub release. The installer keeps one name in every release (the version is in the release title
+# and in its download path), so .../releases/latest/download/DubKanka-Setup.exe is always the newest one. Installed
+# apps read latest.yml and update themselves.
 name: Release
 
 on:
