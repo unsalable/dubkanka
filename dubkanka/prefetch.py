@@ -11,6 +11,7 @@ import threading
 from pathlib import Path
 
 from .config import MODELS_DIR, load_settings
+from .i18n import tx
 from .transcribe import MODEL_MB as WHISPER_MB, WHISPER_DIR, _dir_size_mb
 
 HF_HUB = Path(os.environ.get("HF_HUB_CACHE") or Path(os.environ.get("HF_HOME") or MODELS_DIR / "hf") / "hub")
@@ -59,7 +60,7 @@ def whisper_present(name=None):
 def whisper(prog, name=None):
     from faster_whisper.utils import download_model
     name = name or whisper_name()
-    done = _grow(WHISPER_DIR, WHISPER_MB.get(name, 1600), prog, f"Konuşma tanıma modeli ({name})")
+    done = _grow(WHISPER_DIR, WHISPER_MB.get(name, 1600), prog, tx("Konuşma tanıma modeli ({name})", name=name))
     try:
         download_model(name, cache_dir=str(WHISPER_DIR))
     finally:
@@ -96,7 +97,7 @@ def demucs(prog, name=None):
 
     from .separate import model_files
     name = name or demucs_name()
-    done = _grow(MODELS_DIR / "hf", DEMUCS_MB.get(name, 84), prog, "Ses ayırma modeli")
+    done = _grow(MODELS_DIR / "hf", DEMUCS_MB.get(name, 84), prog, tx("Ses ayırma modeli"))
     try:
         repo, files = model_files(name)
         for f in files:
@@ -113,7 +114,7 @@ def diarize_present():
 
 def diarize(prog):
     from .diarize import ensure_models
-    ensure_models(lambda f: prog(f, "Konuşmacı modelleri"))
+    ensure_models(lambda f: prog(f, tx("Konuşmacı modelleri")))
 
 
 def denoise_present():
@@ -123,7 +124,7 @@ def denoise_present():
 
 def denoise(prog):
     from .ambience import ensure_model
-    ensure_model(lambda f: prog(f, "Gürültü / ortam modeli (DPDFNet)"))
+    ensure_model(lambda f: prog(f, tx("Gürültü / ortam modeli (DPDFNet)")))
 
 
 FETCH = {"whisper": whisper, "demucs": demucs, "diarize": diarize, "denoise": denoise}
@@ -148,7 +149,7 @@ def main():
 
     for i, n in enumerate(names):
         FETCH[n](lambda f, msg=None, i=i: report((i + max(0.0, min(1.0, f))) / len(names), msg or n))
-        report((i + 1) / len(names), f"{n} hazır")
+        report((i + 1) / len(names), tx("{name} hazır", name=n))
 
 
 if __name__ == "__main__":

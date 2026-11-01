@@ -6,6 +6,7 @@ from pathlib import Path
 
 from . import media
 from .config import SAMPLE_RATE, load_settings
+from .i18n import tx
 from .projects import store
 
 PREP_STEPS = [
@@ -27,15 +28,15 @@ def set_source(pid, path, original_name, job=None):
     """Probe an imported file, store it as the project's source and make a browser proxy when needed."""
     info = media.probe(path)
     if not info.get("hasVideo"):
-        raise media.MediaError("Bu dosyada görüntü yok. Lütfen bir video dosyası seç.")
+        raise media.MediaError(tx("Bu dosyada görüntü yok. Lütfen bir video dosyası seç."))
     if info["duration"] <= 0.5:
-        raise media.MediaError("Video çok kısa ya da okunamadı.")
+        raise media.MediaError(tx("Video çok kısa ya da okunamadı."))
     d = store.dir(pid)
     proxy = None
     if not media.browser_playable(info):
         proxy = "source_proxy.mp4"
         if job:
-            job.update(0.0, "Video tarayıcıda oynatılabilir hale getiriliyor...")
+            job.update(0.0, tx("Video tarayıcıda oynatılabilir hale getiriliyor..."))
         media.make_proxy(path, d / proxy, info["duration"], job and (lambda f: job.update(f)))
 
     def fn(p):
@@ -56,14 +57,14 @@ def run_import_url(job, pid, url):
     import yt_dlp
 
     d = store.dir(pid)
-    job.update(0.0, "Video indiriliyor...")
+    job.update(0.0, tx("Video indiriliyor..."))
 
     def hook(s):
         if s.get("status") == "downloading":
             total = s.get("total_bytes") or s.get("total_bytes_estimate") or 0
             if total:
                 job.update(min(0.95, s.get("downloaded_bytes", 0) / total),
-                           f"Video indiriliyor... {s.get('downloaded_bytes', 0) / 2**20:.0f} / {total / 2**20:.0f} MB")
+                           tx("Video indiriliyor... {a} / {b} MB", a=f"{s.get('downloaded_bytes', 0) / 2**20:.0f}", b=f"{total / 2**20:.0f}"))
 
     opts = {
         "format": "bv*[vcodec^=avc1][height<=1080]+ba[ext=m4a]/b[ext=mp4][height<=1080]/bv*[height<=1080]+ba/b",
@@ -81,13 +82,13 @@ def run_import_url(job, pid, url):
         with yt_dlp.YoutubeDL(opts) as ydl:
             info = ydl.extract_info(url, download=True)
     except Exception as e:
-        raise media.MediaError("Bu bağlantıdan video indirilemedi. Videoyu bilgisayarına indirip dosya olarak "
-                               f"yüklemeyi dene. ({str(e)[:160]})") from e
+        raise media.MediaError(tx("Bu bağlantıdan video indirilemedi. Videoyu bilgisayarına indirip dosya olarak "
+                                  "yüklemeyi dene. ({e})", e=str(e)[:160])) from e
     files = sorted(d.glob("source.*"), key=lambda f: f.stat().st_size, reverse=True)
     if not files:
-        raise media.MediaError("İndirilen dosya bulunamadı.")
+        raise media.MediaError(tx("İndirilen dosya bulunamadı."))
     title = (info or {}).get("title") or "Video"
-    store.mutate(pid, lambda p: p.update(name=p["name"] if p["name"] != "Yeni proje" else title[:60]))
+    store.mutate(pid, lambda p: p.update(name=p["name"] if p["name"] not in ("Yeni proje", "New project") else title[:60]))
     set_source(pid, files[0], title, job)
     return {"projectId": pid}
 
@@ -100,22 +101,44 @@ def _stepper(job, base, key):
     return prog
 
 
-def write_ambience(d, voices, background, progress=None):
+def line_regions(lines):
+    """Where the scene's lines say someone speaks, a little wider than the line (like the original voice they cover)."""
+    return [(max(0.0, float(l["start"]) - 0.1), float(l["end"]) + 0.2) for l in lines or []]
+
+
+def write_ambience(d, voices, background, progress=None, known=(), estimate=None):
     """Split the vocals stem into speech + ambience (birds, wind, crowd...) and write both, plus the guests'
-    lite files: speech, and a 'bed' = background + ambience they hear while recording."""
+    lite files: speech, and a 'bed' = background + ambience they hear while recording. DPDFNet's speech is kept
+    (speech_est.wav) so the split can be made again with the lines (refine_ambience) without running it twice."""
     from .ambience import split
-    speech, amb = split(voices, SAMPLE_RATE, progress)
+    speech, amb, est = split(voices, SAMPLE_RATE, progress, known=known, estimate=estimate)
     m = d / "media"
     media.write_wav(m / "speech.wav", speech)
     media.write_wav(m / "ambience.wav", amb)
+    if estimate is None:
+        media.write_wav(m / "speech_est.wav", est)
     media.write_wav(m / "speech_lite.wav", media.resample(speech.mean(axis=1), SAMPLE_RATE, LITE_SR), LITE_SR)
     media.write_wav(m / "bed_lite.wav", media.resample((background + amb).mean(axis=1), SAMPLE_RATE, LITE_SR), LITE_SR)
     return {"speech": "media/speech.wav", "ambience": "media/ambience.wav", "speechLite": "media/speech_lite.wav",
             "bedLite": "media/bed_lite.wav", "ver": int(time.time())}
 
 
-def separated_stems(d, mix, sr, model, ver, prog):
-    """Demucs split + the guests' lite copies + the ambience split. Returns (stems, voices at SAMPLE_RATE)."""
+def refine_ambience(d, lines, progress=None):
+    """Split the vocals stem again now that the lines say where people talk: a voice the detectors missed under a
+    line goes to the speech, not the ambience. Reuses DPDFNet's speech from the first split. Returns the stems to
+    update, or None when there is nothing to refine with."""
+    m = d / "media"
+    if not lines or not (m / "speech_est.wav").exists() or not (m / "voices.wav").exists():
+        return None
+    voices, _ = media.read_audio(m / "voices.wav")
+    background, _ = media.read_audio(m / "background.wav")
+    est, _ = media.read_audio(m / "speech_est.wav", mono=True)
+    return write_ambience(d, voices, background, progress, known=line_regions(lines), estimate=est)
+
+
+def separated_stems(d, mix, sr, model, ver, prog, known=()):
+    """Demucs split + the guests' lite copies + the ambience split (with `known` speech regions when the lines are
+    already there). Returns (stems, voices at SAMPLE_RATE)."""
     from .separate import separate
     voices, background = separate(mix, sr, model, progress=lambda f, msg=None: prog(f * 0.72, msg))
     m = d / "media"
@@ -126,8 +149,8 @@ def separated_stems(d, mix, sr, model, ver, prog):
     stems = {"voices": "media/voices.wav", "background": "media/background.wav", "original": "media/audio.wav",
              "voicesLite": "media/voices_lite.wav", "backgroundLite": "media/background_lite.wav", "ver": ver,
              "separated": True}
-    prog(0.72, "Kuş, rüzgar, kalabalık gibi ortam sesleri konuşmadan ayrılıyor...")
-    stems.update(write_ambience(d, voices, background, lambda f, msg=None: prog(0.72 + f * 0.28, msg)))
+    prog(0.72, tx("Kuş, rüzgar, kalabalık gibi ortam sesleri konuşmadan ayrılıyor..."))
+    stems.update(write_ambience(d, voices, background, lambda f, msg=None: prog(0.72 + f * 0.28, msg), known=known))
     return stems, voices
 
 
@@ -145,20 +168,20 @@ def run_separate(job, pid):
     p = store.get(pid)
     d = store.dir(pid)
     if not p.get("stems"):
-        raise media.MediaError("Önce sahneyi hazırla.")
+        raise media.MediaError(tx("Önce sahneyi hazırla."))
     if not features.wait("separate", job):
-        raise media.MediaError("Önce Ayarlar → Özellikler'den “Müziği ve efektleri koru” özelliğini ekle.")
-    job.update(0.0, "Konuşmalar fondan ayrılıyor...")
+        raise media.MediaError(tx("Önce Ayarlar → Özellikler'den “Müziği ve efektleri koru” özelliğini ekle."))
+    job.update(0.0, tx("Konuşmalar fondan ayrılıyor..."))
     mix, sr = media.read_audio(d / p["stems"]["original"])
     stems, _ = separated_stems(d, mix, sr, load_settings().get("separationModel", "htdemucs_ft"), int(time.time()),
-                               lambda f, msg=None: job.update(f * 0.99, msg))
+                               lambda f, msg=None: job.update(f * 0.99, msg), known=line_regions(p["lines"]))
     (d / "media" / "audio_lite.wav").unlink(missing_ok=True)
 
     def fn(p_):
         p_["stems"] = stems
         p_["mix"].update(SEPARATED_MIX)
     store.mutate(pid, fn)
-    return {"message": "Konuşmalar ayrıldı: müzik ve efektler artık dublajın altında."}
+    return {"message": tx("Konuşmalar ayrıldı: müzik ve efektler artık dublajın altında.")}
 
 
 def run_ambience(job, pid):
@@ -166,28 +189,29 @@ def run_ambience(job, pid):
     p = store.get(pid)
     d = store.dir(pid)
     if not p.get("stems"):
-        raise media.MediaError("Önce sahneyi hazırla.")
+        raise media.MediaError(tx("Önce sahneyi hazırla."))
     if p["stems"].get("separated") is False:
-        raise media.MediaError("Bu sahnede konuşmalar fondan ayrılmadı; önce Mikser'den konuşmaları ayır.")
-    job.update(0.0, "Ortam sesleri ayrılıyor (kuş, rüzgar, kalabalık)...")
+        raise media.MediaError(tx("Bu sahnede konuşmalar fondan ayrılmadı; önce Mikser'den konuşmaları ayır."))
+    job.update(0.0, tx("Ortam sesleri ayrılıyor (kuş, rüzgar, kalabalık)..."))
     voices, _ = media.read_audio(d / p["stems"]["voices"])
     background, _ = media.read_audio(d / p["stems"]["background"])
-    stems = write_ambience(d, voices, background, lambda f, msg=None: job.update(f * 0.98, msg))
+    stems = write_ambience(d, voices, background, lambda f, msg=None: job.update(f * 0.98, msg),
+                           known=line_regions(p["lines"]))
     store.mutate(pid, lambda p_: p_["stems"].update(stems))
-    return {"message": "Ortam sesleri geri geldi. Mikser'deki Ortam sesleri izinden ayarlayabilirsin."}
+    return {"message": tx("Ortam sesleri geri geldi. Mikser'deki Ortam izinden ayarlayabilirsin.")}
 
 
 def run_prepare(job, pid, opts):
     p = store.get(pid)
     d = store.dir(pid)
     if not p.get("source"):
-        raise media.MediaError("Önce bir video yükle.")
+        raise media.MediaError(tx("Önce bir video yükle."))
     info = p["source"]["info"]
     src = d / p["source"]["file"]
     start = max(0.0, float(opts.get("start", 0)))
     end = min(info["duration"], float(opts.get("end", info["duration"])))
     if end - start < 1.0:
-        raise media.MediaError("Seçilen sahne en az 1 saniye olmalı.")
+        raise media.MediaError(tx("Seçilen sahne en az 1 saniye olmalı."))
     settings = {**p["settings"], **{k: opts[k] for k in ("srcLang", "dstLang", "speakers", "translator", "style")
                                     if k in opts}}
     app = load_settings()
@@ -211,7 +235,7 @@ def run_prepare(job, pid, opts):
     # 1. cut the scene
     job.step("cut")
     prog = _stepper(job, base, "cut")
-    prog(0, "Sahne kesiliyor...")
+    prog(0, tx("Sahne kesiliyor..."))
     master, audio = d / "media" / "master.mp4", d / "media" / "audio.wav"
     media.cut_master(src, master, audio, start, end, info, progress=lambda f: prog(f * 0.7))
     clip = media.probe(master)
@@ -238,7 +262,7 @@ def run_prepare(job, pid, opts):
     else:
         stems, voices = unseparated_stems(d, mix, sr, ver), mix
         mix_mode = UNSEPARATED_MIX
-        notes.append("Müzik ayrılmadı: orijinal ses dublajın altında kısılarak çalar.")
+        notes.append(tx("Müzik ayrılmadı: orijinal ses dublajın altında kısılarak çalar."))
         job.step("separate", "skipped")
     del mix
 
@@ -267,11 +291,11 @@ def run_prepare(job, pid, opts):
     # 4. speakers -> characters + lines
     job.step("speakers")
     prog = _stepper(job, base, "speakers")
-    prog(0, "Konuşmacılar ayırt ediliyor...")
+    prog(0, tx("Konuşmacılar ayırt ediliyor..."))
     turns = []
     if tr["words"]:
         from .diarize import diarize, ensure_models
-        ensure_models(lambda f: prog(f * 0.3, "Konuşmacı modeli indiriliyor (ilk sefere özel, ~32 MB)..."))
+        ensure_models(lambda f: prog(f * 0.3, tx("Konuşmacı modeli indiriliyor (ilk sefere özel, ~32 MB)...")))
         turns = diarize(v16, int(settings.get("speakers") or 0), progress=lambda f: prog(0.3 + f * 0.65))
     from .segment import make_project_lines
     from .vad import speech_regions
@@ -282,6 +306,12 @@ def run_prepare(job, pid, opts):
         p_["detectedLang"] = tr["language"]
         return len(p_["lines"])
     n_lines = store.mutate(pid, build)
+    if n_lines and mix_mode is SEPARATED_MIX:
+        # now that the lines say where people talk, a voice the first split left in the ambience goes to the speech
+        prog(0.95, tx("Ortam sesi konuşmalardan arındırılıyor..."))
+        upd = refine_ambience(d, store.get(pid)["lines"], lambda f, msg=None: prog(0.95 + 0.05 * f))
+        if upd:
+            store.mutate(pid, lambda p_: p_["stems"].update(upd))
     job.step("speakers", "done" if speech else "skipped")
     base += _WEIGHTS["speakers"]
 
@@ -290,12 +320,12 @@ def run_prepare(job, pid, opts):
     prog = _stepper(job, base, "translate")
     if not speech:
         job.step("translate", "skipped")
-        notes.insert(0, "Satırlar yazılmadı: Yazıya dökme özelliği yüklü değil. Senaryo'da satırları kendin "
-                        "ekleyebilirsin.")
+        notes.insert(0, tx("Satırlar yazılmadı: Yazıya dökme özelliği yüklü değil. Senaryo'da satırları kendin "
+                           "ekleyebilirsin."))
     elif n_lines:
         src_lang = settings.get("srcLang") if settings.get("srcLang") not in (None, "", "auto") else tr["language"]
         try:
-            prog(0, "Satırlar çevriliyor...")
+            prog(0, tx("Satırlar çevriliyor..."))
             p = store.get(pid)
             from .translate import translate_lines
             tr_notes = []
@@ -306,15 +336,15 @@ def run_prepare(job, pid, opts):
             job.step("translate", "done")
             notes.extend(tr_notes)
         except Exception as e:
-            notes.append(f"Çeviri yapılamadı: {e}. Senaryo ekranından tekrar deneyebilirsin.")
+            notes.append(tx("Çeviri yapılamadı: {e}. Senaryo ekranından tekrar deneyebilirsin.", e=e))
             job.step("translate", "error")
     else:
         job.step("translate", "done")
-        notes.insert(0, "Bu sahnede konuşma bulunamadı. Senaryo ekranından satırları elle ekleyebilirsin.")
+        notes.insert(0, tx("Bu sahnede konuşma bulunamadı. Senaryo ekranından satırları elle ekleyebilirsin."))
 
     warning = " ".join(notes) or None
     store.mutate(pid, lambda p_: p_.update(status="ready"))
-    return {"lines": n_lines, "warning": warning, "message": warning or f"{n_lines} satır hazır"}
+    return {"lines": n_lines, "warning": warning, "message": warning or tx("{n} satır hazır", n=n_lines)}
 
 
 def run_translate(job, pid, engine, style, only_empty):
@@ -326,7 +356,7 @@ def run_translate(job, pid, engine, style, only_empty):
     src = st.get("srcLang") if st.get("srcLang") not in (None, "", "auto") else (p.get("detectedLang") or "auto")
     from .translate import ALIASES, translate_lines
     engine = ALIASES.get(engine, engine)
-    job.update(0.0, "Satırlar çevriliyor...")
+    job.update(0.0, tx("Satırlar çevriliyor..."))
     notes = []
     out = translate_lines(lines, p["characters"], src, st.get("dstLang", "en"), engine, style, load_settings(),
                           lambda f, *_: job.update(f), notes)
@@ -338,4 +368,4 @@ def run_translate(job, pid, engine, style, only_empty):
             if l["id"] in out:
                 l["text"] = out[l["id"]]
     store.mutate(pid, fn)
-    return {"count": len(out), "message": " ".join(notes) or f"{len(out)} satır çevrildi."}
+    return {"count": len(out), "message": " ".join(notes) or tx("{n} satır çevrildi.", n=len(out))}

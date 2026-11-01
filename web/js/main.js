@@ -1,8 +1,9 @@
 import { html, render, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { api, P } from './api.js';
-import { Dialog, Icon, Toasts, useIndicator } from './components.js';
+import { Dialog, Icon, installTooltips, Toasts, useIndicator } from './components.js';
 import { desktop, useUpdate } from './desktop.js';
 import { player } from './engine.js';
+import { getLang, hasStoredLang, setLang, systemLang, t } from './i18n.js';
 import { backFromRoom, backFromSettings, go, openProject, setState, startWatch, store, toastError, useStore } from './state.js';
 import { cls } from './util.js';
 import { BoothView } from './views/booth.js';
@@ -34,17 +35,17 @@ function RoomButton({ project, active }) {
   // the room is a place you visit: pressing its button again takes you back
   const href = active ? backFromRoom(pid) : `#/p/${pid}/room`;
   const tone = !r || r.status === 'off' ? null : on ? 'ok' : r.status === 'starting' ? 'busy' : 'bad';
-  return html`<a class=${cls('roombtn', active && 'active')} href=${href} title=${active ? 'Odadan çık' : 'Arkadaşlarını odaya çağır'}>
+  return html`<a class=${cls('roombtn', active && 'active')} href=${href} title=${active ? t('Odadan çık') : t('Arkadaşlarını odaya çağır')}>
     ${tone ? html`<span class=${cls('lamp', tone)}></span>` : html`<${Icon} name="users" size=${16} />`}
-    <span class="roombtn-label">${!r || r.status === 'off' ? 'Oda' : on ? 'Oda açık' : r.status === 'starting' ? 'Oda açılıyor' : 'Oda hatası'}</span>
-    ${on && html`<span class="count" title="Odadaki arkadaşlar">${online}</span>`}</a>`;
+    <span class="roombtn-label">${!r || r.status === 'off' ? t('Oda') : on ? t('Oda açık') : r.status === 'starting' ? t('Oda açılıyor') : t('Oda hatası')}</span>
+    ${on && html`<span class="count" title=${t('Odadaki arkadaşlar')}>${online}</span>`}</a>`;
 }
 
 function UpdateButton() {
   const u = useUpdate();
   if (!u || u.state !== 'downloaded') return null;
-  return html`<button class="updatebtn" title=${`DubKanka ${u.version} indirildi`} onClick=${() => desktop.updates.install()}>
-    <${Icon} name="refresh" size=${14} />Güncelle ve yeniden başlat</button>`;
+  return html`<button class="updatebtn" title=${t('DubKanka {v} indirildi', { v: u.version })} onClick=${() => desktop.updates.install()}>
+    <${Icon} name="refresh" size=${14} />${t('Güncelle ve yeniden başlat')}</button>`;
 }
 
 /** Features downloading in the background: one ring for all of them, a click shows the details. */
@@ -57,7 +58,7 @@ function DownloadPill() {
   return html`<a class="dlpill" href="#/settings/features" title=${js.map((j) => j.title).join('\n')}>
     <svg class="ring" viewBox="0 0 16 16"><circle class="ring-bg" cx="8" cy="8" r="6" /><circle class="ring-fg" cx="8" cy="8" r="6"
       style=${{ strokeDasharray: C, strokeDashoffset: C * (1 - f) }} /></svg>
-    <span>${js.length > 1 ? `${js.length} özellik iniyor` : 'İndiriliyor'}</span><span class="tc">%${Math.round(f * 100)}</span></a>`;
+    <span>${js.length > 1 ? t('{n} özellik iniyor', { n: js.length }) : t('İndiriliyor')}</span><span class="tc">%${Math.round(f * 100)}</span></a>`;
 }
 
 function ProjectName({ p }) {
@@ -71,7 +72,7 @@ function ProjectName({ p }) {
   if (edit)
     return html`<input class="input projname-input" value=${name} autoFocus onInput=${(e) => setName(e.target.value)}
       onBlur=${save} onKeyDown=${(e) => e.key === 'Enter' && e.target.blur()} />`;
-  return html`<button class="projname" title="Adı değiştir" onClick=${() => setEdit(true)}>${p.name}</button>`;
+  return html`<button class="projname" title=${t('Adı değiştir')} onClick=${() => setEdit(true)}>${p.name}</button>`;
 }
 
 function Tabs({ project, tab }) {
@@ -79,13 +80,13 @@ function Tabs({ project, tab }) {
   const box = useRef(null);
   const ind = useRef(null);
   useIndicator(box, ind, '.tab.active', [tab, ready]);
-  return html`<nav class="tabs" ref=${box} aria-label="Adımlar">
+  return html`<nav class="tabs" ref=${box} aria-label=${t('Adımlar')}>
     <i class="tab-ind" ref=${ind}></i>
     ${TABS.map(([k, label, icon], i) => {
       const disabled = k !== 'prepare' && !ready;
       return html`<a key=${k} class=${cls('tab', tab === k && 'active', disabled && 'disabled')} aria-current=${tab === k ? 'page' : undefined}
-        href=${disabled ? undefined : `#/p/${project.id}/${k}`} title=${disabled ? 'Önce sahneyi hazırla' : label}>
-        <span class="tab-n">${i + 1}</span><${Icon} name=${icon} size=${15} /><span class="tab-label">${label}</span></a>`;
+        href=${disabled ? undefined : `#/p/${project.id}/${k}`} title=${disabled ? t('Önce sahneyi hazırla') : null}>
+        <span class="tab-n">${i + 1}</span><${Icon} name=${icon} size=${15} /><span class="tab-label">${t(label)}</span></a>`;
     })}
   </nav>`;
 }
@@ -101,7 +102,7 @@ function Shell({ project, tab, children, bare }) {
   return html`<div class="shell">
     <header class="topbar">
       <div class="topbar-left">
-        <a class="brand" href="#/" title="Projeler"><img src="/web/icon.svg" alt="" /><span>DubKanka</span></a>
+        <a class="brand" href="#/" title=${t('Projeler')}><img src="/web/icon.svg" alt="" /><span>DubKanka</span></a>
         ${project && html`<span class="crumb"><${Icon} name="chevron" size=${14} /></span><${ProjectName} p=${project} />`}
       </div>
       ${project ? html`<${Tabs} project=${project} tab=${tab} />` : html`<span class="topbar-spacer"></span>`}
@@ -109,7 +110,7 @@ function Shell({ project, tab, children, bare }) {
         <${DownloadPill} />
         <${UpdateButton} />
         <${RoomButton} project=${project} active=${tab === 'room'} />
-        <a class=${cls('iconbtn', inSettings && 'on')} href=${inSettings ? backFromSettings() : '#/settings'} title=${inSettings ? 'Ayarları kapat (Esc)' : 'Ayarlar'}
+        <a class=${cls('iconbtn', inSettings && 'on')} href=${inSettings ? backFromSettings() : '#/settings'} title=${inSettings ? t('Ayarları kapat (Esc)') : t('Ayarlar')}
           aria-pressed=${inSettings}><${Icon} name=${inSettings ? 'x' : 'gear'} /></a>
       </div>`}
     </header>
@@ -145,11 +146,11 @@ function App() {
   const s = useStore();
   if (s.bootError)
     return html`<div class="boot error"><img class="boot-mark" src="/web/icon.svg" alt="" />${s.bootError}
-      <button class="btn" onClick=${() => location.reload()}>Tekrar dene</button></div>`;
-  if (!s.role) return html`<div class="boot"><img class="boot-mark" src="/web/icon.svg" alt="" />Bağlanıyor…</div>`;
+      <button class="btn" onClick=${() => location.reload()}>${t('Tekrar dene')}</button></div>`;
+  if (!s.role) return html`<div class="boot"><img class="boot-mark" src="/web/icon.svg" alt="" />${t('Bağlanıyor…')}</div>`;
   if (s.role !== 'host') return html`<${GuestApp} /><${Toasts} /><${Dialog} />`;
   // nothing until the system info is here: a first start must open on the feature picker, not flash the home page
-  if (!s.system) return html`<div class="boot"><img class="boot-mark" src="/web/icon.svg" alt="" />Açılıyor…</div>`;
+  if (!s.system) return html`<div class="boot"><img class="boot-mark" src="/web/icon.svg" alt="" />${t('Açılıyor…')}</div>`;
   const [a, b, c] = s.route;
   let view;
   if (s.system && s.system.settings.onboarded === false) view = html`<${Shell} bare><${Onboarding} /></${Shell}>`;
@@ -157,14 +158,35 @@ function App() {
   else if (a === 'settings') view = html`<${Shell}><${SettingsView} page=${b} /></${Shell}>`;
   else view = html`<${Shell}><${HomeView} /></${Shell}>`;
   return html`${view}<${Toasts} /><${Dialog} />${!s.online && html`<div class="offline" role="alert"><${Icon} name="alert" size=${16} />
-    Uygulamayla bağlantı koptu. DubKanka açık mı?</div>`}`;
+    ${t('Uygulamayla bağlantı koptu. DubKanka açık mı?')}</div>`}`;
+}
+
+/** A new language mounts the whole app again, so every word on screen is the new language's (state.changeLang). */
+function Root() {
+  const s = useStore();
+  return html`<${App} key=${s.lang} />`;
+}
+
+/** The language the studio speaks: what was picked in Ayarlar → Genel. Before 1.4 there was only Turkish, so an
+ *  existing install stays Turkish; a first start follows the system. The server and the desktop shell are told. */
+async function settleLang(sys) {
+  const saved = sys.settings && sys.settings.language;
+  const want = saved || (hasStoredLang() ? getLang() : sys.settings && sys.settings.onboarded ? 'tr' : systemLang());
+  const changed = want !== getLang();
+  if (changed) {
+    setLang(want);
+    setState({ lang: want });
+  }
+  if (!saved) await api.post('/api/settings', { language: want }).catch(() => {});
+  if (desktop && desktop.setLanguage) desktop.setLanguage(want).catch(() => {});
+  return changed ? api.get('/api/system') : sys; // labels from the server come in the request's language
 }
 
 async function boot() {
   try {
     const who = await api.get('/api/whoami');
     setState({ role: who.role, guestName: who.name });
-    if (who.role === 'host') setState({ system: await api.get('/api/system') });
+    if (who.role === 'host') setState({ system: await settleLang(await api.get('/api/system')) });
     else if (who.role === 'guest' && who.projectId) await openProject(who.projectId);
   } catch (e) {
     setState({ bootError: e.message });
@@ -172,6 +194,14 @@ async function boot() {
   if (!store.projectId && store.role !== 'anon') startWatch();
 }
 
-render(html`<${App} />`, document.getElementById('app'));
+// Nothing in the studio is dragged out of the window: a link or a picture used to leave a ghost with its address. Text
+// can still be dragged inside a field.
+document.addEventListener('dragstart', (e) => {
+  const el = e.target instanceof Element ? e.target : e.target && e.target.parentElement;
+  if (!el || !el.closest('input, textarea, [contenteditable="true"], [draggable="true"]')) e.preventDefault();
+});
+installTooltips();
+
+render(html`<${Root} />`, document.getElementById('app'));
 boot();
 window.dk = { store, player, go };

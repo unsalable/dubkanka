@@ -28,9 +28,11 @@ contextBridge.exposeInMainWorld('dkDesktop', {
   relaunch: call('dk:relaunch'),
   setTitleBarOverlay: call('dk:titlebar'),
   runtime: { getInfo: call('dk:runtime:info'), repair: call('dk:runtime:repair') },
+  setLanguage: call('dk:lang:set'),
 });
 
 contextBridge.exposeInMainWorld('dkSetup', {
+  lang: ipcRenderer.sendSync('dk:lang'),
   onEvent: (cb) => on('dk:setup', cb),
   replay: call('dk:setup:replay'),
   retry: call('dk:setup:retry'),

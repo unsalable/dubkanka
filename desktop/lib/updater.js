@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { app } = require('electron');
 const P = require('./paths');
+const { t } = require('./i18n');
 
 const CHECK_TIMEOUT = 6000; // a launch never waits longer than this for the answer
 let autoUpdater = null;
@@ -57,7 +58,7 @@ function init(beforeInstall) {
   autoUpdater.on('update-downloaded', (i) => set({ state: 'downloaded', version: i.version, progress: 1 }));
   autoUpdater.on('error', (e) => {
     log('error', e && e.stack);
-    set({ state: 'error', error: /net::|ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN/.test(String(e)) ? 'İnternete ulaşılamadı' : String((e && e.message) || e).slice(0, 160) });
+    set({ state: 'error', error: /net::|ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN/.test(String(e)) ? t('İnternete ulaşılamadı') : String((e && e.message) || e).slice(0, 160) });
   });
 }
 

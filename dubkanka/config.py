@@ -34,6 +34,7 @@ DEFAULT_SETTINGS = {
     "exportsDir": "",
     "defaultDstLang": "en",  # dub language a new scene starts with: the one picked for the last scene
     "onboarded": None,  # the first-run feature picker was answered (None: not decided yet, see features.boot)
+    "language": None,  # tr | en: what the studio speaks (i18n.py); None until the web UI settles it on first start
 }
 
 _lock = threading.Lock()

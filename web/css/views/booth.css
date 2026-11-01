@@ -24,9 +24,9 @@
 /* the cue: who speaks, the dub line large, the original small */
 .cue { padding: 12px 16px 10px; border-top: 1px solid var(--line); }
 .cue-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
-.cue-head .hl { font-size: 15px; }
-/* the speaker's dot pops in when the next speaker takes over: the one place the tag itself moves */
-.cue-head .hl::before { width: 10px; height: 10px; animation: dot-in calc(420ms * var(--m)) var(--spring) both; }
+.cue-head .hl { font-size: 14px; height: 26px; padding: 0 10px; border-radius: 8px; }
+/* the speaker's tag pops in when the next speaker takes over: the one place the tag itself moves */
+.cue-head .hl { animation: dot-in calc(420ms * var(--m)) var(--spring) both; }
 .cue-text { font: 600 clamp(22px, 2.3vw, 34px)/1.25 var(--font); text-wrap: balance; animation: line-in var(--t-slow) var(--ease-out) both; min-height: 1.25em; }
 .cw { color: var(--text); transition: color calc(120ms * var(--m)), background-color calc(120ms * var(--m)); border-radius: 2px; }
 .cw.on { color: var(--accent-ink); background: var(--accent); }
@@ -70,9 +70,12 @@
 .booth-mon { display: flex; align-items: center; justify-content: space-between; gap: 10px 22px; flex-wrap: wrap; margin: 8px 14px 12px; padding: 8px 10px 8px 14px;
   border-radius: var(--r); background: var(--panel-2); border: 1px solid var(--line); }
 .mon { display: flex; align-items: center; gap: 10px; min-width: 0; }
-.mon-mic-row { flex: 1 1 280px; max-width: 470px; color: var(--text-3); }
+.mon-mic-row { flex: 1 1 340px; max-width: 640px; color: var(--text-3); }
+/* the way to the microphone settings, right next to the microphone */
+.mon-set { flex: none; color: var(--text-2); }
+.mon-set.active { background: var(--raised-2); border-color: transparent; color: var(--text); }
 .mon-mic-row .meter { min-width: 80px; }
-.mon-mic { width: auto; min-width: 0; max-width: 220px; height: 28px; font-size: 12px; flex: 0 1 auto; }
+.mon-mic { width: auto; min-width: 0; max-width: 220px; height: 28px; font-size: 12px; flex: 0 1 auto; border-radius: 9px; }
 .mon-levels { gap: 6px 16px; flex-wrap: wrap; }
 .mon-lvl { display: flex; align-items: center; gap: 8px; font-size: 12px; font-weight: 500; color: var(--text-2); cursor: pointer; }
 .mon-lvl input[type='range'] { width: 84px; }
@@ -108,8 +111,7 @@
 .lineitem.sel { background: var(--accent-soft); }
 .lineitem.done { color: var(--text-2); }
 .lineitem.done .icon { color: var(--ok); }
-.lineitem-n { font-size: 11px; color: var(--text-3); min-width: 22px; text-align: right; }
-.lineitem.sel .lineitem-n { color: var(--accent); }
+.lineitem-n { font-size: 11px; font-weight: 600; color: color-mix(in oklab, var(--c, var(--text-3)) 72%, #fff); min-width: 22px; text-align: right; }
 .lineitem-t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
 .side-foot { display: flex; gap: 6px; flex-wrap: wrap; padding: 10px 12px; border-top: 1px solid var(--line); margin-top: auto; }
 .boothsettings { padding: 12px; animation: fade var(--t) var(--ease-out); }

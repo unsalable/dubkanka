@@ -2,6 +2,7 @@ import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P } from '../api.js';
 import { Btn, Field, Icon, JobPanel, Select } from '../components.js';
 import { FeatureOffer } from '../feature-ui.js';
+import { t } from '../i18n.js';
 import { ask, featureReady, go, jobOf, toast, toastError, useStore } from '../state.js';
 import { clamp, fmtTime, parseTime } from '../util.js';
 
@@ -38,8 +39,8 @@ function RangeBar({ duration, range, setRange, current, onSeek }) {
   return html`<div class="rangebar" ref=${ref} onPointerDown=${(e) => onSeek(toT(e.clientX))}>
     <div class="rangebar-sel" style=${{ left: pct(range[0]), width: (100 * (range[1] - range[0])) / duration + '%' }}></div>
     <div class="rangebar-cur" style=${{ left: pct(current) }}></div>
-    <div class="rangebar-h" style=${{ left: pct(range[0]) }} onPointerDown=${drag(0)} title="Başlangıç"></div>
-    <div class="rangebar-h" style=${{ left: pct(range[1]) }} onPointerDown=${drag(1)} title="Bitiş"></div>
+    <div class="rangebar-h" style=${{ left: pct(range[0]) }} onPointerDown=${drag(0)} title=${t('Başlangıç')}></div>
+    <div class="rangebar-h" style=${{ left: pct(range[1]) }} onPointerDown=${drag(1)} title=${t('Bitiş')}></div>
   </div>`;
 }
 
@@ -80,22 +81,22 @@ export function PrepareView({ p }) {
       wasRunning.current = false;
       const r = prep.result || {};
       if (r.warning) toast(r.warning, 'info', 8000);
-      else toast(`Sahne hazır: ${r.lines ?? p.lines.length} satır`, 'ok');
+      else toast(t('Sahne hazır: {n} satır', { n: r.lines ?? p.lines.length }), 'ok');
       go(`p/${p.id}/script`);
     }
   }, [prep && prep.status, p.status]);
 
   if (running(imp) || (!p.source && !(imp && imp.status === 'error')))
-    return html`<${Processing} p=${p} job=${imp || { title: 'Video okunuyor', status: 'running', progress: 0, message: 'Bekleniyor…' }}
-      title=${(imp && imp.title) === 'Video indiriliyor' ? 'Video indiriliyor' : 'Video okunuyor'} note="Bitince sahneyi seçeceksin." />`;
+    return html`<${Processing} p=${p} job=${imp || { title: t('Video okunuyor'), status: 'running', progress: 0, message: t('Bekleniyor…') }}
+      title=${imp && imp.title ? imp.title : t('Video okunuyor')} note=${t('Bitince sahneyi seçeceksin.')} />`;
   if (!p.source)
-    return html`<div class="page narrow"><${JobPanel} job=${imp} /><${Btn} icon="back" onClick=${() => go('')}>Projelere dön</${Btn}></div>`;
+    return html`<div class="page narrow"><${JobPanel} job=${imp} /><${Btn} icon="back" onClick=${() => go('')}>${t('Projelere dön')}</${Btn}></div>`;
 
   const speech = featureReady('speech');
   const separate = featureReady('separate');
   if (running(prep) || p.status === 'preparing')
-    return html`<${Processing} p=${p} job=${prep || { title: 'Sahne hazırlanıyor', status: 'queued', progress: 0, message: 'Sırada…' }}
-      title="Sahne hazırlanıyor" note="Bitince senaryo açılır." />`;
+    return html`<${Processing} p=${p} job=${prep || { title: t('Sahne hazırlanıyor'), status: 'queued', progress: 0, message: t('Sırada…') }}
+      title=${t('Sahne hazırlanıyor')} note=${t('Bitince senaryo açılır.')} />`;
 
   const src = fileUrl(p.id, p.source.proxy || p.source.file);
   const set = (k) => (v) => setOpts((o) => ({ ...o, [k]: v }));
@@ -111,7 +112,7 @@ export function PrepareView({ p }) {
   };
   const start = async () => {
     if (p.status === 'ready' && p.lines.some((l) => l.takes && l.takes.length) &&
-      !(await ask({ title: 'Sahne yeniden hazırlansın mı?', text: 'Şimdiki satırlar ve bütün kayıtlar silinir.', ok: 'Yeniden hazırla', danger: true }))) return;
+      !(await ask({ title: t('Sahne yeniden hazırlansın mı?'), text: t('Şimdiki satırlar ve bütün kayıtlar silinir.'), ok: t('Yeniden hazırla'), danger: true }))) return;
     try {
       wasRunning.current = true;
       await api.post(P(p.id, '/prepare'), { start: range[0], end: range[1], ...opts, speakers: Number(opts.speakers) || 0 });
@@ -126,8 +127,8 @@ export function PrepareView({ p }) {
 
   return html`<div class="page prepare">
     ${prep && prep.status === 'error' && html`<div class="prepare-alert"><${JobPanel} job=${prep} /></div>`}
-    ${p.status === 'ready' && html`<div class="prepare-alert"><div class="alert ok"><${Icon} name="check" /><span>Sahne hazır.</span>
-      <a href=${`#/p/${p.id}/script`}>Senaryoyu aç</a></div></div>`}
+    ${p.status === 'ready' && html`<div class="prepare-alert"><div class="alert ok"><${Icon} name="check" /><span>${t('Sahne hazır.')}</span>
+      <a href=${`#/p/${p.id}/script`}>${t('Senaryoyu aç')}</a></div></div>`}
     <div class="ws prepare-grid">
       <section class="pane viewer-pane">
         <div class="videopane srcwrap">
@@ -143,45 +144,45 @@ export function PrepareView({ p }) {
         <div class="trim">
           <${RangeBar} duration=${dur} range=${range} setRange=${setRange} current=${cur} onSeek=${seek} />
           <div class="trimrow">
-            <div class="trimcell"><span class="seclabel">Giriş</span>
-              <div class="row nowrap"><${TimeInput} label="Başlangıç" value=${range[0]} onChange=${(t) => setRange([clamp(t, 0, range[1] - 1), range[1]])} />
-                <${Btn} small kind="ghost" onClick=${() => setRange([Math.min(cur, range[1] - 1), range[1]])} title="Başlangıcı oynatma noktasına al">Buradan</${Btn}></div></div>
-            <div class="trimcell center"><${Btn} icon="play" onClick=${playSel}>Seçimi izle</${Btn}>
+            <div class="trimcell"><span class="seclabel">${t('Giriş')}</span>
+              <div class="row nowrap"><${TimeInput} label=${t('Başlangıç')} value=${range[0]} onChange=${(x) => setRange([clamp(x, 0, range[1] - 1), range[1]])} />
+                <${Btn} small kind="ghost" onClick=${() => setRange([Math.min(cur, range[1] - 1), range[1]])} title=${t('Başlangıcı oynatma noktasına al')}>${t('Buradan')}</${Btn}></div></div>
+            <div class="trimcell center"><${Btn} icon="play" onClick=${playSel}>${t('Seçimi izle')}</${Btn}>
               <span class="tc-lcd">${fmtTime(range[1] - range[0])}</span></div>
-            <div class="trimcell right"><span class="seclabel">Çıkış</span>
-              <div class="row nowrap"><${Btn} small kind="ghost" onClick=${() => setRange([range[0], Math.max(cur, range[0] + 1)])} title="Bitişi oynatma noktasına al">Buraya kadar</${Btn}>
-                <${TimeInput} label="Bitiş" value=${range[1]} onChange=${(t) => setRange([range[0], clamp(t, range[0] + 1, dur)])} /></div></div>
+            <div class="trimcell right"><span class="seclabel">${t('Çıkış')}</span>
+              <div class="row nowrap"><${Btn} small kind="ghost" onClick=${() => setRange([range[0], Math.max(cur, range[0] + 1)])} title=${t('Bitişi oynatma noktasına al')}>${t('Buraya kadar')}</${Btn}>
+                <${TimeInput} label=${t('Bitiş')} value=${range[1]} onChange=${(x) => setRange([range[0], clamp(x, range[0] + 1, dur)])} /></div></div>
           </div>
-          ${long && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />Seçim ${fmtTime(range[1] - range[0], 0)} uzunluğunda; kısa sahne çok daha hızlı hazırlanır.</div>`}
+          ${long && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${t('Seçim {d} uzunluğunda; kısa sahne çok daha hızlı hazırlanır.', { d: fmtTime(range[1] - range[0], 0) })}</div>`}
         </div>
       </section>
       <section class="pane">
-        <div class="pane-head"><h3>Sahne</h3></div>
+        <div class="pane-head"><h3>${t('Sahne')}</h3></div>
         ${speech ? html`<div class="pane-body">
-          <${Field} label="Videodaki dil">
-            <${Select} value=${opts.srcLang || 'auto'} onChange=${set('srcLang')} options=${[['auto', 'Otomatik algıla'], ...langs]} />
+          <${Field} label=${t('Videodaki dil')}>
+            <${Select} value=${opts.srcLang || 'auto'} onChange=${set('srcLang')} options=${[['auto', t('Otomatik algıla')], ...langs]} />
           </${Field}>
-          <${Field} label="Dublaj dili">
+          <${Field} label=${t('Dublaj dili')}>
             <${Select} value=${opts.dstLang || 'en'} onChange=${set('dstLang')} options=${langs} />
           </${Field}>
-          <${Field} label="Kaç kişi konuşuyor?">
+          <${Field} label=${t('Kaç kişi konuşuyor?')}>
             <${Select} value=${String(opts.speakers || 0)} onChange=${set('speakers')}
-              options=${[['0', 'Otomatik bul'], ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => [String(n), n + ' kişi'])]} />
+              options=${[['0', t('Otomatik bul')], ...[1, 2, 3, 4, 5, 6, 7, 8].map((n) => [String(n), t('{n} kişi', { n })])]} />
           </${Field}>
-          <${Field} label="Çeviri">
-            <${Select} value=${opts.translator} onChange=${set('translator')} options=${translators.map((t) => [t.id, t.name + (t.configured ? '' : ' (ayarlanmadı)')])} />
+          <${Field} label=${t('Çeviri')}>
+            <${Select} value=${opts.translator} onChange=${set('translator')} options=${translators.map((x) => [x.id, x.name + (x.configured ? '' : ' ' + t('(ayarlanmadı)'))])} />
           </${Field}>
-          ${tr.kind === 'llm' && html`<${Field} label="Çeviri tarzı">
+          ${tr.kind === 'llm' && html`<${Field} label=${t('Çeviri tarzı')}>
             <${Select} value=${opts.style || 'natural'} onChange=${set('style')} options=${Object.entries(sys.styles || {})} />
           </${Field}>`}
-          ${tr.id && !tr.configured && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${tr.name} ayarlanmamış; satırlar çevrilmeden kalır. <a href="#/settings/translate">Ayarlar</a></div>`}
+          ${tr.id && !tr.configured && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${t('{name} ayarlanmamış; satırlar çevrilmeden kalır.', { name: tr.name })} <a href="#/settings/translate">${t('Ayarlar')}</a></div>`}
         </div>` : null}
         ${!(speech && separate) && html`<div class="pane-body prep-offers">
-          <${FeatureOffer} id="speech" text="Satırları kendiliğinden yazar ve çevirir." />
-          <${FeatureOffer} id="separate" text="Müzik ve efektler dublajın altında kalır." />
+          <${FeatureOffer} id="speech" text=${t('Satırları kendiliğinden yazar ve çevirir.')} />
+          <${FeatureOffer} id="separate" text=${t('Müzik ve efektler dublajın altında kalır.')} />
         </div>`}
         <div class="pane-body prep-cta">
-          <${Btn} kind="primary big" icon="sparkle" onClick=${start}>${p.status === 'ready' ? 'Yeniden hazırla' : 'Sahneyi hazırla'}</${Btn}>
+          <${Btn} kind="primary big" onClick=${start}>${p.status === 'ready' ? t('Yeniden hazırla') : t('Sahneyi hazırla')}</${Btn}>
         </div>
       </section>
     </div>

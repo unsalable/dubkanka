@@ -10,6 +10,7 @@ import numpy as np
 
 from . import media
 from .config import EXPORTS_DIR, SAMPLE_RATE
+from .i18n import tx
 from .mixer import render, selected_take, take_window
 from .projects import store
 
@@ -25,28 +26,32 @@ _FONTS_DIR = os.path.join(os.environ.get("WINDIR", r"C:\Windows"), "Fonts").repl
 VIDEO_DEFAULTS = {"mode": "encode", "codec": "h264", "encoder": "auto", "rc": "crf", "quality": 18, "bitrate": 12.0,
                   "preset": "medium", "fps": "source", "height": "source", "pixfmt": "yuv420p", "gop": 2.0}
 AUDIO_DEFAULTS = {"codec": "aac", "bitrate": 192, "sampleRate": 48000, "loudnorm": True, "lufs": -14.0}
-EXPORT_DEFAULTS = {"format": "vertical_blur", "subs": "dub", "subMode": "burn", "subFont": "Arial Black", "subSize": 1.0,
+# Sharing starts from a copy of the source picture (the user's wish, 1.4): nothing is re-encoded, so nothing is lost.
+# Another quality is one click away on the Paylaş screen.
+EXPORT_DEFAULTS = {"format": "original", "subs": "dub", "subMode": "soft", "subFont": "Arial Black", "subSize": 1.0,
                    "subPos": None, "subColor": "white", "credits": True, "creditsText": "", "mix": "dub",
-                   "preset": "tiktok", "container": "mp4", "video": VIDEO_DEFAULTS, "audio": AUDIO_DEFAULTS}
+                   "preset": "copy", "container": "mp4", "video": {**VIDEO_DEFAULTS, "mode": "copy"},
+                   "audio": {**AUDIO_DEFAULTS, "bitrate": 320}}
 
-# "tiktok" is the id the standard preset had from the start: saved projects keep pointing at it
+# In the order they are shown. "tiktok" is the id the standard preset had from the start: saved projects keep
+# pointing at it.
 PRESETS = {
-    "tiktok": {"label": "Standart", "summary": "H.264 High · CRF 18 · kaynak fps (en fazla 60) · AAC 192k · -14 LUFS",
-               "settings": {"container": "mp4", "subMode": "burn",
-                            "video": {**VIDEO_DEFAULTS},
-                            "audio": {**AUDIO_DEFAULTS}}},
-    "high": {"label": "Yüksek kalite", "summary": "H.264 High · CRF 14 · yavaş preset · AAC 320k · -14 LUFS",
-             "settings": {"container": "mp4", "subMode": "burn",
-                          "video": {**VIDEO_DEFAULTS, "quality": 14, "preset": "slow"},
-                          "audio": {**AUDIO_DEFAULTS, "bitrate": 320}}},
-    "small": {"label": "Küçük dosya", "summary": "H.265 · CRF 26 · 720p · AAC 128k",
-              "settings": {"container": "mp4", "subMode": "burn",
-                           "video": {**VIDEO_DEFAULTS, "codec": "hevc", "quality": 26, "height": 720},
-                           "audio": {**AUDIO_DEFAULTS, "bitrate": 128}}},
     "copy": {"label": "Kaynak kopyası", "summary": "Görüntü yeniden kodlanmaz (-c:v copy), sadece ses değişir · AAC 320k",
              "settings": {"format": "original", "container": "mp4", "subMode": "soft",
                           "video": {**VIDEO_DEFAULTS, "mode": "copy"},
                           "audio": {**AUDIO_DEFAULTS, "bitrate": 320}}},
+    "high": {"label": "Yüksek kalite", "summary": "H.264 High · CRF 14 · yavaş preset · AAC 320k · -14 LUFS",
+             "settings": {"container": "mp4", "subMode": "burn",
+                          "video": {**VIDEO_DEFAULTS, "quality": 14, "preset": "slow"},
+                          "audio": {**AUDIO_DEFAULTS, "bitrate": 320}}},
+    "tiktok": {"label": "Standart", "summary": "H.264 High · CRF 18 · kaynak fps (en fazla 60) · AAC 192k · -14 LUFS",
+               "settings": {"container": "mp4", "subMode": "burn",
+                            "video": {**VIDEO_DEFAULTS},
+                            "audio": {**AUDIO_DEFAULTS}}},
+    "small": {"label": "Küçük dosya", "summary": "H.265 · CRF 26 · 720p · AAC 128k",
+              "settings": {"container": "mp4", "subMode": "burn",
+                           "video": {**VIDEO_DEFAULTS, "codec": "hevc", "quality": 26, "height": 720},
+                           "audio": {**AUDIO_DEFAULTS, "bitrate": 128}}},
 }
 X264_PRESETS = ["ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"]
 _NV_PRESET = {"ultrafast": "p1", "superfast": "p1", "veryfast": "p2", "faster": "p3", "fast": "p4", "medium": "p5",
@@ -136,7 +141,7 @@ def credits_text(p):
         actors = [a for a in dict.fromkeys(names.get(c["id"], [])) if a]
         if actors:
             parts.append(f"{c['name']}: {', '.join(actors)}")
-    return ("Seslendirenler — " + "  •  ".join(parts)) if parts else ""
+    return (tx("Seslendirenler — ") + "  •  ".join(parts)) if parts else ""
 
 
 def build_ass(p, W, H, fmt, fg_box):
@@ -285,13 +290,13 @@ def pick_encoder(v):
     if v["encoder"] not in ("", "auto"):
         e = next((e for e in encs if e["id"] == v["encoder"]), None)
         if not e:
-            raise media.MediaError(f"{v['encoder']} kodlayıcısı bu bilgisayarda çalışmıyor. Otomatik seçimi kullan.")
+            raise media.MediaError(tx("{enc} kodlayıcısı bu bilgisayarda çalışmıyor. Otomatik seçimi kullan.", enc=v["encoder"]))
         return e
     ten = v["pixfmt"] == "yuv420p10le"
     pool = [e for e in encs if e["tenBit"] or not ten]
     if not pool:
-        raise media.MediaError(f"Bu bilgisayarda {_CODEC_NAMES[v['codec']]}{' 10-bit' if ten else ''} kodlayabilen bir "
-                               "kodlayıcı yok.")
+        raise media.MediaError(tx("Bu bilgisayarda {codec} kodlayabilen bir kodlayıcı yok.",
+                                  codec=_CODEC_NAMES[v["codec"]] + (" 10-bit" if ten else "")))
     return pool[0]
 
 
@@ -300,29 +305,30 @@ def problems(ex, src_info):
     v, a, box = ex["video"], ex["audio"], ex["container"]
     if v["mode"] == "copy":
         if ex["format"] != "original":
-            return "Kaynak kopyası sadece Orijinal boyutta olur: 9:16 ve kare için görüntünün yeniden çizilmesi gerekir."
+            return tx("Kaynak kopyası sadece orijinal boyutta olur: 9:16 ve kare için görüntünün yeniden çizilmesi gerekir.")
         if ex["subs"] != "none" and ex["subMode"] == "burn":
-            return "Kaynak kopyasında altyazı görüntüye yakılamaz. Altyazıyı ayrı iz yap ya da kapat."
+            return tx("Kaynak kopyasında altyazı görüntüye yakılamaz. Altyazıyı ayrı iz yap ya da kapat.")
         if not src_info:
-            return "Projenin kaynak videosu bulunamadı, görüntü kopyalanamaz."
+            return tx("Projenin kaynak videosu bulunamadı, görüntü kopyalanamaz.")
         allowed = _COPY_IN[box]
         if allowed is not None and src_info.get("vcodec") not in allowed:
             name = _CODEC_NAMES.get(src_info.get("vcodec"), src_info.get("vcodec") or "?")
-            return f"{name} görüntüsü {box.upper()} içine kopyalanamaz. Kapsayıcı olarak MKV seç."
+            return tx("{codec} görüntüsü {box} içine kopyalanamaz. Kapsayıcı olarak MKV seç.", codec=name, box=box.upper())
     else:
         if v["pixfmt"] == "yuv420p10le" and v["codec"] == "h264":
-            return "10-bit sadece H.265 ve AV1 ile olur."
+            return tx("10-bit sadece H.265 ve AV1 ile olur.")
         if v["codec"] == "av1" and box == "mov":
-            return "AV1, MOV içine konamaz. MP4 ya da MKV seç."
+            return tx("AV1, MOV içine konamaz. MP4 ya da MKV seç.")
         try:
             enc = pick_encoder(v)
         except media.MediaError as e:
             return str(e)
         if v["pixfmt"] == "yuv420p10le" and not enc["tenBit"]:
-            return f"{enc['label']} 10-bit kodlayamıyor. 8-bit seç ya da başka bir kodlayıcı kullan."
+            return tx("{enc} 10-bit kodlayamıyor. 8-bit seç ya da başka bir kodlayıcı kullan.", enc=tx(enc["label"]))
     if a["codec"] not in _AUDIO_IN[box]:
         fit = [c.upper() for c, codecs in _AUDIO_IN.items() if a["codec"] in codecs]
-        return f"{AUDIO_CODECS[a['codec']]} sesi {box.upper()} içine konamaz. Kapsayıcı olarak {' ya da '.join(fit)} seç."
+        return tx("{codec} sesi {box} içine konamaz. Kapsayıcı olarak {fit} seç.", codec=tx(AUDIO_CODECS[a["codec"]]),
+                  box=box.upper(), fit=tx(" ya da ").join(fit))
     return None
 
 
@@ -438,7 +444,7 @@ def _summary(path, copied):
     if "10" in (i.get("pixfmt") or ""):
         v += " 10-bit"
     if copied:
-        v += " (kaynaktan kopya)"
+        v += tx(" (kaynaktan kopya)")
     parts = [v, f"{i.get('width')}×{i.get('height')}", f"{i.get('fps', 0):g} fps"]
     if i.get("acodec"):
         a = {"aac": "AAC", "opus": "Opus", "flac": "FLAC"}.get(i["acodec"], i["acodec"].upper())
@@ -462,7 +468,7 @@ def run_export(job, pid, opts):
     p = store.get(pid)
     d = store.dir(pid)
     if not p.get("clip") or not p.get("stems"):
-        raise media.MediaError("Önce sahneyi hazırla.")
+        raise media.MediaError(tx("Önce sahneyi hazırla."))
     if opts:
         store.mutate(pid, lambda p_: merge(p_["export"], {k: v for k, v in opts.items() if k in EXPORT_DEFAULTS}))
         p = store.get(pid)
@@ -478,7 +484,7 @@ def run_export(job, pid, opts):
     copying = v["mode"] == "copy"
     start = float((p.get("trim") or {}).get("start") or 0)
 
-    job.update(0.02, "Sesler karıştırılıyor...")
+    job.update(0.02, tx("Sesler karıştırılıyor..."))
     audio = render(p, d, ex["mix"])
     gap, key = 0.0, start
     if copying:  # the copy has to begin on a keyframe: the original audio fills the frames before the cut
@@ -493,7 +499,7 @@ def run_export(job, pid, opts):
 
     af = None
     if a["loudnorm"] and media.ffmpeg_caps().get("loudnorm"):
-        job.update(0.05, "Ses seviyesi ölçülüyor (EBU R128)...")
+        job.update(0.05, tx("Ses seviyesi ölçülüyor (EBU R128)..."))
         af = _loudness_filter(mix_path, a["lufs"])
     af = (af or "alimiter=limit=0.95:level=false") + f",aresample={48000 if a['codec'] == 'libopus' else a['sampleRate']}"
 
@@ -509,7 +515,7 @@ def run_export(job, pid, opts):
             sub_in += ["-i", f"media/subs_{which}.srt"]
             sub_map += ["-map", f"{2 + i}:s:0"]
             sub_args += [f"-metadata:s:s:{i}", f"language={_ISO639.get(lang or '', 'und')}",
-                         f"-metadata:s:s:{i}", f"title={'Dublaj' if which == 'dub' else 'Orijinal'}"]
+                         f"-metadata:s:s:{i}", "title=" + (tx("Dublaj") if which == "dub" else tx("Orijinal"))]
         sub_args = (["-c:s", "srt" if box == "mkv" else "mov_text"] + sub_args) if tracks else []
 
     dst_lang = _ISO639.get(p["settings"].get("dstLang") or "", "und") if ex["mix"] == "dub" else "und"
@@ -521,7 +527,7 @@ def run_export(job, pid, opts):
         W, H = info["width"], info["height"]
         args = ["-ss", f"{key:.6f}", "-i", str(src), "-i", "media/export_mix.wav", *sub_in,
                 "-map", "0:v:0", "-map", "1:a:0", *sub_map, "-c:v", "copy", *tail]
-        msg = "Görüntü kaynaktan kopyalanıyor, ses ekleniyor..."
+        msg = tx("Görüntü kaynaktan kopyalanıyor, ses ekleniyor...")
     else:
         enc = pick_encoder(v)
         if info:  # first generation: decode the original, not the scene's working copy
@@ -551,12 +557,12 @@ def run_export(job, pid, opts):
                 last = "v1"
         args = [*vin, "-i", "media/export_mix.wav", *sub_in, "-filter_complex", graph, "-map", f"[{last}]",
                 "-map", "1:a:0", *sub_map, *video_args(v, enc, fps, box), *tail]
-        msg = f"Video oluşturuluyor ({enc['label']})..."
+        msg = tx("Video oluşturuluyor ({enc})...", enc=tx(enc["label"]))
 
     stamp = time.strftime("%Y%m%d-%H%M%S")
-    short = "Kaynak" if copying else {"vertical_blur": "Dikey", "vertical_crop": "Dikey-kirp", "square": "Kare",
-                                      "original": "Orijinal"}[fmt]
-    tag = {"dub": "", "clean": " - Konusmasiz", "original": " - Orijinal ses"}[ex["mix"]]
+    short = tx("Kaynak") if copying else tx({"vertical_blur": "Dikey", "vertical_crop": "Dikey-kirp", "square": "Kare",
+                                             "original": "Orijinal"}[fmt])
+    tag = {"dub": "", "clean": " - " + tx("Konusmasiz"), "original": " - " + tx("Orijinal ses")}[ex["mix"]]
     name = f"{_safe_name(p['name'])} - {short}{tag} - {stamp}.{box}"
     out = EXPORTS_DIR / name
     tmp = EXPORTS_DIR / f"{name}.part.{box}"
@@ -572,7 +578,7 @@ def run_export(job, pid, opts):
     if copying:
         entry["keyframe"] = {"requested": round(start, 3), "actual": round(key, 3), "offset": round(gap, 3)}
     store.mutate(pid, lambda p_: p_.setdefault("exports", []).insert(0, entry))
-    job.update(1.0, "Video hazır!")
+    job.update(1.0, tx("Video hazır."))
     return entry
 
 
@@ -620,8 +626,12 @@ def export_wav(p, d, mode="dub"):
 
 
 def system_info():
+    """The export options, their names in the request's language."""
     caps = media.ffmpeg_caps() if media.has_ffmpeg() else {"encoders": []}
-    return {"formats": FORMATS, "subs": SUBS, "exportPresets": PRESETS, "exportDefaults": EXPORT_DEFAULTS,
-            "encoders": caps["encoders"], "containers": CONTAINERS, "audioCodecs": AUDIO_CODECS,
+    names = lambda d: {k: tx(v) for k, v in d.items()}  # noqa: E731
+    presets = {k: {**v, "label": tx(v["label"]), "summary": tx(v["summary"])} for k, v in PRESETS.items()}
+    return {"formats": names(FORMATS), "subs": names(SUBS), "exportPresets": presets, "exportDefaults": EXPORT_DEFAULTS,
+            "encoders": [{**e, "label": tx(e["label"])} for e in caps["encoders"]], "containers": names(CONTAINERS),
+            "audioCodecs": names(AUDIO_CODECS),
             "fpsOptions": FPS_OPTIONS, "heightOptions": HEIGHT_OPTIONS, "qualityRange": QUALITY_RANGE,
             "encoderPresets": X264_PRESETS}

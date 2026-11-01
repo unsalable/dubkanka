@@ -8,6 +8,7 @@ const path = require('node:path');
 const { spawn } = require('node:child_process');
 const { app, net } = require('electron');
 const P = require('./paths');
+const { t } = require('./i18n');
 
 const PYTHON = '3.14';
 const FFMPEG_URLS = [
@@ -15,6 +16,7 @@ const FFMPEG_URLS = [
   'https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip',
 ];
 
+// labels in Turkish, translated when the plan goes to the setup screen
 const STEPS = [
   { id: 'python', label: 'Python 3.14', size: '30 MB', weight: 3 },
   { id: 'packages', label: 'Stüdyo', size: '80 MB', weight: 6 },
@@ -83,7 +85,7 @@ function run(cmd, args, { env, cwd, onLine, onChild } = {}) {
     child.on('close', (code, signal) => {
       if (code === 0) resolve(tail);
       else {
-        const e = new Error(tail.slice(-6).join('\n') || `${path.basename(cmd)} çıkış kodu ${code ?? signal}`);
+        const e = new Error(tail.slice(-6).join('\n') || t('{exe} çıkış kodu {code}', { exe: path.basename(cmd), code: code ?? signal }));
         e.tail = tail;
         e.killed = signal != null;
         reject(e);
@@ -103,7 +105,7 @@ function freeBytes(dir) {
 
 async function download(url, dest, onBytes) {
   const res = await net.fetch(url, { redirect: 'follow' });
-  if (!res.ok) throw new Error(`İndirilemedi (HTTP ${res.status}): ${url}`);
+  if (!res.ok) throw new Error(t('İndirilemedi (HTTP {status}): {url}', { status: res.status, url }));
   const total = Number(res.headers.get('content-length')) || 0;
   fs.mkdirSync(path.dirname(dest), { recursive: true });
   const file = fs.createWriteStream(dest);
@@ -120,7 +122,7 @@ async function download(url, dest, onBytes) {
   } finally {
     await new Promise((r) => file.end(r));
   }
-  if (total && got < total) throw new Error('İndirme yarıda kesildi, internet bağlantını kontrol et.');
+  if (total && got < total) throw new Error(t('İndirme yarıda kesildi, internet bağlantını kontrol et.'));
 }
 
 function findFile(dir, name, depth = 3) {
@@ -146,12 +148,12 @@ async function ensure(emit) {
   const todo = pending(state);
   if (!todo.length) return P.VENV_PY;
   const firstRun = !exists(P.VENV_PY);
-  const steps = STEPS.map((s) => ({ ...s, state: todo.includes(s.id) ? 'pending' : 'done' }));
+  const steps = STEPS.map((s) => ({ ...s, label: t(s.label), state: todo.includes(s.id) ? 'pending' : 'done' }));
   emit({ type: 'plan', firstRun, steps });
   fs.mkdirSync(P.BIN, { recursive: true });
   const free = freeBytes(P.HOME);
   if (firstRun && free != null && free < 2 * 2 ** 30)
-    emit({ type: 'log', line: `Uyarı: diskte ${mb(free)} MB boş yer var, stüdyo yaklaşık 1 GB ister.`, warn: true });
+    emit({ type: 'log', line: t('Uyarı: diskte {mb} MB boş yer var, stüdyo yaklaşık 1 GB ister.', { mb: mb(free) }), warn: true });
 
   const total = steps.filter((s) => s.state === 'pending').reduce((a, s) => a + s.weight, 0) || 1;
   let base = 0;
@@ -210,11 +212,11 @@ async function ensure(emit) {
         const tmp = path.join(P.BIN, 'ffmpeg-unpack');
         fs.rmSync(tmp, { recursive: true, force: true });
         fs.mkdirSync(tmp, { recursive: true });
-        progress(step, 0.9, 'Arşiv açılıyor');
+        progress(step, 0.9, t('Arşiv açılıyor'));
         await run(P.TAR, ['-xf', zip, '-C', tmp]);
         for (const exe of ['ffmpeg.exe', 'ffprobe.exe']) {
           const f = findFile(tmp, exe);
-          if (!f) throw new Error(`${exe} arşivde bulunamadı.`);
+          if (!f) throw new Error(t('{exe} arşivde bulunamadı.', { exe }));
           fs.copyFileSync(f, path.join(P.BIN, exe));
         }
         fs.rmSync(tmp, { recursive: true, force: true });
@@ -236,8 +238,8 @@ async function ensure(emit) {
 
 function friendly(e) {
   const m = String((e && e.message) || e);
-  if (/ENOTFOUND|ECONNRESET|ETIMEDOUT|ERR_INTERNET|ERR_NAME|network|dns|timed out/i.test(m)) return 'İnternet bağlantısı yok ya da çok yavaş. Bağlantını kontrol edip tekrar dene.';
-  if (/ENOSPC|not enough space|No space/i.test(m)) return 'Diskte yer kalmadı.';
+  if (/ENOTFOUND|ECONNRESET|ETIMEDOUT|ERR_INTERNET|ERR_NAME|network|dns|timed out/i.test(m)) return t('İnternet bağlantısı yok ya da çok yavaş. Bağlantını kontrol edip tekrar dene.');
+  if (/ENOSPC|not enough space|No space/i.test(m)) return t('Diskte yer kalmadı.');
   return m.split('\n').slice(-3).join(' ').slice(0, 400);
 }
 

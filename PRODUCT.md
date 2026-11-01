@@ -1,6 +1,6 @@
 # DubKanka: ürün notu
 
-**Ne:** Bir dizi ya da film sahnesini arkadaşlarla dublajlayıp paylaşmak için Windows masaüstü uygulaması (Electron kabuk + yerel FastAPI sunucu + Preact arayüz, Türkçe). GitHub sürümlerinden tek bir kurulum dosyasıyla kurulur; her açılışta yeni sürüm var mı bakar, varsa indirip kurar ve yeni sürümle açılır.
+**Ne:** Bir dizi ya da film sahnesini arkadaşlarla dublajlayıp paylaşmak için Windows masaüstü uygulaması (Electron kabuk + yerel FastAPI sunucu + Preact arayüz, Türkçe ve İngilizce; dil Ayarlar → Genel'den, ilk açılışta karşılama ekranından, arkadaşlar için katılma ekranından seçilir). GitHub sürümlerinden tek bir kurulum dosyasıyla kurulur; her açılışta yeni sürüm var mı bakar, varsa indirip kurar ve yeni sürümle açılır.
 
 **İlk açılış:** sadece stüdyo iner (~200 MB). Ardından tek soru: "ne yapmak istiyorsun?" Temel stüdyo seçili gelir; yapay zeka parçaları boş gelen ek özelliklerdir (yazıya dökme ve çeviri, müziği koruma, arkadaşlarla oda, kayıt temizleme). Seçilenler arka planda iner; seçilmeyenler kullanılmak istendiği yerde "İndir · boyut" düğmesiyle çıkar, hepsi Ayarlar → Özellikler'de de durur. Kullanıcının isteği (31 Ekim 2026): "Her şeyi en başta indirmeyelim; isteyen sonradan, kullanırken indirsin." 
 
@@ -9,7 +9,8 @@
 **Ana işler:**
 - Videoyu bırakınca önce dublajlanacak sahneyi seçtirmek, sonra her şeyi kendisi hazırlamak: konuşmaları ayırmak (müzik, efekt ve ortam seslerini korumak), yazıya dökmek, kişilere bölmek, çevirmek.
 - Her repliği zamanında kaydetmek (akış çizgisi, bip sesleri, büyük ritim şeridi, otomatik hizalama), temiz sesle: yankı engelleme ve gürültü bastırma açık gelir; gürültü engelleme Discord'daki gibi seçilir (Standart, canlı RNNoise, kayıttan sonra DPDFNet, Kapalı). Krisp ücretli ve kapalı kaynak olduğu için yok; yerine ücretsiz ve açık kaynak olanlar var.
-- Miksi yapıp altyazılı 9:16 video ya da görüntüsü yeniden kodlanmamış bir kopya olarak dışa aktarmak.
+- Konuşma ortam sesine ya da fona karışmışsa onu ayırmak: ayırma, satırların yerini ve birkaç ipucunu birlikte kullanır; kalanı Mikser'de o bölgeyi sürükleyip "Sustur"la ya da satırın altında "Ortam sesini sustur"la kapatmak.
+- Miksi yapıp dışa aktarmak: varsayılan, görüntüsü yeniden kodlanmamış bir kaynak kopyası; isteyen altyazılı 9:16 ya da kare video için başka bir kaliteye geçer.
 
 **Ücret:** Hiçbir şey ücretli değil. Oda Cloudflare'in ücretsiz geçici tüneli, yapay zeka yerel, çeviri varsayılan olarak ücretsiz Google. Anahtarlı dil modelleri isteğe bağlı.
 

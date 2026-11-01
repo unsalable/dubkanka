@@ -9,6 +9,7 @@ import numpy as np
 
 from .config import SAMPLE_RATE
 from .gpu import torch_device, free_gpu
+from .i18n import tx
 
 SOURCES = ["drums", "bass", "other", "vocals"]  # stem order of every htdemucs model
 _lock = threading.Lock()
@@ -84,7 +85,7 @@ def separate(mix, sr, model_name="htdemucs_ft", progress=None, shifts=None):
 
     with _lock:
         if progress:
-            progress(0.0, "Ses ayırma modeli yükleniyor...")
+            progress(0.0, tx("Ses ayırma modeli yükleniyor..."))
         model = _vocals_model(model_name)
         device = torch_device()
         if shifts is None:

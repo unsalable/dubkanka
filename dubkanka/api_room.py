@@ -2,6 +2,7 @@
 from fastapi import APIRouter, Request
 
 from .access import body_json, host_only, member, mutate
+from .i18n import tx
 from .projects import find_char
 from .room import room
 
@@ -19,16 +20,16 @@ async def room_presence(request: Request):
 @router.post("/api/projects/{pid}/characters/{cid}/unclaim")
 async def char_unclaim(pid: str, cid: str, request: Request):
     role, g = member(request, pid)
-    name = g["name"] if g else (str((await body_json(request)).get("name") or "").strip()[:30] or "Ben")
+    name = g["name"] if g else (str((await body_json(request)).get("name") or "").strip()[:30] or tx("Ben"))
 
     def fn(p):
         c = find_char(p, cid)
         if not c:
-            raise KeyError("Karakter bulunamadı")
+            raise KeyError(tx("Karakter bulunamadı"))
         names = [n.strip() for n in (c.get("actor") or "").split(",") if n.strip() and n.strip() != name]
         c["actor"] = ", ".join(names)[:60]
         return c["name"]
     cname = mutate(pid, fn)
     if room.project_id == pid:
-        room.log(f"{name}, {cname} rolünü bıraktı")
+        room.log("{name}, {char} rolünü bıraktı", name=name, char=cname)
     return {"ok": True}

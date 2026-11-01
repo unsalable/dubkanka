@@ -17,6 +17,7 @@ html, body { margin: 0; height: 100%; }
 body { background: var(--bg); color: var(--text); font: 13px/1.5 'IBM Plex Sans', 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; display: flex; flex-direction: column;
   user-select: none; }
 ::selection { background: rgba(255, 210, 63, 0.35); }
+img, a { -webkit-user-drag: none; }
 .mono { font-family: 'IBM Plex Mono', Consolas, monospace; font-variant-numeric: tabular-nums; }
 .dim { color: var(--text-3); }
 .bar { height: 48px; flex: none; display: flex; align-items: center; gap: 8px; padding: 0 156px 0 14px; -webkit-app-region: drag; }

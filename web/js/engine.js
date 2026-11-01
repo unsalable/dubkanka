@@ -1,5 +1,6 @@
 // Web Audio playback synced to a muted <video>. The mix rules mirror dubkanka/mixer.py.
 import { fileUrl } from './api.js';
+import { t } from './i18n.js';
 import { clamp, db2gain, LS, readyTake } from './util.js';
 
 // Listening volume (the speaker next to every transport): it sits after the mix, so the meters keep showing the mix
@@ -46,7 +47,7 @@ export const engine = {
     if (!this.cache.has(url)) {
       const p = fetch(url, { credentials: 'same-origin' })
         .then((r) => {
-          if (!r.ok) throw new Error('Ses dosyası yüklenemedi');
+          if (!r.ok) throw new Error(t('Ses dosyası yüklenemedi'));
           return r.arrayBuffer();
         })
         .then((b) => new Promise((res, rej) => this.ensure().decodeAudioData(b, res, rej)));
@@ -122,14 +123,35 @@ export function takeSpan(t) {
 
 export const FILL_PRE = 0.15;
 export const FILL_POST = 0.25;
+export const MUTE_FADE = 0.03;
+
+/** Silenced stretches of the background ('bg') or the ambience ('amb') track, sorted and joined where their fades would
+ *  touch (the Mikser's muted regions; mixer.mute_envelope renders the same). */
+export function muteWindows(p, track) {
+  const ws = ((p.mix && p.mix.mutes) || []).filter((m) => m.track === track && m.end > m.start).map((m) => [m.start, m.end]).sort((a, b) => a[0] - b[0]);
+  const out = [];
+  for (const w of ws) {
+    const last = out[out.length - 1];
+    if (last && w[0] - MUTE_FADE <= last[1] + MUTE_FADE) last[1] = Math.max(last[1], w[1]);
+    else out.push([...w]);
+  }
+  return out;
+}
+
+/** The background and the ambience as they play under the dub: their muted stretches silenced. */
+export function bedItems(p, bufs, busBg = 'bg', busAmb = 'amb') {
+  return [
+    { buffer: bufs.bg, at: 0, bus: busBg, mutes: muteWindows(p, 'bg') },
+    { buffer: bufs.amb, at: 0, bus: busAmb, mutes: muteWindows(p, 'amb') },
+  ];
+}
 
 /** The final dub mix as playable items (same rules as the server render: mixer.render). */
 export function buildMix(p, bufs, mode = 'dub') {
   const items = [];
   if (mode === 'clean') {  // music, effects and ambience: every voice removed
     const m = p.mix;
-    items.push({ buffer: bufs.bg, at: 0, bus: 'bg' });
-    items.push({ buffer: bufs.amb, at: 0, bus: 'amb' });
+    items.push(...bedItems(p, bufs));
     return { items, buses: { bg: m.bgMute ? 0 : db2gain(m.bgGain), amb: m.ambMute ? 0 : db2gain(m.ambGain || 0) } };
   }
   if (mode === 'original') {
@@ -150,8 +172,7 @@ export function buildMix(p, bufs, mode = 'dub') {
     fill: mix.fillMute ? 0 : db2gain(mix.fillGain),
     sfx: 1,
   };
-  items.push({ buffer: bufs.bg, at: 0, bus: 'bg' });
-  items.push({ buffer: bufs.amb, at: 0, bus: 'amb' });
+  items.push(...bedItems(p, bufs));
   if (!mix.origMute) items.push({ buffer: bufs.voices, at: 0, bus: 'orig' });
   const windows = [];
   for (const line of p.lines) {
@@ -270,7 +291,15 @@ class Player {
         g.gain.linearRampToValueAtTime(0, this.ctxTimeOf(e));
       }
       src.connect(g);
-      g.connect(busNode(it.bus || 'main'));
+      let out = g;
+      if (it.mutes && it.mutes.length) {
+        // muted stretches: their own gain stage, so the item's fades and the bus faders stay untouched
+        const m = ctx.createGain();
+        this.scheduleMutes(m.gain, it.mutes, s, e);
+        g.connect(m);
+        out = m;
+      }
+      out.connect(busNode(it.bus || 'main'));
       src.start(Math.max(ctx.currentTime, when), s - it.at, e - s);
       this.nodes.push(src);
     }
@@ -318,6 +347,24 @@ class Player {
     // animation frames stop when the tab is hidden; keep end-of-take detection alive with a timer
     clearInterval(this.fallback);
     this.fallback = setInterval(() => performance.now() - this.lastTick > 300 && this.step(true), 250);
+  }
+  /** Silence `windows` ([start, end] in project time) between s and e, with short ramps in and out. */
+  scheduleMutes(param, windows, s, e) {
+    param.setValueAtTime(1, this.ctxTimeOf(s));
+    for (const [a, b] of windows) {
+      if (b <= s || a - MUTE_FADE >= e) continue;
+      if (a - MUTE_FADE > s) {
+        param.setValueAtTime(1, this.ctxTimeOf(a - MUTE_FADE));
+        param.linearRampToValueAtTime(0, this.ctxTimeOf(a));
+      } else if (a > s) {
+        param.setValueAtTime((a - s) / MUTE_FADE, this.ctxTimeOf(s));
+        param.linearRampToValueAtTime(0, this.ctxTimeOf(a));
+      } else param.setValueAtTime(0, this.ctxTimeOf(s));
+      if (b < e) {
+        param.setValueAtTime(0, this.ctxTimeOf(b));
+        param.linearRampToValueAtTime(1, this.ctxTimeOf(Math.min(e, b + MUTE_FADE)));
+      }
+    }
   }
   setBusGain(name, gain) {
     const b = this.buses[name];

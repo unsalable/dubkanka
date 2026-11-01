@@ -3,8 +3,10 @@
 // chat app: the browser's own, RNNoise live in an AudioWorklet (bundled, web/vendor/noise), DPDFNet on the server after
 // the take (the "cleanup" feature), or none.
 import { engine } from './engine.js';
+import { t } from './i18n.js';
 import { LS } from './util.js';
 
+// the labels are translated where they are shown (t())
 export const NOISE_ENGINES = [['standard', 'Standart'], ['rnnoise', 'RNNoise'], ['dpdfnet', 'DPDFNet'], ['off', 'Kapalı']];
 
 export const micPrefs = () => ({
@@ -25,14 +27,14 @@ const simd = () => WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0
 let rnnoiseWasm = null;
 const rnnoiseCtx = new WeakSet();
 async function rnnoiseNode(ctx) {
-  if (ctx.sampleRate !== 48000) throw new Error('RNNoise 48 kHz ses ister');
+  if (ctx.sampleRate !== 48000) throw new Error(t('RNNoise 48 kHz ses ister'));
   if (!rnnoiseCtx.has(ctx)) {
     await ctx.audioWorklet.addModule(NOISE_DIR + 'rnnoise-worklet.js');
     rnnoiseCtx.add(ctx);
   }
   if (!rnnoiseWasm) {
     rnnoiseWasm = fetch(NOISE_DIR + (simd() ? 'rnnoise_simd.wasm' : 'rnnoise.wasm')).then((r) => {
-      if (!r.ok) throw new Error('RNNoise yüklenemedi');
+      if (!r.ok) throw new Error(t('RNNoise yüklenemedi'));
       return r.arrayBuffer();
     });
     rnnoiseWasm.catch(() => (rnnoiseWasm = null));
@@ -89,7 +91,7 @@ class Recorder {
   async _open() {
     this.close(false);
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      throw new Error('Bu tarayıcı mikrofon kaydını desteklemiyor (güvenli bağlantı gerekli).');
+      throw new Error(t('Bu tarayıcı mikrofon kaydını desteklemiyor (güvenli bağlantı gerekli).'));
     }
     const ctx = engine.ensure();
     if (!this.moduleLoaded) {
@@ -114,9 +116,9 @@ class Recorder {
         },
       });
     } catch (e) {
-      if (e.name === 'NotAllowedError') throw new Error('Mikrofon izni verilmedi. İzin verip tekrar dene.');
-      if (e.name === 'NotFoundError' || e.name === 'OverconstrainedError') throw new Error('Mikrofon bulunamadı. Takılı mı, başka bir uygulama mı kullanıyor?');
-      if (e.name === 'NotReadableError') throw new Error('Mikrofon başka bir uygulama tarafından kullanılıyor.');
+      if (e.name === 'NotAllowedError') throw new Error(t('Mikrofon izni verilmedi. İzin verip tekrar dene.'));
+      if (e.name === 'NotFoundError' || e.name === 'OverconstrainedError') throw new Error(t('Mikrofon bulunamadı. Takılı mı, başka bir uygulama mı kullanıyor?'));
+      if (e.name === 'NotReadableError') throw new Error(t('Mikrofon başka bir uygulama tarafından kullanılıyor.'));
       throw e;
     }
     const track = this.stream.getAudioTracks()[0];
@@ -178,7 +180,7 @@ class Recorder {
     }
   }
   start() {
-    if (!this.ready) throw new Error('Mikrofon hazır değil');
+    if (!this.ready) throw new Error(t('Mikrofon hazır değil'));
     this.chunks = [];
     this.firstTime = null;
     this.recording = true;
@@ -228,7 +230,7 @@ export async function listMics() {
   try {
     const devs = await navigator.mediaDevices.enumerateDevices();
     return devs.filter((d) => d.kind === 'audioinput' && d.deviceId !== 'communications')
-      .map((d, i) => ({ id: d.deviceId === 'default' ? '' : d.deviceId, label: d.label || `Mikrofon ${i + 1}`, headset: isHeadsetMic(d.label) }));
+      .map((d, i) => ({ id: d.deviceId === 'default' ? '' : d.deviceId, label: d.label || t('Mikrofon {n}', { n: i + 1 }), headset: isHeadsetMic(d.label) }));
   } catch {
     return [];
   }

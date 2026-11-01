@@ -2,6 +2,7 @@
 import threading
 
 from .config import MODELS_DIR, load_settings
+from .i18n import tx
 from .gpu import setup_cuda_dlls, use_gpu
 
 WHISPER_DIR = MODELS_DIR / "whisper"
@@ -42,8 +43,8 @@ def _load(name, progress=None):
             got = _dir_size_mb(WHISPER_DIR) - start_size
             if got > 5 and progress:
                 pct = min(99, int(got / expected * 100))
-                progress(pct / 100, f"Konuşma tanıma modeli indiriliyor (ilk sefere özel, "
-                                    f"~{expected / 1024:.1f} GB): %{pct}")
+                progress(pct / 100, tx("Konuşma tanıma modeli indiriliyor (ilk sefere özel, ~{gb} GB): %{pct}",
+                                       gb=f"{expected / 1024:.1f}", pct=pct))
 
     t = threading.Thread(target=watch, daemon=True)
     t.start()
@@ -67,10 +68,10 @@ def transcribe(audio16k, language=None, model_name=None, progress=None):
     model_name = model_name or load_settings().get("whisperModel", "large-v3-turbo")
     with _lock:
         if progress:
-            progress(0.0, "Konuşma tanıma modeli yükleniyor...")
+            progress(0.0, tx("Konuşma tanıma modeli yükleniyor..."))
         m = _load(model_name, progress and (lambda f, msg: progress(0.0, msg)))
         if progress:
-            progress(0.0, "Konuşmalar yazıya dökülüyor...")
+            progress(0.0, tx("Konuşmalar yazıya dökülüyor..."))
         lang = None if language in (None, "", "auto") else language
         segments, info = m.transcribe(
             audio16k, language=lang, task="transcribe", beam_size=5, word_timestamps=True,

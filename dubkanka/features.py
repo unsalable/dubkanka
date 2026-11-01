@@ -24,6 +24,7 @@ import time
 from . import prefetch
 from .config import BIN_DIR, HOME, MODELS_DIR, PROJECTS_DIR, ROOT, load_settings, save_settings
 from .gpu import gpu_info, reset as reset_gpu
+from .i18n import tx
 from .jobs import JobCancelled, bus, jobs
 from .media import NO_WINDOW
 
@@ -170,7 +171,7 @@ def status(fid):
         state = "partial"  # the code is here, a model is not (an older install that skipped models, or a new model)
     else:
         state = "missing"
-    out = {"id": fid, "name": f["name"], "summary": f["summary"], "state": state,
+    out = {"id": fid, "name": tx(f["name"]), "summary": tx(f["summary"]), "state": state,
            "mb": 0 if state == "ready" else download_mb(fid), "job": job.to_dict() if job else None,
            "restartToRemove": removing(fid)}
     if f.get("torch"):
@@ -193,7 +194,7 @@ def _installer():
     if _module_ok("pip"):
         return ([sys.executable, "-m", "pip", "install", "--disable-pip-version-check", "--no-input"],
                 [sys.executable, "-m", "pip", "uninstall", "-y", "--disable-pip-version-check"])
-    raise FeatureError("Paket kurucu bulunamadı. Ayarlar → Sistem → Kurulumu onar ile düzelt.")
+    raise FeatureError(tx("Paket kurucu bulunamadı. Ayarlar → Sistem → Kurulumu onar ile düzelt."))
 
 
 def _env():
@@ -207,12 +208,12 @@ def _env():
 def _friendly(tail):
     text = "\n".join(tail)
     if re.search(r"ENOTFOUND|ConnectError|connection|timed out|dns|Network|getaddrinfo|Failed to fetch", text, re.I):
-        return "İnternet bağlantısı yok ya da çok yavaş. Bağlantını kontrol edip tekrar dene."
+        return tx("İnternet bağlantısı yok ya da çok yavaş. Bağlantını kontrol edip tekrar dene.")
     if re.search(r"No space|not enough space|ENOSPC|os error 112", text, re.I):
-        return "Diskte yer kalmadı."
+        return tx("Diskte yer kalmadı.")
     if re.search(r"Access is denied|os error 5|being used by another process|os error 32", text, re.I):
-        return "Dosyalar kullanımda. Uygulamayı yeniden başlatıp tekrar dene."
-    return " ".join(tail[-3:])[:400] or "Kurulum tamamlanamadı."
+        return tx("Dosyalar kullanımda. Uygulamayı yeniden başlatıp tekrar dene.")
+    return " ".join(tail[-3:])[:400] or tx("Kurulum tamamlanamadı.")
 
 
 def _run(job, cmd, on_line=None, tick=None):
@@ -263,15 +264,15 @@ def _free():
 def _install_torch(job, variant, prog):
     install, _ = _installer()
     gpu = gpu_info()
-    label = f"PyTorch {TORCH} · {TORCH_BUILDS[variant]}" + (f" ({gpu['name']})" if variant != "cpu" and gpu.get("name") else "")
-    prog(0.0, label + " indiriliyor")
+    label = f"PyTorch {TORCH} · {tx(TORCH_BUILDS[variant])}" + (f" ({gpu['name']})" if variant != "cpu" and gpu.get("name") else "")
+    prog(0.0, tx("{name} indiriliyor", name=label))
     expected = (5.2 if variant != "cpu" else 0.9) * 2**30  # what it takes on disk
     start = _free()
 
     def tick():
         now = _free()
         if start is not None and now is not None:
-            prog(min(0.97, (start - now) / expected), f"{label}: {max(0, start - now) / 2**20:.0f} MB yazıldı")
+            prog(min(0.97, (start - now) / expected), tx("{name}: {mb} MB yazıldı", name=label, mb=f"{max(0, start - now) / 2**20:.0f}"))
 
     _run(job, install + [f"torch=={TORCH}", "--index-url", TORCH_INDEX + variant], tick=tick)
 
@@ -285,7 +286,7 @@ def _install_packages(job, packages, prog):
             n[0] += 1
             prog(min(0.95, n[0] / 40), text[:120])
 
-    prog(0.02, "Paketler indiriliyor")
+    prog(0.02, tx("Paketler indiriliyor"))
     _run(job, install + packages + ["-c", str(LOCK)], on_line=line)
     importlib.invalidate_caches()
 
@@ -294,7 +295,7 @@ def _fetch_tool(tool, prog):
     from .diarize import download
     from .room import CLOUDFLARED_URL
     BIN_DIR.mkdir(parents=True, exist_ok=True)
-    download(CLOUDFLARED_URL, BIN_DIR / "cloudflared.exe", lambda f: prog(f, "Bağlantı aracı (cloudflared)"))
+    download(CLOUDFLARED_URL, BIN_DIR / "cloudflared.exe", lambda f: prog(f, tx("Bağlantı aracı (cloudflared)")))
 
 
 def _verify(fid):
@@ -306,7 +307,7 @@ def _verify(fid):
                        encoding="utf-8", errors="replace", timeout=300, env=_env(), creationflags=NO_WINDOW)
     if r.returncode != 0:
         last = [l for l in (r.stderr or "").splitlines() if l.strip()][-1:] or ["?"]
-        raise FeatureError(f"Kuruldu ama açılamadı: {last[0][:300]}")
+        raise FeatureError(tx("Kuruldu ama açılamadı: {e}", e=last[0][:300]))
 
 
 def _changed():
@@ -345,12 +346,12 @@ def run_install(job, fid):
             step(prog)
             done += mb
             _changed()
-        job.update(0.99, "Kontrol ediliyor...")
+        job.update(0.99, tx("Kontrol ediliyor..."))
         _verify(fid)
         _remember()
     finally:
         _changed()
-    return {"feature": fid, "message": f"{f['name']} hazır."}
+    return {"feature": fid, "message": tx("{name} hazır.", name=tx(f["name"]))}
 
 
 def install(ids):
@@ -365,7 +366,7 @@ def install(ids):
             _save_state(s)
         if ready(fid):
             continue
-        started.append(jobs.submit("feature", None, f"{FEATURES[fid]['name']} indiriliyor",
+        started.append(jobs.submit("feature", None, tx("{name} indiriliyor", name=tx(FEATURES[fid]["name"])),
                                    lambda j, fid=fid: run_install(j, fid), meta={"feature": fid}, pool="setup"))
     bus.notify()
     return started
@@ -384,7 +385,8 @@ def wait(fid, job=None):
         if not j or j.kind != "feature":
             break
         if job:
-            job.update(None, f"{FEATURES[fid]['name']} indiriliyor, bitince devam edilecek: %{round(j.progress * 100)}")
+            job.update(None, tx("{name} indiriliyor, bitince devam edilecek: %{pct}", name=tx(FEATURES[fid]["name"]),
+                                pct=round(j.progress * 100)))
         time.sleep(1.0)
     importlib.invalidate_caches()
     return usable(fid)
@@ -452,7 +454,7 @@ def _model_dirs(fid):
 def _remove_now(job, fid):
     f = FEATURES[fid]
     if job:
-        job.update(0.1, "Kaldırılıyor...")
+        job.update(0.1, tx("Kaldırılıyor..."))
     pkgs = _exclusive_packages(fid) if f.get("packages") else []
     if pkgs:
         _, uninstall = _installer()
@@ -466,26 +468,26 @@ def _remove_now(job, fid):
     _save_state(s)
     _remember()
     _changed()
-    return {"feature": fid, "message": f"{f['name']} kaldırıldı."}
+    return {"feature": fid, "message": tx("{name} kaldırıldı.", name=tx(f["name"]))}
 
 
 def remove(fid):
     """Returns {"restart": True} when the feature is in use by this process and goes on the next start."""
     if fid not in FEATURES:
-        raise FeatureError("Böyle bir özellik yok.")
+        raise FeatureError(tx("Böyle bir özellik yok."))
     if _job(fid, active=True):
-        raise FeatureError("Önce süren işlemin bitmesini bekle.")
+        raise FeatureError(tx("Önce süren işlemin bitmesini bekle."))
     if fid == "room":
         from .room import room
         if room.status in ("on", "starting"):
-            raise FeatureError("Önce odayı kapat.")
+            raise FeatureError(tx("Önce odayı kapat."))
     if loaded(fid) or (FEATURES[fid].get("packages") and _uses_loaded(_exclusive_packages(fid))):
         s = _state()
         s["remove"] = sorted(set(s.get("remove", [])) | {fid})
         _save_state(s)
         bus.notify()
         return {"restart": True}
-    jobs.submit("feature-remove", None, f"{FEATURES[fid]['name']} kaldırılıyor", lambda j: _remove_now(j, fid),
+    jobs.submit("feature-remove", None, tx("{name} kaldırılıyor", name=tx(FEATURES[fid]["name"])), lambda j: _remove_now(j, fid),
                 meta={"feature": fid}, pool="setup")
     return {"restart": False}
 
@@ -537,12 +539,12 @@ def refresh(report):
     install, _ = _installer()
     for i, fid in enumerate(todo):
         f = FEATURES[fid]
-        report(i / max(1, len(todo)), f"{f['name']} güncelleniyor")
+        report(i / max(1, len(todo)), tx("{name} güncelleniyor", name=tx(f["name"])))
         if f.get("torch") and _torch_version() != TORCH:
             _run(None, install + [f"torch=={TORCH}", "--index-url", TORCH_INDEX + (_torch_build() or torch_variant())])
         _run(None, install + list(f["packages"]) + ["-c", str(LOCK)], on_line=lambda l, i=i: report(i / max(1, len(todo)), l[:120]))
     _remember()
-    report(1.0, "Özellikler güncel")
+    report(1.0, tx("Özellikler güncel"))
 
 
 def main():

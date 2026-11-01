@@ -9,6 +9,8 @@ import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
+from .i18n import current as current_lang, tx
+
 LANGUAGES = [
     ("tr", "Türkçe"), ("en", "İngilizce"), ("de", "Almanca"), ("fr", "Fransızca"), ("es", "İspanyolca"),
     ("it", "İtalyanca"), ("pt", "Portekizce"), ("ru", "Rusça"), ("ar", "Arapça"), ("az", "Azerice"),
@@ -116,28 +118,29 @@ def _http(url, data=None, headers=None, method=None, timeout=60, name="Sunucu", 
         except (urllib.error.URLError, TimeoutError, ConnectionError) as e:
             last = e
             if local:
-                raise TranslateError(f"{name} çalışmıyor ya da adres yanlış. Uygulamayı açıp tekrar dene.") from e
+                raise TranslateError(tx("{name} çalışmıyor ya da adres yanlış. Uygulamayı açıp tekrar dene.", name=tx(name))) from e
             if attempt < retries:
                 time.sleep(1.5 * (attempt + 1))
                 continue
-            raise TranslateError(f"{name} sunucusuna bağlanılamadı. İnternet bağlantını kontrol et.") from e
+            raise TranslateError(tx("{name} sunucusuna bağlanılamadı. İnternet bağlantını kontrol et.", name=tx(name))) from e
         except json.JSONDecodeError as e:
-            raise TranslateError(f"{name} beklenmeyen bir yanıt verdi.") from e
-    raise TranslateError(f"{name} yanıt vermedi ({last}).")
+            raise TranslateError(tx("{name} beklenmeyen bir yanıt verdi.", name=tx(name))) from e
+    raise TranslateError(tx("{name} yanıt vermedi ({e}).", name=tx(name), e=last))
 
 
 def _http_message(name, code, detail):
+    name = tx(name)
     low = detail.lower()
     if code in (401, 403):
-        return f"{name}: API anahtarı geçersiz ya da bu işleme yetkisi yok."
+        return tx("{name}: API anahtarı geçersiz ya da bu işleme yetkisi yok.", name=name)
     if code == 402 or "insufficient" in low or "credit" in low or "billing" in low or "quota" in low:
-        return f"{name}: bakiye ya da kota yetersiz."
+        return tx("{name}: bakiye ya da kota yetersiz.", name=name)
     if code == 404 or "model" in low and ("not found" in low or "does not exist" in low):
-        return f"{name}: model ya da adres bulunamadı. Ayarlar'dan modeli kontrol et."
+        return tx("{name}: model ya da adres bulunamadı. Ayarlar'dan modeli kontrol et.", name=name)
     if code == 429:
-        return f"{name}: çok fazla istek ya da kota doldu, biraz sonra tekrar dene."
+        return tx("{name}: çok fazla istek ya da kota doldu, biraz sonra tekrar dene.", name=name)
     if code >= 500:
-        return f"{name} şu an hata veriyor ({code}), biraz sonra tekrar dene."
+        return tx("{name} şu an hata veriyor ({code}), biraz sonra tekrar dene.", name=name, code=code)
     msg = ""
     try:
         j = json.loads(detail)
@@ -145,7 +148,7 @@ def _http_message(name, code, detail):
         msg = (err.get("message") if isinstance(err, dict) else err) or j.get("message") or ""
     except Exception:
         pass
-    return f"{name} isteği reddetti ({code}){': ' + str(msg)[:160] if msg else ''}."
+    return tx("{name} isteği reddetti ({code}){msg}.", name=name, code=code, msg=": " + str(msg)[:160] if msg else "")
 
 
 # ---------------------------------------------------------------- machine translation
@@ -171,8 +174,8 @@ def _google_request(text, src, dst):
         except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
             last = e
         time.sleep(1.5 * (attempt + 1))
-    raise TranslateError(f"Google Çeviri'ye ulaşılamadı ({last}). İnternet bağlantını kontrol et ya da biraz sonra "
-                         "tekrar dene.")
+    raise TranslateError(tx("Google Çeviri'ye ulaşılamadı ({e}). İnternet bağlantını kontrol et ya da biraz sonra "
+                            "tekrar dene.", e=last))
 
 
 def _batches(texts, limit=3500, count=None):
@@ -222,7 +225,7 @@ def _deepl_lang(code, target):
 def translate_deepl(texts, src, dst, cfg, progress=None):
     key = (cfg.get("key") or "").strip()
     if not key:
-        raise TranslateError("DeepL için Ayarlar'dan bir API anahtarı gir.")
+        raise TranslateError(tx("DeepL için Ayarlar'dan bir API anahtarı gir."))
     host = "https://api-free.deepl.com" if key.endswith(":fx") else "https://api.deepl.com"
     out = [""] * len(texts)
     batches = _batches(texts, limit=25000, count=50)
@@ -318,7 +321,7 @@ def parse_lines_json(text):
         data = data.get("lines") if isinstance(data.get("lines"), list) else next(
             (v for v in data.values() if isinstance(v, list)), None)
     if not isinstance(data, list):
-        raise TranslateError("Model geçerli JSON döndürmedi.")
+        raise TranslateError(tx("Model geçerli JSON döndürmedi."))
     out = {}
     for d in data:
         if isinstance(d, dict) and d.get("id") is not None and isinstance(d.get("text"), str):
@@ -331,15 +334,15 @@ def _openai_chat(p, cfg, prompt):
     if p["id"] in ("ollama", "lmstudio") or (p["id"] == "custom" and not base.endswith("/v1")):
         base = base if base.endswith("/v1") else base + "/v1"
     if not base:
-        raise TranslateError(f"{p['name']} için Ayarlar'dan sunucu adresini gir.")
+        raise TranslateError(tx("{name} için Ayarlar'dan sunucu adresini gir.", name=tx(p["name"])))
     headers = {}
     if cfg.get("key"):
         headers["Authorization"] = f"Bearer {cfg['key']}"
     elif p.get("needsKey"):
-        raise TranslateError(f"{p['name']} için Ayarlar'dan bir API anahtarı gir.")
+        raise TranslateError(tx("{name} için Ayarlar'dan bir API anahtarı gir.", name=tx(p["name"])))
     model = cfg.get("model") or ""
     if not model:
-        raise TranslateError(f"{p['name']} için Ayarlar'dan bir model seç.")
+        raise TranslateError(tx("{name} için Ayarlar'dan bir model seç.", name=tx(p["name"])))
     if p["id"] == "openrouter":
         headers.update({"HTTP-Referer": "https://github.com/unsalable/dubkanka", "X-Title": "DubKanka"})
     body = {"model": model, "messages": [{"role": "system", "content": _SYSTEM}, {"role": "user", "content": prompt}],
@@ -354,16 +357,16 @@ def _openai_chat(p, cfg, prompt):
         data = _http(base + "/chat/completions", body, headers, name=p["name"], local=local, timeout=600)
     choice = (data.get("choices") or [{}])[0]
     if choice.get("finish_reason") == "content_filter":
-        raise TranslateError(f"{p['name']} bu sahneyi çevirmeyi reddetti. Google ile çevirmeyi dene.")
+        raise TranslateError(tx("{name} bu sahneyi çevirmeyi reddetti. Google ile çevirmeyi dene.", name=tx(p["name"])))
     return ((choice.get("message") or {}).get("content")) or ""
 
 
 def _gemini(p, cfg, prompt):
     key, model = cfg.get("key") or "", cfg.get("model") or ""
     if not key:
-        raise TranslateError("Gemini için Ayarlar'dan bir API anahtarı gir.")
+        raise TranslateError(tx("{name} için Ayarlar'dan bir API anahtarı gir.", name="Gemini"))
     if not model:
-        raise TranslateError("Gemini için Ayarlar'dan bir model seç.")
+        raise TranslateError(tx("{name} için Ayarlar'dan bir model seç.", name="Gemini"))
     schema = {"type": "OBJECT", "properties": {"lines": {"type": "ARRAY", "items": {
         "type": "OBJECT", "properties": {"id": {"type": "STRING"}, "text": {"type": "STRING"}}, "required": ["id", "text"]}}},
         "required": ["lines"]}
@@ -374,7 +377,7 @@ def _gemini(p, cfg, prompt):
     data = _http(url, body, {"x-goog-api-key": key}, name="Gemini", timeout=600)
     cand = (data.get("candidates") or [{}])[0]
     if cand.get("finishReason") in ("SAFETY", "PROHIBITED_CONTENT", "BLOCKLIST") or data.get("promptFeedback", {}).get("blockReason"):
-        raise TranslateError("Gemini bu sahneyi çevirmeyi reddetti. Google ile çevirmeyi dene.")
+        raise TranslateError(tx("{name} bu sahneyi çevirmeyi reddetti. Google ile çevirmeyi dene.", name="Gemini"))
     return "".join(part.get("text", "") for part in (cand.get("content") or {}).get("parts", []))
 
 
@@ -383,7 +386,7 @@ def _anthropic(p, cfg, prompt):
 
     key = cfg.get("key") or ""
     if not key:
-        raise TranslateError("Claude ile çeviri için Ayarlar'dan bir Anthropic API anahtarı gir.")
+        raise TranslateError(tx("Claude ile çeviri için Ayarlar'dan bir Anthropic API anahtarı gir."))
     model = cfg.get("model") or "claude-opus-5-5"
     client = anthropic.Anthropic(api_key=key, max_retries=3, timeout=600.0)
     kwargs = dict(model=model, max_tokens=16000, system=_SYSTEM, messages=[{"role": "user", "content": prompt}],
@@ -394,23 +397,23 @@ def _anthropic(p, cfg, prompt):
         else:  # server-side fallback model if the main one declines
             resp = client.beta.messages.create(betas=["server-side-fallback-2026-07-01"], fallbacks="default", **kwargs)
     except anthropic.AuthenticationError as e:
-        raise TranslateError("Anthropic API anahtarı geçersiz. Ayarlar'dan kontrol et.") from e
+        raise TranslateError(tx("Anthropic API anahtarı geçersiz. Ayarlar'dan kontrol et.")) from e
     except anthropic.PermissionDeniedError as e:
-        raise TranslateError("Bu API anahtarının seçili modele erişimi yok.") from e
+        raise TranslateError(tx("Bu API anahtarının seçili modele erişimi yok.")) from e
     except anthropic.NotFoundError as e:
-        raise TranslateError(f"Model bulunamadı: {model}") from e
+        raise TranslateError(tx("Model bulunamadı: {model}", model=model)) from e
     except anthropic.RateLimitError as e:
-        raise TranslateError("Claude şu an çok yoğun ya da kotan doldu, biraz sonra tekrar dene.") from e
+        raise TranslateError(tx("Claude şu an çok yoğun ya da kotan doldu, biraz sonra tekrar dene.")) from e
     except anthropic.BadRequestError as e:
-        raise TranslateError(f"Claude isteği reddetti: {e.message}") from e
+        raise TranslateError(tx("Claude isteği reddetti: {e}", e=e.message)) from e
     except anthropic.APIStatusError as e:
-        raise TranslateError(f"Claude hatası ({e.status_code}), biraz sonra tekrar dene.") from e
+        raise TranslateError(tx("Claude hatası ({code}), biraz sonra tekrar dene.", code=e.status_code)) from e
     except anthropic.APIConnectionError as e:
-        raise TranslateError("Claude'a bağlanılamadı. İnternet bağlantını kontrol et.") from e
+        raise TranslateError(tx("Claude'a bağlanılamadı. İnternet bağlantını kontrol et.")) from e
     if resp.stop_reason == "refusal":
-        raise TranslateError("Claude bu sahneyi çevirmeyi reddetti. Google ile çevirmeyi dene.")
+        raise TranslateError(tx("{name} bu sahneyi çevirmeyi reddetti. Google ile çevirmeyi dene.", name="Claude"))
     if resp.stop_reason == "max_tokens":
-        raise TranslateError("Senaryo çok uzun, Claude yanıtı yarıda kesildi.")
+        raise TranslateError(tx("Senaryo çok uzun, Claude yanıtı yarıda kesildi."))
     return next((b.text for b in resp.content if b.type == "text"), "")
 
 
@@ -462,7 +465,7 @@ def translate_lines(lines, characters, src, dst, engine, style, settings, progre
             texts = translate_google([l["orig"] for l in missing], src, dst) if src != dst else [l["orig"] for l in missing]
             out.update({l["id"]: t for l, t in zip(missing, texts)})
             if notes is not None:
-                notes.append(f"{p['name']} {len(missing)} satırı atladı, onlar Google ile çevrildi.")
+                notes.append(tx("{name} {n} satırı atladı, onlar Google ile çevrildi.", name=tx(p["name"]), n=len(missing)))
         return out
     if src == dst:
         return {l["id"]: l["orig"] for l in lines}
@@ -502,7 +505,7 @@ def list_models(pid, cfg):
         return [{"id": m["id"], "label": m.get("display_name") or m["id"]} for m in data.get("data", [])]
     if p["id"] == "gemini":
         if not key:
-            raise TranslateError("Modelleri görmek için önce Gemini API anahtarını gir.")
+            raise TranslateError(tx("Modelleri görmek için önce {name} API anahtarını gir.", name="Gemini"))
         data = _http("https://generativelanguage.googleapis.com/v1beta/models?pageSize=1000", headers={"x-goog-api-key": key},
                      name="Gemini", timeout=20)
         return [{"id": m["name"].split("/", 1)[-1], "label": m.get("displayName") or m["name"]}
@@ -516,9 +519,9 @@ def list_models(pid, cfg):
     if p["id"] in ("lmstudio", "custom") and base and not base.endswith("/v1"):
         base += "/v1"
     if not base:
-        raise TranslateError(f"{p['name']} için önce sunucu adresini gir.")
+        raise TranslateError(tx("{name} için önce sunucu adresini gir.", name=tx(p["name"])))
     if p.get("needsKey") and not key and p["id"] != "openrouter":
-        raise TranslateError(f"Modelleri görmek için önce {p['name']} API anahtarını gir.")
+        raise TranslateError(tx("Modelleri görmek için önce {name} API anahtarını gir.", name=tx(p["name"])))
     headers = {"Authorization": f"Bearer {key}"} if key else {}
     data = _http(base + "/models", headers=headers, name=p["name"], local=local, timeout=20, retries=1 if local else 2)
     models = [{"id": m["id"], "label": m.get("name") or m["id"]} for m in data.get("data", [])
@@ -553,13 +556,13 @@ def detect():
         try:
             models = list_models(pid, {})
             found.append({"id": pid, "source": "local",
-                          "detail": f"{len(models)} model" if models else "çalışıyor ama hiç model yok"})
+                          "detail": tx("{n} model", n=len(models)) if models else tx("çalışıyor ama hiç model yok")})
         except TranslateError:
             pass
     for pid, names in ENV_KEYS.items():
         var = next((n for n in names if os.environ.get(n, "").strip()), None)
         if var:
-            found.append({"id": pid, "source": "env", "detail": f"ortam değişkeni {var}"})
+            found.append({"id": pid, "source": "env", "detail": tx("ortam değişkeni {var}", var=var)})
     return found
 
 
@@ -594,13 +597,14 @@ def registry_status(settings):
             and (p["kind"] == "mt" or bool(cfg.get("model"))))
         if p["id"] == "libre":  # the public default server wants a key: only count it once something was set up
             configured = bool(saved.get("url") or saved.get("key"))
-        out.append({"id": p["id"], "name": p["name"], "kind": p["kind"], "local": bool(p.get("local")),
+        out.append({"id": p["id"], "name": tx(p["name"]), "kind": p["kind"], "local": bool(p.get("local")),
                     "needsKey": bool(p.get("needsKey")), "needsUrl": bool(p.get("needsUrl")), "keyUrl": p.get("keyUrl"),
-                    "note": p.get("note", ""), "configured": configured, "hasKey": bool(cfg.get("key")),
+                    "note": tx(p.get("note", "")), "configured": configured, "hasKey": bool(cfg.get("key")),
                     "model": cfg.get("model") or "", "url": cfg.get("url") or ""})
     return out
 
 
 def system_info():
     from .config import load_settings
-    return {"languages": LANGUAGES, "styles": STYLES, "translators": registry_status(load_settings())}
+    langs = [(c, _ENGLISH_NAMES.get(c, n)) for c, n in LANGUAGES] if current_lang() == "en" else LANGUAGES
+    return {"languages": langs, "styles": {k: tx(v) for k, v in STYLES.items()}, "translators": registry_status(load_settings())}

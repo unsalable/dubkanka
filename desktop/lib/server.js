@@ -5,6 +5,7 @@ const net = require('node:net');
 const path = require('node:path');
 const { spawn, spawnSync } = require('node:child_process');
 const P = require('./paths');
+const { t } = require('./i18n');
 const { pythonEnv } = require('./runtime');
 
 function isFree(port) {
@@ -17,7 +18,7 @@ function isFree(port) {
 
 async function freePort(from = 8765) {
   for (let p = from; p < from + 100; p++) if (await isFree(p)) return p;
-  throw new Error('Boş bir port bulunamadı.');
+  throw new Error(t('Boş bir port bulunamadı.'));
 }
 
 function openLog() {
@@ -65,14 +66,14 @@ class Server {
   async waitReady(timeoutMs = 150000) {
     const t0 = Date.now();
     while (Date.now() - t0 < timeoutMs) {
-      if (!this.child) throw Object.assign(new Error('Sunucu başlarken kapandı.'), { tail: this.tail });
+      if (!this.child) throw Object.assign(new Error(t('Sunucu başlarken kapandı.')), { tail: this.tail });
       try {
         const r = await fetch(`http://127.0.0.1:${this.port}/api/ping`);
         if (r.ok) return;
       } catch {}
       await new Promise((r) => setTimeout(r, 400));
     }
-    throw Object.assign(new Error('Sunucu zamanında açılmadı.'), { tail: this.tail });
+    throw Object.assign(new Error(t('Sunucu zamanında açılmadı.')), { tail: this.tail });
   }
   stop() {
     const c = this.child;

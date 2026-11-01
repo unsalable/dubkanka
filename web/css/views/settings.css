@@ -22,12 +22,14 @@
 .sgroup-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: clip; }
 .sgroup-card > * + * { border-top: 1px solid var(--line); }
 .sgroup-note { font-size: 12px; color: var(--text-3); margin: 9px 4px 0; max-width: 66ch; }
+.sgroup-note a { font-weight: 500; }
 .srow { display: flex; align-items: center; gap: 18px; min-height: 54px; padding: 10px 16px; }
 .srow-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .srow-label { font-weight: 500; }
 .srow-hint { font-size: 12px; color: var(--text-3); line-height: 1.45; }
 .srow-ctl { flex: none; display: flex; align-items: center; justify-content: flex-end; gap: 6px; max-width: 62%; }
-.srow-ctl select.input { width: auto; min-width: 230px; max-width: 100%; }
+.srow-ctl .select { width: auto; min-width: 230px; max-width: 100%; }
+.srow-input { width: 230px; }
 .srow .toggle { margin: 0; }
 .srow.folder .srow-hint { max-width: 100%; }
 .found { display: flex; flex-direction: column; gap: 8px; padding: 12px 16px; background: var(--panel-2); animation: drop var(--t) var(--ease-out); }
@@ -61,6 +63,15 @@
 .feat-err { color: #ffa29b; }
 .feat-opts { border-top: 1px solid var(--line); background: rgba(255, 250, 235, 0.015); }
 .feat-opts .srow { padding-left: 72px; min-height: 50px; }
+/* a feature's state: a quiet tick and the word when it is installed, a spinner while it goes */
+.feat-state { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 500; color: var(--text-2); white-space: nowrap; }
+.feat-state.done .icon { color: var(--ok); stroke-width: 2.4; }
+.feat-state .spinner { width: 12px; height: 12px; }
+/* the same features in one line each (Ayarlar → Genel) */
+.featline { gap: 12px; padding-left: 12px; min-height: 52px; }
+.feat-ico.sm { width: 30px; height: 30px; border-radius: 9px; }
+.featline-act { max-width: 60%; }
+.featline .feat-progress { width: 220px; }
 
 @media (max-width: 900px) {
   .settings { grid-template-columns: 1fr; gap: 14px; padding: 14px 12px 48px; }

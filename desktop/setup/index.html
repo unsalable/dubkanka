@@ -12,38 +12,38 @@
     <section class="starting" id="starting">
       <img class="mark" src="icon.svg" alt="">
       <div class="lane"><i></i></div>
-      <p id="startText">Başlatılıyor…</p>
+      <p id="startText" data-t>Başlatılıyor…</p>
     </section>
 
     <section class="updating" id="updating" hidden>
       <img class="mark" src="icon.svg" alt="">
-      <h1 id="updTitle">Güncelleniyor</h1>
+      <h1 id="updTitle" data-t>Güncelleniyor</h1>
       <p class="lead" id="updLead"></p>
       <div class="card"><div class="overall"><div class="track"><i id="updBar"></i></div><span class="mono" id="updPct">0%</span></div></div>
-      <p class="foot"><button class="btn ghost" id="updSkip">Şimdilik atla</button></p>
+      <p class="foot"><button class="btn ghost" id="updSkip" data-t>Şimdilik atla</button></p>
     </section>
 
     <section class="install" id="install" hidden>
       <img class="mark" src="icon.svg" alt="">
-      <h1 id="title">DubKanka hazırlanıyor</h1>
+      <h1 id="title" data-t>DubKanka hazırlanıyor</h1>
       <p class="lead" id="lead"></p>
       <div class="card">
         <div class="overall"><div class="track"><i id="bar"></i></div><span class="mono" id="pct">0%</span></div>
         <ol class="steps" id="steps"></ol>
       </div>
-      <p class="foot"><span class="mono dim" id="elapsed">0:00</span><span class="dim" id="footText">Bilgisayarı açık bırakman yeterli.</span></p>
-      <details class="log"><summary>Ayrıntılar</summary><pre id="log"></pre></details>
+      <p class="foot"><span class="mono dim" id="elapsed">0:00</span><span class="dim" id="footText" data-t>Bilgisayarı açık bırakman yeterli.</span></p>
+      <details class="log"><summary data-t>Ayrıntılar</summary><pre id="log"></pre></details>
     </section>
 
     <section class="error" id="error" hidden>
-      <h1>Bir sorun çıktı</h1>
+      <h1 data-t>Bir sorun çıktı</h1>
       <p class="msg" id="errMsg"></p>
       <div class="actions">
-        <button class="btn primary" id="retry">Tekrar dene</button>
-        <button class="btn" id="logs">Günlük klasörünü aç</button>
-        <button class="btn ghost" id="quit">Kapat</button>
+        <button class="btn primary" id="retry" data-t>Tekrar dene</button>
+        <button class="btn" id="logs" data-t>Günlük klasörünü aç</button>
+        <button class="btn ghost" id="quit" data-t>Kapat</button>
       </div>
-      <details class="log" open><summary>Son satırlar</summary><pre id="errLog"></pre></details>
+      <details class="log" open><summary data-t>Son satırlar</summary><pre id="errLog"></pre></details>
     </section>
   </main>
   <script src="setup.js"></script>

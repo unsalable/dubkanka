@@ -13,12 +13,18 @@
   font: 600 11.5px/1 var(--mono); }
 .xstep-head h3 { font-size: 14.5px; }
 .xstep-hint { color: var(--text-3); font-size: 12px; }
+.xstep-aside { margin-left: auto; display: flex; align-items: center; }
 .xstep-body { padding-left: 32px; }
 .xstep .segmented { display: flex; }
 .xstep .segmented button { flex: 1; }
 .xnote { margin: 10px 0 0; color: var(--text-3); font-size: 12px; }
+.xnote-row { display: flex; align-items: center; gap: 8px; }
 .xsub { margin-top: 12px; }
 .xsub .toggle { margin: 0; }
+/* a switch with its "?" at the right end; while it is locked a click anywhere on the row asks why */
+.xsub-row { display: flex; align-items: center; gap: 10px; }
+.xsub-row .toggle { flex: 1; min-width: 0; }
+.xsub-row.locked, .xsub-row.locked .toggle.disabled { cursor: help; }
 .xsub .input { margin-top: 8px; }
 .xdisclose { display: inline-flex; align-items: center; gap: 7px; margin: 10px 0 0; padding: 6px 10px 6px 8px; border: 0; border-radius: 9px; background: transparent; color: var(--text-2);
   font: 500 12.5px var(--font); cursor: pointer; transition: background-color var(--t-fast), color var(--t-fast); }
@@ -32,6 +38,12 @@
 .formatcard { align-items: center; text-align: center; padding: 14px 6px 12px; gap: 2px; }
 .formatcard::after { top: 8px; right: 8px; width: 16px; height: 16px; }
 .formatcard.on::after { background-size: 10px; }
+/* a shape the chosen quality cannot make: an outline with a small lock; a click says why and offers the way out */
+.formatcard.locked { cursor: help; background: transparent; border-style: dashed; border-color: var(--line-2); }
+.formatcard.locked:hover { background: rgba(255, 250, 235, 0.02); border-color: var(--line-3); }
+.formatcard.locked:active { transform: none; }
+.formatcard.locked .shape, .formatcard.locked b, .formatcard.locked small { opacity: 0.42; }
+.formatcard.locked::after { opacity: 0.6; box-shadow: none; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238c897f' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5.5' y='10.5' width='13' height='9.5' rx='2'/%3E%3Cpath d='M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5'/%3E%3C/svg%3E") center / 12px no-repeat; }
 .formatcard b { font: 600 13px var(--mono); }
 .formatcard small { font-size: 11.5px; }
 .shape { border: 1.5px solid currentColor; border-radius: 4px; flex: none; margin-bottom: 8px; color: var(--text-3); transition: color var(--t); }
@@ -106,5 +118,5 @@
   .presets { grid-template-columns: 1fr; }
   .make-row { flex-direction: column; align-items: stretch; }
 }
-.formatcard:not(.on)::after { opacity: 0; }
+.formatcard:not(.on):not(.locked)::after { opacity: 0; }
 .frame { cursor: pointer; }

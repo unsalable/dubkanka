@@ -1,5 +1,6 @@
 import { html, render, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { getVolume, onVolume, player, setVolume } from './engine.js';
+import { t } from './i18n.js';
 import { recorder } from './recorder.js';
 import { dismissToast, useStore } from './state.js';
 import { clamp, cls, fmtTime } from './util.js';
@@ -24,7 +25,6 @@ const ICONS = {
   folder: '<path d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2h8.5A1.5 1.5 0 0 1 21 8.5v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7.5"/>',
   x: '<path d="M6 6l12 12M18 6 6 18"/>',
-  wand: '<path d="m4 20 11-11m2-5 .8 1.7L19.5 6.5l-1.7.8L17 9l-.8-1.7L14.5 6.5l1.7-.8zM9 3l.5 1L10.5 4.5 9.5 5 9 6l-.5-1L7.5 4.5l1-.5z"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>',
   link: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
   film: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 4v16M17 4v16M3 9h4m10 0h4M3 15h4m10 0h4"/>',
@@ -41,7 +41,6 @@ const ICONS = {
   dots: '<circle cx="5" cy="12" r="1.6" fill="currentColor"/><circle cx="12" cy="12" r="1.6" fill="currentColor"/><circle cx="19" cy="12" r="1.6" fill="currentColor"/>',
   alert: '<path d="M10.3 4.2 2.6 17.5A2 2 0 0 0 4.3 20.5h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0zM12 10v4m0 3v.5"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5.5M12 7.5v.5"/>',
-  sparkle: '<path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/>',
   wave: '<path d="M3 12h2M7 8v8M11 5v14M15 9v6M19 7v10M21 12h0"/>',
   leaf: '<path d="M5 19c0-8 5-13 15-14-1 10-6 15-14 15M5 19c3-4 6-7 10-9"/>',
   refresh: '<path d="M20 11a8 8 0 0 0-14.3-4.9L4 8m0-5v5h5M4 13a8 8 0 0 0 14.3 4.9L20 16m0 5v-5h-5"/>',
@@ -53,6 +52,11 @@ const ICONS = {
   globe: '<circle cx="12" cy="12" r="8.5"/><path d="M3.5 12h17M12 3.5c2.5 2.6 3.5 5.4 3.5 8.5s-1 5.9-3.5 8.5c-2.5-2.6-3.5-5.4-3.5-8.5s1-5.9 3.5-8.5z"/>',
   bolt: '<path d="M13 3 5 13.5h6L10 21l8-10.5h-6z"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
+  chevdown: '<path d="m6 9 6 6 6-6"/>',
+  help: '<path d="M9.2 9.3a2.9 2.9 0 0 1 5.6 1c0 1.9-2.8 2.5-2.8 4.2M12 18v.2"/>',
+  lock: '<rect x="5.5" y="10.5" width="13" height="9.5" rx="2"/><path d="M8.5 10.5V8a3.5 3.5 0 0 1 7 0v2.5"/>',
+  layers: '<path d="m12 3.5 8.5 4.5-8.5 4.5L3.5 8z"/><path d="m3.5 12 8.5 4.5 8.5-4.5M3.5 16l8.5 4.5 8.5-4.5"/>',
+  translate: '<path d="M3.5 5.5h9M8 3.5v2c0 4-2.5 7-5 8.5M5.5 9.5c1 2 3 3.5 5.5 4.5"/><path d="m12.5 20.5 4-10 4 10M14 17h5"/>',
   eye: '<path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="2.8"/>',
   magnet: '<path d="M6 4v8a6 6 0 0 0 12 0V4h-4v8a2 2 0 0 1-4 0V4zM6 8h4m4 0h4"/>',
   clock: '<circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/>',
@@ -153,7 +157,7 @@ export function Portal({ children }) {
 }
 
 /** A menu anchored to an element; opens below it, or above when there is no room. Closes on outside click / Esc. */
-export function Popover({ anchor, onClose, children, align = 'end', title, class: c }) {
+export function Popover({ anchor, onClose, children, align = 'end', title, class: c, role = 'menu' }) {
   const ref = useRef(null);
   const [pos, setPos] = useState(null);
   useLayoutEffect(() => {
@@ -187,7 +191,7 @@ export function Popover({ anchor, onClose, children, align = 'end', title, class
       removeEventListener('scroll', place, true);
     };
   }, [anchor]);
-  return html`<${Portal}><div class=${cls('popover', c)} ref=${ref} role="menu" style=${pos || { left: '0px', top: '0px', visibility: 'hidden' }}>
+  return html`<${Portal}><div class=${cls('popover', c)} ref=${ref} role=${role} style=${pos || { left: '0px', top: '0px', visibility: 'hidden' }}>
     ${title && html`<div class="popover-title">${title}</div>`}${children}</div></${Portal}>`;
 }
 
@@ -205,7 +209,7 @@ export function Modal({ title, onClose, children, wide }) {
   }, [onClose]);
   return html`<div class="modal-bg" onMouseDown=${(e) => e.target === e.currentTarget && onClose && onClose()}>
     <div class=${cls('modal', wide && 'modal-wide')} role="dialog" aria-modal="true" aria-labelledby=${id}>
-      <div class="modal-head"><h3 id=${id}>${title}</h3>${onClose && html`<button class="iconbtn" title="Kapat" onClick=${onClose}><${Icon} name="x" /></button>`}</div>
+      <div class="modal-head"><h3 id=${id}>${title}</h3>${onClose && html`<button class="iconbtn" title=${t('Kapat')} onClick=${onClose}><${Icon} name="x" /></button>`}</div>
       <div class="modal-body">${children}</div>
     </div>
   </div>`;
@@ -222,6 +226,7 @@ const STEP_ICON = {
   error: '<path d="M12 6v7m0 4.5v.5" stroke="currentColor" stroke-width="3" fill="none" stroke-linecap="round"/>',
 };
 
+/** A job with its steps on one rail: a finished step fills the rail down to the next one, which then starts to turn. */
 export function JobPanel({ job, onCancel, bare }) {
   if (!job) return null;
   const running = job.status === 'running' || job.status === 'queued';
@@ -229,15 +234,16 @@ export function JobPanel({ job, onCancel, bare }) {
   return html`<div class=${cls(!bare && 'jobpanel', job.status === 'error' && 'is-error')}>
     <div class="jobpanel-top">
       <strong>${job.title}</strong>
-      <span class="jobpanel-pct">${running ? pct + '%' : job.status === 'done' ? 'Bitti' : job.status === 'error' ? 'Hata' : 'İptal'}</span>
+      <span class="jobpanel-pct">${running ? pct + '%' : job.status === 'done' ? t('Bitti') : job.status === 'error' ? t('Hata') : t('İptal')}</span>
     </div>
     ${running && html`<${Progress} value=${job.progress} live />`}
     ${job.steps && job.steps.length > 0 && html`<ol class="steps">${job.steps.map(
       (s) => html`<li key=${s.key} class=${'step step-' + s.status}>
-        <span class="step-ico">${STEP_ICON[s.status] && html`<svg viewBox="0 0 24 24" dangerouslySetInnerHTML=${{ __html: STEP_ICON[s.status] }}></svg>`}</span>${s.label}</li>`
+        <span class="step-ico">${STEP_ICON[s.status] && html`<svg viewBox="0 0 24 24" dangerouslySetInnerHTML=${{ __html: STEP_ICON[s.status] }}></svg>`}</span>
+        <span class="step-label">${s.label}</span></li>`
     )}</ol>`}
     <div class="jobpanel-msg">${job.error ? job.error : job.message}</div>
-    ${running && onCancel && html`<${Btn} small kind="ghost" onClick=${onCancel}>İptal</${Btn}>`}
+    ${running && onCancel && html`<${Btn} small kind="ghost" onClick=${onCancel}>${t('İptal')}</${Btn}>`}
   </div>`;
 }
 
@@ -245,10 +251,217 @@ export function Field({ label, hint, children, class: c }) {
   return html`<label class=${cls('field', c)}><span class="field-label">${label}</span>${children}${hint && html`<span class="field-hint">${hint}</span>`}</label>`;
 }
 
-export function Select({ value, options, onChange, disabled, class: c }) {
-  return html`<select class=${cls('input', c)} value=${value} disabled=${disabled} onChange=${(e) => onChange(e.target.value)}>
-    ${options.map(([v, l]) => html`<option value=${v} selected=${String(v) === String(value)}>${l}</option>`)}
-  </select>`;
+/** A choice from a list, drawn by the app: the system's own drop-down looked foreign next to everything else. The field
+ *  shows the choice; the list opens under it (above when there is no room), the chosen row ticked and in view. Arrow
+ *  keys, Home / End, Enter, Esc and typing the first letters work like a native list. onChange gets the value as text. */
+export function Select({ value, options, onChange, disabled, class: c, title, label }) {
+  const btn = useRef(null);
+  const [open, setOpen] = useState(false);
+  const cur = options.find(([v]) => String(v) === String(value));
+  const key = (e) => {
+    if (open || disabled) return;
+    if (['ArrowDown', 'ArrowUp', 'Enter', ' '].includes(e.key)) {
+      e.preventDefault();
+      e.stopPropagation(); // Space opens the list here, it does not record in the booth
+      setOpen(true);
+    }
+  };
+  return html`<button type="button" ref=${btn} class=${cls('input select', open && 'open', !cur && 'empty', c)} disabled=${disabled}
+      aria-haspopup="listbox" aria-expanded=${open} aria-label=${label} title=${title} onClick=${() => setOpen(!open)} onKeyDown=${key}>
+      <span class="select-value">${cur ? cur[1] : ''}</span><${Icon} name="chevdown" size=${14} class="select-chev" /></button>
+    ${open && html`<${Listbox} anchor=${btn.current} value=${value} options=${options} onClose=${() => setOpen(false)}
+      onPick=${(v) => {
+        setOpen(false);
+        if (btn.current) btn.current.focus({ preventScroll: true });
+        if (String(v) !== String(value)) onChange(String(v));
+      }} />`}`;
+}
+
+/** The open list of a Select, in the top layer so a scrolling pane never cuts it. */
+function Listbox({ anchor, value, options, onPick, onClose }) {
+  const ref = useRef(null);
+  const [pos, setPos] = useState(null);
+  const [active, setActive] = useState(() => Math.max(0, options.findIndex(([v]) => String(v) === String(value))));
+  const typed = useRef({ text: '', at: 0 });
+  useLayoutEffect(() => {
+    const place = () => {
+      const el = ref.current;
+      if (!el || !anchor || !anchor.isConnected) return onClose();
+      const a = anchor.getBoundingClientRect();
+      const w = Math.max(a.width, Math.min(el.scrollWidth + 2, 420));
+      const h = Math.min(el.scrollHeight, 320);
+      const left = clamp(a.left, 8, innerWidth - w - 8);
+      const below = innerHeight - a.bottom - 10;
+      const up = below < Math.min(h, 200) && a.top - 10 > below;
+      const maxH = Math.max(120, Math.min(320, up ? a.top - 14 : below - 4));
+      setPos({ left: left + 'px', width: w + 'px', maxHeight: maxH + 'px', transformOrigin: up ? 'bottom' : 'top',
+        ...(up ? { bottom: innerHeight - a.top + 4 + 'px' } : { top: a.bottom + 4 + 'px' }) });
+    };
+    place();
+    const outside = (e) => ref.current && !ref.current.contains(e.target) && !anchor.contains(e.target) && onClose();
+    addEventListener('pointerdown', outside, true);
+    addEventListener('resize', onClose);
+    addEventListener('scroll', place, true);
+    return () => {
+      removeEventListener('pointerdown', outside, true);
+      removeEventListener('resize', onClose);
+      removeEventListener('scroll', place, true);
+    };
+  }, [anchor]);
+  // the chosen row sits in the middle of the list when it opens; the active one stays in view while moving through it
+  useLayoutEffect(() => {
+    const el = ref.current;
+    const row = el && el.children[active];
+    if (!row || !pos) return;
+    if (row.offsetTop < el.scrollTop) el.scrollTop = row.offsetTop - 4;
+    else if (row.offsetTop + row.offsetHeight > el.scrollTop + el.clientHeight) el.scrollTop = row.offsetTop + row.offsetHeight - el.clientHeight + 4;
+  }, [active]);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !pos) return;
+    const row = el.children[active];
+    if (row) el.scrollTop = Math.max(0, row.offsetTop - (el.clientHeight - row.offsetHeight) / 2);
+    el.focus({ preventScroll: true });
+  }, [!!pos]);
+  const key = (e) => {
+    const n = options.length;
+    e.stopPropagation(); // keys belong to the open list, never to the screen's shortcuts (Space, P, K...)
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      setActive((i) => clamp(i + (e.key === 'ArrowDown' ? 1 : -1), 0, n - 1));
+    } else if (e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      setActive(e.key === 'Home' ? 0 : n - 1);
+    } else if (e.key === 'PageDown' || e.key === 'PageUp') {
+      e.preventDefault();
+      setActive((i) => clamp(i + (e.key === 'PageDown' ? 8 : -8), 0, n - 1));
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      if (options[active]) onPick(options[active][0]);
+    } else if (e.key === 'Escape' || e.key === 'Tab') {
+      e.preventDefault();
+      onClose();
+      if (anchor) anchor.focus({ preventScroll: true });
+    } else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      // typing jumps to the first row that starts with what was typed
+      const now = performance.now();
+      const tp = typed.current;
+      tp.text = (now - tp.at > 700 ? '' : tp.text) + e.key.toLocaleLowerCase();
+      tp.at = now;
+      const i = options.findIndex(([, l]) => String(l).toLocaleLowerCase().startsWith(tp.text));
+      if (i >= 0) setActive(i);
+    }
+  };
+  return html`<${Portal}><div class="popover listbox" ref=${ref} role="listbox" tabIndex="-1" onKeyDown=${key}
+    style=${pos || { left: '0px', top: '0px', visibility: 'hidden' }}>
+    ${options.map(([v, l], i) => {
+      const on = String(v) === String(value);
+      return html`<button type="button" key=${String(v)} role="option" aria-selected=${on} tabIndex="-1"
+        class=${cls('popitem', 'listopt', on && 'on', i === active && 'active')} onPointerMove=${() => i !== active && setActive(i)}
+        onClick=${() => onPick(v)}><span class="grow">${l}</span>${on && html`<${Icon} name="check" size=${14} />`}</button>`;
+    })}
+  </div></${Portal}>`;
+}
+
+/** A small "?" beside something locked or not obvious: says why, and can offer the way out (`action`: {label, onClick}).
+ *  Opens on hover and stays open on a click; `open` / `onClose` let a parent open it too (a click on a locked choice). */
+export function HelpTip({ title, children, action, open: openProp, onClose, class: c }) {
+  const btn = useRef(null);
+  const [own, setOwn] = useState(null); // null: closed, 'hover' or 'pin'
+  const timer = useRef(0);
+  const open = openProp || !!own;
+  const close = () => {
+    clearTimeout(timer.current);
+    setOwn(null);
+    if (onClose) onClose();
+  };
+  useEffect(() => () => clearTimeout(timer.current), []);
+  const enter = () => {
+    clearTimeout(timer.current);
+    if (!own) timer.current = setTimeout(() => setOwn((o) => o || 'hover'), 260);
+  };
+  const leave = () => {
+    clearTimeout(timer.current);
+    if (own === 'hover') timer.current = setTimeout(() => setOwn((o) => (o === 'hover' ? null : o)), 220);
+  };
+  return html`<button type="button" ref=${btn} class=${cls('helptip', open && 'on', c)} aria-label=${title || t('Neden?')} aria-expanded=${open}
+      onClick=${(e) => { e.stopPropagation(); e.preventDefault(); own === 'pin' || openProp ? close() : setOwn('pin'); }}
+      onPointerEnter=${(e) => e.pointerType !== 'touch' && enter()} onPointerLeave=${leave}><${Icon} name="help" size=${13} /></button>
+    ${open && html`<${Popover} anchor=${btn.current} onClose=${close} class="helppop" role="dialog">
+      <div onPointerEnter=${() => clearTimeout(timer.current)} onPointerLeave=${leave}>
+        ${title && html`<div class="helppop-title">${title}</div>`}
+        <div class="helppop-text">${children}</div>
+        ${action && html`<button type="button" class="btn btn-sm helppop-act" onClick=${() => { close(); action.onClick(); }}>${action.label}</button>`}
+      </div>
+    </${Popover}>`}`;
+}
+
+/** Every `title` in the app shows as the app's own tooltip instead of the system's: after a short rest the text appears
+ *  under the element (above when there is no room) and goes on the next move away, a press, a key or a scroll. */
+export function installTooltips() {
+  const tip = document.createElement('div');
+  tip.className = 'tooltip';
+  tip.setAttribute('role', 'tooltip');
+  let cur = null;
+  let timer = 0;
+  let shown = false;
+  // While the pointer is on an element its title is held here (the system tooltip must not see it) and given back
+  // when the pointer leaves, so the page's own updates of the title (or its removal) stay in charge.
+  const release = () => {
+    if (!cur) return;
+    const text = cur.dataset.dkTip;
+    delete cur.dataset.dkTip;
+    if (text && !cur.hasAttribute('title')) cur.setAttribute('title', text);
+  };
+  const hide = () => {
+    clearTimeout(timer);
+    release();
+    cur = null;
+    if (shown) {
+      shown = false;
+      tip.classList.remove('show');
+    }
+  };
+  const show = (el) => {
+    const text = el.dataset.dkTip;
+    if (!text || !el.isConnected || el.closest('[disabled], .dragging')) return;
+    tip.textContent = text;
+    if (!tip.isConnected) document.body.appendChild(tip);
+    const r = el.getBoundingClientRect();
+    const w = tip.offsetWidth;
+    const h = tip.offsetHeight;
+    const below = r.bottom + 8 + h < innerHeight - 6;
+    tip.style.left = clamp(r.left + r.width / 2 - w / 2, 6, innerWidth - w - 6) + 'px';
+    tip.style.top = (below ? r.bottom + 8 : Math.max(6, r.top - h - 8)) + 'px';
+    tip.dataset.side = below ? 'below' : 'above';
+    shown = true;
+    tip.classList.remove('show');
+    void tip.offsetWidth; // restart the fade for a new element
+    tip.classList.add('show');
+  };
+  document.addEventListener('pointerover', (e) => {
+    if (e.pointerType === 'touch') return;
+    const el = e.target instanceof Element ? e.target.closest('[title], [data-dk-tip]') : null;
+    if (el === cur) return;
+    const wasShown = shown;
+    hide();
+    if (!el) return;
+    const raw = el.getAttribute('title') || '';
+    el.removeAttribute('title');
+    if (!raw.trim()) return;
+    // the title was the name of an icon button: keep it for screen readers
+    if (!el.hasAttribute('aria-label') && !el.textContent.trim()) el.setAttribute('aria-label', raw);
+    el.dataset.dkTip = raw;
+    cur = el;
+    // from one tooltip straight to the next one: it shows at once, like a menu bar
+    timer = setTimeout(() => cur === el && show(el), wasShown ? 60 : 550);
+  });
+  document.addEventListener('pointerout', (e) => {
+    if (cur && !(e.relatedTarget instanceof Node && cur.contains(e.relatedTarget))) hide();
+  });
+  for (const ev of ['pointerdown', 'keydown', 'wheel']) document.addEventListener(ev, hide, true);
+  addEventListener('scroll', hide, true);
+  addEventListener('blur', hide);
 }
 
 export function Toggle({ checked, onChange, label, disabled }) {
@@ -274,7 +487,7 @@ export function GainSlider({ value, onInput, onCommit, min = -24, max = 12, step
   useEffect(() => {
     if (!dragging.current) setV(value || 0);
   }, [value]);
-  return html`<div class="gain" title="Ses seviyesi (dB) · çift tık: 0 dB">
+  return html`<div class="gain" title=${t('Ses seviyesi (dB) · çift tık: 0 dB')}>
     ${label && html`<span class="gain-label">${label}</span>`}
     <input type="range" min=${min} max=${max} step=${step} value=${v} style=${{ '--p': pctOf(v, min, max) }}
       onPointerDown=${() => (dragging.current = true)}
@@ -349,16 +562,17 @@ export function VolumeControl() {
   useEffect(() => onVolume(setV), []);
   const level = v.muted ? 0 : v.level;
   const toggle = () => setVolume(level === 0 ? { muted: false, level: v.level || 0.8 } : { muted: true });
-  return html`<div class="vol" title=${level === 0 ? 'Ses kapalı' : `Dinleme sesi %${Math.round(level * 100)}`}>
-    <button class="iconbtn sm" onClick=${toggle} aria-label=${level === 0 ? 'Sesi aç' : 'Sesi kapat'}>
+  return html`<div class="vol" title=${level === 0 ? t('Ses kapalı') : t('Dinleme sesi %{n}', { n: Math.round(level * 100) })}>
+    <button class="iconbtn sm" onClick=${toggle} aria-label=${level === 0 ? t('Sesi aç') : t('Sesi kapat')}>
       <${Icon} name=${level === 0 ? 'mute' : 'speaker'} size=${16} /></button>
-    <input type="range" min="0" max="1" step="0.01" value=${level} style=${{ '--p': level * 100 + '%' }} aria-label="Dinleme sesi"
+    <input type="range" min="0" max="1" step="0.01" value=${level} style=${{ '--p': level * 100 + '%' }} aria-label=${t('Dinleme sesi')}
       onInput=${(e) => { const x = Number(e.target.value); e.target.style.setProperty('--p', x * 100 + '%'); setVolume({ level: x, muted: x === 0 }); }} />
   </div>`;
 }
 
-export function PlayButton({ playing, onClick, disabled, title = 'Oynat / durdur (Boşluk)' }) {
-  return html`<button class="playbtn" onClick=${onClick} disabled=${disabled} title=${title} aria-label=${playing ? 'Durdur' : 'Oynat'}>
+export function PlayButton({ playing, onClick, disabled, title }) {
+  return html`<button class=${cls('playbtn', playing && 'on')} onClick=${onClick} disabled=${disabled} title=${title || t('Oynat / durdur (Boşluk)')}
+    aria-label=${playing ? t('Durdur') : t('Oynat')}>
     <${Icon} name=${playing ? 'pause' : 'play'} size=${16} /></button>`;
 }
 
@@ -386,7 +600,7 @@ export function usePlaying() {
 }
 
 /** Microphone level as an LED bar: -60..0 dBFS, the peak holds for a second, the frame turns red on clipping. */
-export function LevelMeter({ title = 'Mikrofon seviyesi' }) {
+export function LevelMeter({ title }) {
   const ref = useRef(null);
   useEffect(() => {
     let hold = -60;
@@ -412,7 +626,7 @@ export function LevelMeter({ title = 'Mikrofon seviyesi' }) {
       }
     });
   }, []);
-  return html`<div class="meter" ref=${ref} title=${title}><div></div><i class="peak"></i></div>`;
+  return html`<div class="meter" ref=${ref} title=${title || t('Mikrofon seviyesi')}><div></div><i class="peak"></i></div>`;
 }
 
 // One animation loop drives every bus meter on screen: fast attack, slow fall, idle when silent.
@@ -430,7 +644,7 @@ function meterLoop() {
 }
 player.on((type) => type === 'play' && !meterRaf && meters.size && (meterRaf = requestAnimationFrame(meterLoop)));
 
-export function BusMeter({ bus, horizontal = true, title = 'Seviye' }) {
+export function BusMeter({ bus, horizontal = true, title }) {
   const ref = useRef(null);
   useEffect(() => {
     const m = { bus, el: ref.current, v: 0, h: horizontal };
@@ -438,19 +652,11 @@ export function BusMeter({ bus, horizontal = true, title = 'Seviye' }) {
     if (player.playing && !meterRaf) meterRaf = requestAnimationFrame(meterLoop);
     return () => meters.delete(m);
   }, [bus]);
-  return html`<span class=${cls('vu', horizontal && 'h')} title=${title}><i ref=${ref}></i></span>`;
+  return html`<span class=${cls('vu', horizontal && 'h')} title=${title || t('Seviye')}><i ref=${ref}></i></span>`;
 }
 
 export function Empty({ icon = 'film', title, children }) {
   return html`<div class="empty"><${Icon} name=${icon} size=${32} /><h3>${title}</h3><div>${children}</div></div>`;
-}
-
-export function CharDot({ color, size = 10 }) {
-  return html`<span class="chardot" style=${{ background: color, width: size + 'px', height: size + 'px' }}></span>`;
-}
-
-export function Swatch({ color }) {
-  return html`<span class="swatch" style=${{ '--c': color }}></span>`;
 }
 
 export function Kbd({ children }) {

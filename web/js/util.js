@@ -1,3 +1,5 @@
+import { locale, t } from './i18n.js';
+
 export const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 export const db2gain = (db) => Math.pow(10, (db || 0) / 20);
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -39,10 +41,10 @@ export function fmtSize(mb) {
 
 export function timeAgo(ts) {
   const d = Date.now() / 1000 - ts;
-  if (d < 60) return 'az önce';
-  if (d < 3600) return Math.floor(d / 60) + ' dk önce';
-  if (d < 86400) return Math.floor(d / 3600) + ' saat önce';
-  return new Date(ts * 1000).toLocaleDateString('tr-TR');
+  if (d < 60) return t('az önce');
+  if (d < 3600) return t('{n} dk önce', { n: Math.floor(d / 60) });
+  if (d < 86400) return t('{n} saat önce', { n: Math.floor(d / 3600) });
+  return new Date(ts * 1000).toLocaleDateString(locale());
 }
 
 export function debounce(fn, ms) {

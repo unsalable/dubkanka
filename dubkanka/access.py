@@ -4,6 +4,7 @@ from pathlib import Path
 
 from fastapi import HTTPException, Request
 
+from .i18n import tx
 from .projects import store
 from .room import room
 
@@ -27,7 +28,7 @@ def who(request: Request):
 
 def host_only(request: Request):
     if is_remote(request):
-        raise HTTPException(403, "Bu işlem sadece odayı açan bilgisayardan yapılabilir.")
+        raise HTTPException(403, tx("Bu işlem sadece odayı açan bilgisayardan yapılabilir."))
 
 
 def member(request: Request, pid):
@@ -36,21 +37,21 @@ def member(request: Request, pid):
         return role, g
     if role == "guest" and pid == room.project_id:
         return role, g
-    raise HTTPException(403, "Odaya katılman gerekiyor.")
+    raise HTTPException(403, tx("Odaya katılman gerekiyor."))
 
 
 def project_or_404(pid):
     try:
         return store.get(pid)
     except KeyError:
-        raise HTTPException(404, "Proje bulunamadı")
+        raise HTTPException(404, tx("Proje bulunamadı"))
 
 
 def mutate(pid, fn):
     try:
         return store.mutate(pid, fn)
     except KeyError as e:
-        raise HTTPException(404, str(e.args[0]) if e.args else "Bulunamadı")
+        raise HTTPException(404, str(e.args[0]) if e.args else tx("Bulunamadı"))
     except ValueError as e:
         raise HTTPException(400, str(e))
 
@@ -70,9 +71,9 @@ async def save_body(request: Request, dst: Path, limit_mb=8000):
             if size > limit_mb * 2**20:
                 f.close()
                 dst.unlink(missing_ok=True)
-                raise HTTPException(413, "Dosya çok büyük.")
+                raise HTTPException(413, tx("Dosya çok büyük."))
             f.write(chunk)
     if size == 0:
         dst.unlink(missing_ok=True)
-        raise HTTPException(400, "Boş dosya geldi.")
+        raise HTTPException(400, tx("Boş dosya geldi."))
     return size

@@ -3,6 +3,7 @@ import { api, fileUrl, P } from '../api.js';
 import { Btn, Field, Icon, JobPanel, Modal, PlayButton, Popover, Select, TimeReadout, Toggle, usePlaying, VideoPane, VolumeControl } from '../components.js';
 import { engine, player, stemUrls } from '../engine.js';
 import { FeatureOffer } from '../feature-ui.js';
+import { t } from '../i18n.js';
 import { ask, featureReady, go, jobOf, patchLocal, toast, toastError, useStore } from '../state.js';
 import { fitZoom, Timeline } from '../timeline.js';
 import { cls, copyText, debounce, fmtTime, revealInList, syllables } from '../util.js';
@@ -29,18 +30,18 @@ function TooLong({ orig, text }) {
   const so = syllables(orig);
   const sd = syllables(text);
   if (sd / Math.max(1, so) <= 1.35) return null;
-  return html`<span class="toolong" title=${`Orijinal ${so} hece, dublaj ${sd} hece. Kısaltırsan ağza daha iyi oturur.`}>uzun</span>`;
+  return html`<span class="toolong" title=${t('Orijinal {a} hece, dublaj {b} hece. Kısaltırsan ağza daha iyi oturur.', { a: so, b: sd })}>${t('uzun')}</span>`;
 }
 
-/** Who says the line: the character's name tag; click to give the line to someone else. */
+/** Who says the line: the character's name tag itself is the button that gives the line to someone else. */
 function CharTag({ p, line, c, onPick }) {
   const btn = useRef(null);
   const [open, setOpen] = useState(false);
-  return html`<button ref=${btn} class="chartag" title="Bu satırı kim söylüyor?" aria-expanded=${open} onClick=${(e) => { e.stopPropagation(); setOpen(!open); }}>
-      <span class="hl" style=${{ '--c': c ? c.color : '#8c897f' }}>${c ? c.name : 'Kim?'}</span><${Icon} name="chevron" size=${11} class="chev" /></button>
-    ${open && html`<${Popover} anchor=${btn.current} align="start" title="Söyleyen" onClose=${() => setOpen(false)}>
+  return html`<button ref=${btn} class="hl chartag" style=${{ '--c': c ? c.color : '#8c897f' }} title=${t('Bu satırı kim söylüyor?')} aria-expanded=${open}
+      onClick=${(e) => { e.stopPropagation(); setOpen(!open); }}>${c ? c.name : t('Kim?')}<${Icon} name="chevdown" size=${12} class="chev" /></button>
+    ${open && html`<${Popover} anchor=${btn.current} align="start" title=${t('Söyleyen')} onClose=${() => setOpen(false)}>
       ${p.characters.map((ch) => html`<button key=${ch.id} class="popitem" onClick=${() => { setOpen(false); onPick(ch.id); }}>
-        <span class="swatch" style=${{ '--c': ch.color }}></span><span class="grow">${ch.name}</span>${ch.id === line.char && html`<${Icon} name="check" size=${14} />`}</button>`)}
+        <span class="hl" style=${{ '--c': ch.color }}>${ch.name}</span><span class="grow"></span>${ch.id === line.char && html`<${Icon} name="check" size=${14} />`}</button>`)}
     </${Popover}>`}`;
 }
 
@@ -79,20 +80,20 @@ function LineRow({ p, line, idx, selected, onSelect, onPlay, chars }) {
   // the cue sheet shows only what the line needs: who says it, the original, the dub; timing lives in the timeline
   return html`<div class=${cls('linerow', selected && 'sel', flash && 'flash')} style=${{ '--c': c ? c.color : '#8c897f' }}
     onClick=${() => onSelect(line)} id=${'line-' + line.id}>
-    <div class="linerow-num" title=${`${fmtTime(line.start)} · ${(line.end - line.start).toFixed(1)} sn`}>${idx + 1}</div>
+    <div class="linerow-num" title=${`${fmtTime(line.start)} · ${t('{n} sn', { n: (line.end - line.start).toFixed(1) })}`}>${idx + 1}</div>
     <div class="linerow-main">
       <div class="linerow-meta">
         <${CharTag} p=${p} line=${line} c=${c} onPick=${setChar} />
         <${TooLong} orig=${line.orig} text=${text} />
         <span class="grow"></span>
         <span class="linerow-acts">
-          <button class="iconbtn sm" title="Orijinali dinle" onClick=${(e) => { e.stopPropagation(); onPlay(line); }}><${Icon} name="headphones" size=${15} /></button>
-          <button class="iconbtn sm" title="Bu satırı kaydet" onClick=${(e) => { e.stopPropagation(); go(`p/${p.id}/record/${line.id}`); }}><${Icon} name="mic" size=${15} /></button>
+          <button class="iconbtn sm" title=${t('Orijinali dinle')} onClick=${(e) => { e.stopPropagation(); onPlay(line); }}><${Icon} name="headphones" size=${15} /></button>
+          <button class="iconbtn sm" title=${t('Bu satırı kaydet')} onClick=${(e) => { e.stopPropagation(); go(`p/${p.id}/record/${line.id}`); }}><${Icon} name="mic" size=${15} /></button>
         </span>
-        ${recorded && html`<span class="linerow-done" title="Kaydı var"><${Icon} name="check" size=${14} /></span>`}
+        ${recorded && html`<span class="linerow-done" title=${t('Kaydı var')}><${Icon} name="check" size=${14} /></span>`}
       </div>
       ${line.orig && html`<div class="orig">${line.orig}</div>`}
-      <textarea ref=${area} class="input dubtext" rows="1" placeholder="Dublaj repliğini yaz…" value=${text}
+      <textarea ref=${area} class="input dubtext" rows="1" placeholder=${t('Dublaj repliğini yaz…')} value=${text}
         onFocus=${() => { focused.current = true; onSelect(line); }}
         onBlur=${(e) => { focused.current = false; save.flush(e.target.value); }}
         onInput=${(e) => { setText(e.target.value); save(e.target.value); }}
@@ -122,20 +123,20 @@ function CastRow({ p, c, count, i }) {
   };
   const others = p.characters.filter((x) => x.id !== c.id);
   return html`<div class="castrow" style=${{ '--c': c.color, '--i': i }}>
-    <label class="colorpick" title="Kalem rengi"><input type="color" value=${c.color} onChange=${(e) => patch({ color: e.target.value })} /></label>
-    <input class="bare strong castname" value=${name} title="Karakter adı" aria-label="Karakter adı" onInput=${(e) => setName(e.target.value)}
+    <label class="colorpick" title=${t('Rengi değiştir')}><input type="color" value=${c.color} onChange=${(e) => patch({ color: e.target.value })} /></label>
+    <input class="bare strong castname" value=${name} title=${t('Karakter adı')} aria-label=${t('Karakter adı')} onInput=${(e) => setName(e.target.value)}
       onBlur=${() => name.trim() && name !== c.name && patch({ name: name.trim() })} onKeyDown=${(e) => e.key === 'Enter' && e.target.blur()} />
-    <input class="bare castactor" value=${actor} placeholder="seslendiren" title="Bu rolü kim seslendirecek?" aria-label="Seslendiren"
+    <input class="bare castactor" value=${actor} placeholder=${t('seslendiren')} title=${t('Bu rolü kim seslendirecek?')} aria-label=${t('Seslendiren')}
       onInput=${(e) => setActor(e.target.value)} onBlur=${() => actor !== (c.actor || '') && patch({ actor: actor.trim() })} onKeyDown=${(e) => e.key === 'Enter' && e.target.blur()} />
-    <span class="tc dim" title="Satır sayısı">${count}</span>
-    <button class="iconbtn sm" ref=${dots} title="Diğer işlemler" aria-haspopup="menu" aria-expanded=${menu} onClick=${() => setMenu(!menu)}><${Icon} name="dots" size=${16} /></button>
-    ${menu && html`<${Popover} anchor=${dots.current} title=${others.length ? 'Aynı kişi mi? Şununla birleştir' : null} onClose=${() => setMenu(false)}>
+    <span class="tc dim" title=${t('Satır sayısı')}>${count}</span>
+    <button class="iconbtn sm" ref=${dots} title=${t('Diğer işlemler')} aria-haspopup="menu" aria-expanded=${menu} onClick=${() => setMenu(!menu)}><${Icon} name="dots" size=${16} /></button>
+    ${menu && html`<${Popover} anchor=${dots.current} title=${others.length ? t('Aynı kişi mi? Şununla birleştir') : null} onClose=${() => setMenu(false)}>
       ${others.map((x) => html`<button key=${x.id} class="popitem" onClick=${() => merge(x.id)}>
-        <span class="swatch" style=${{ '--c': x.color }}></span><span class="grow">${x.name}</span><span class="dim tc">${p.lines.filter((l) => l.char === x.id).length}</span></button>`)}
+        <span class="hl" style=${{ '--c': x.color }}>${x.name}</span><span class="grow"></span><span class="dim tc">${p.lines.filter((l) => l.char === x.id).length}</span></button>`)}
       ${others.length > 0 && html`<div class="popover-sep"></div>`}
       ${count === 0
-        ? html`<button class="popitem danger" onClick=${() => { setMenu(false); api.del(P(p.id, `/characters/${c.id}`)).catch(toastError); }}><${Icon} name="trash" size=${14} />Karakteri sil</button>`
-        : html`<div class="popitem dim" aria-disabled="true"><${Icon} name="info" size=${14} />Satırı olan karakter silinemez, önce birleştir.</div>`}
+        ? html`<button class="popitem danger" onClick=${() => { setMenu(false); api.del(P(p.id, `/characters/${c.id}`)).catch(toastError); }}><${Icon} name="trash" size=${14} />${t('Karakteri sil')}</button>`
+        : html`<div class="popitem dim" aria-disabled="true"><${Icon} name="info" size=${14} />${t('Satırı olan karakter silinemez, önce birleştir.')}</div>`}
     </${Popover}>`}
   </div>`;
 }
@@ -153,15 +154,15 @@ function TranslatePanel({ p, onClose }) {
   const tr = translators.find((t) => t.id === engineName) || {};
   const go_ = () => api.post(P(p.id, '/translate'), { engine: engineName, style, onlyEmpty }).catch(toastError);
   const runningJob = job && (job.status === 'running' || job.status === 'queued');
-  const options = translators.map((t) => [t.id, t.name + (t.configured ? '' : ' (ayarlanmadı)')]);
-  return html`<${Modal} title="Satırları çevir" onClose=${onClose}>
-    <${Field} label="Çeviri servisi"><${Select} value=${engineName} onChange=${setEngine} options=${options.length ? options : [['google', 'Google Çeviri']]} /></${Field}>
-    ${ENGINE_KIND(sys, engineName) === 'llm' && html`<${Field} label="Tarz">
+  const options = translators.map((x) => [x.id, x.name + (x.configured ? '' : ' ' + t('(ayarlanmadı)'))]);
+  return html`<${Modal} title=${t('Satırları çevir')} onClose=${onClose}>
+    <${Field} label=${t('Çeviri servisi')}><${Select} value=${engineName} onChange=${setEngine} options=${options.length ? options : [['google', t('Google Çeviri')]]} /></${Field}>
+    ${ENGINE_KIND(sys, engineName) === 'llm' && html`<${Field} label=${t('Tarz')}>
       <${Select} value=${style} onChange=${setStyle} options=${Object.entries(sys.styles || {})} /></${Field}>`}
-    ${!tr.configured && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${tr.name} henüz ayarlanmadı. <a href="#/settings">Ayarlar → Çeviri</a></div>`}
-    <${Toggle} checked=${onlyEmpty} onChange=${setOnlyEmpty} label="Sadece boş satırları çevir (yazdıklarım kalsın)" />
+    ${!tr.configured && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${t('{name} henüz ayarlanmadı.', { name: tr.name })} <a href="#/settings/translate">${t('Ayarlar → Çeviri')}</a></div>`}
+    <${Toggle} checked=${onlyEmpty} onChange=${setOnlyEmpty} label=${t('Sadece boş satırları çevir (yazdıklarım kalsın)')} />
     ${job && html`<${JobPanel} job=${job} />`}
-    <div class="modal-actions"><${Btn} onClick=${onClose}>Kapat</${Btn}><${Btn} kind="primary" icon="sparkle" disabled=${runningJob || !tr.configured} onClick=${go_}>Çevir</${Btn}></div>
+    <div class="modal-actions"><${Btn} onClick=${onClose}>${t('Kapat')}</${Btn}><${Btn} kind="primary" icon="translate" disabled=${runningJob || !tr.configured} onClick=${go_}>${t('Çevir')}</${Btn}></div>
   </${Modal}>`;
 }
 
@@ -170,20 +171,20 @@ export function scriptText(p, cid) {
   const rows = [];
   p.lines.forEach((l, i) => {
     if (cid && l.char !== cid) return;
-    rows.push(`#${i + 1}  [${fmtTime(l.start)} · ${(l.end - l.start).toFixed(1)} sn]${cid ? '' : '  ' + (p.characters.find((x) => x.id === l.char) || {}).name}\n${l.text || '(boş)'}\n   orijinal: ${l.orig}`);
+    rows.push(`#${i + 1}  [${fmtTime(l.start)} · ${t('{n} sn', { n: (l.end - l.start).toFixed(1) })}]${cid ? '' : '  ' + (p.characters.find((x) => x.id === l.char) || {}).name}\n${l.text || t('(boş)')}\n   ${t('orijinal:')} ${l.orig}`);
   });
-  return `🎬 ${p.name} — dublaj senaryosu${c ? `\nRolün: ${c.name}` : ''}\n` +
-    `Her repliği ayrı kaydet, dosyanın adını satır numarası yap (ör. 3.m4a). WhatsApp sesli mesajı da olur.\n\n` + rows.join('\n\n');
+  return `🎬 ${t('{name} — dublaj senaryosu', { name: p.name })}${c ? `\n${t('Rolün: {name}', { name: c.name })}` : ''}\n` +
+    `${t('Her repliği ayrı kaydet, dosyanın adını satır numarası yap (ör. 3.m4a). WhatsApp sesli mesajı da olur.')}\n\n` + rows.join('\n\n');
 }
 
 function ShareScript({ p, onClose }) {
   const [cid, setCid] = useState(p.characters[0] ? p.characters[0].id : '');
   const txt = scriptText(p, cid);
-  return html`<${Modal} title="Senaryoyu gönder" onClose=${onClose} wide>
-    <p class="muted">Arkadaşın kendi repliklerini kaydedip sana atar; dosyaları <b>Kayıt</b> ekranında <b>Toplu yükle</b> ile eklersin.</p>
-    <${Field} label="Kimin için?"><${Select} value=${cid} onChange=${setCid} options=${[...p.characters.map((c) => [c.id, c.name]), ['', 'Tüm senaryo']]} /></${Field}>
+  return html`<${Modal} title=${t('Senaryoyu gönder')} onClose=${onClose} wide>
+    <p class="muted">${t('Arkadaşın kendi repliklerini kaydedip sana atar; dosyaları Kayıt ekranında Toplu yükle ile eklersin.')}</p>
+    <${Field} label=${t('Kimin için?')}><${Select} value=${cid} onChange=${setCid} options=${[...p.characters.map((c) => [c.id, c.name]), ['', t('Tüm senaryo')]]} /></${Field}>
     <textarea class="input sharetext" readonly value=${txt}></textarea>
-    <div class="modal-actions"><${Btn} icon="copy" kind="primary" onClick=${async () => { await copyText(txt); toast('Kopyalandı', 'ok'); }}>Kopyala</${Btn}></div>
+    <div class="modal-actions"><${Btn} icon="copy" kind="primary" onClick=${async () => { await copyText(txt); toast(t('Kopyalandı'), 'ok'); }}>${t('Kopyala')}</${Btn}></div>
   </${Modal}>`;
 }
 
@@ -232,13 +233,13 @@ export function ScriptView({ p }) {
     if (!selLine) return;
     const next = p.lines[p.lines.indexOf(selLine) + 1];
     if (next && (next.takes || []).length &&
-      !(await ask({ title: 'Satırlar birleştirilsin mi?', text: 'Sonraki satırın kayıtları silinir.', ok: 'Birleştir', danger: true }))) return;
+      !(await ask({ title: t('Satırlar birleştirilsin mi?'), text: t('Sonraki satırın kayıtları silinir.'), ok: t('Birleştir'), danger: true }))) return;
     api.post(P(p.id, `/lines/${selLine.id}/merge-next`)).catch(toastError);
   };
   const delLine = async () => {
     if (!selLine) return;
     if ((selLine.takes || []).length &&
-      !(await ask({ title: `${p.lines.indexOf(selLine) + 1}. satır silinsin mi?`, text: 'Satırın kayıtları da silinir.', ok: 'Sil', danger: true }))) return;
+      !(await ask({ title: t('{n}. satır silinsin mi?', { n: p.lines.indexOf(selLine) + 1 }), text: t('Satırın kayıtları da silinir.'), ok: t('Sil'), danger: true }))) return;
     api.del(P(p.id, `/lines/${selLine.id}`)).catch(toastError);
   };
 
@@ -255,7 +256,7 @@ export function ScriptView({ p }) {
   });
 
   const track = {
-    id: 'voices', label: html`<${Icon} name="wave" size=${14} />Orijinal konuşmalar`, height: 84, buffer: voices, waveColor: 'rgba(214,210,198,0.3)',
+    id: 'voices', label: html`<${Icon} name="wave" size=${14} />${t('Orijinal konuşmalar')}`, height: 84, buffer: voices, waveColor: 'rgba(214,210,198,0.3)',
     clips: p.lines.map((l, i) => ({
       id: l.id, start: l.start, end: l.end, color: (chars[l.char] || {}).color, label: `${i + 1}`,
       title: `${(chars[l.char] || {}).name}: ${l.orig}`, resizable: true, draggable: true, className: 'lineclip',
@@ -269,35 +270,35 @@ export function ScriptView({ p }) {
       <div class="viewer-col">
         <section class="pane viewer-pane">
           <${VideoPane} src=${fileUrl(p.id, p.clip.preview, p.clip.ver)} poster=${fileUrl(p.id, p.clip.thumb, p.clip.ver)} class="script-video"
-            onClick=${() => original && toggle()} title=${playing ? 'Durdur' : 'Oynat'} />
+            onClick=${() => original && toggle()} title=${playing ? t('Durdur') : t('Oynat')} />
           <div class="transport">
             <${PlayButton} playing=${playing} onClick=${toggle} disabled=${!original} />
             <${TimeReadout} duration=${dur} />
             <${VolumeControl} />
             <div class="toolbar line-tools">
-              <${Btn} small kind="ghost" icon="plus" onClick=${addLine} title="Oynatma çizgisinin olduğu yere yeni satır">Satır ekle</${Btn}>
-              <${Btn} small kind="ghost" icon="cut" onClick=${split} disabled=${!selLine} title="Seçili satırı oynatma çizgisinden ikiye böl">Böl</${Btn}>
-              <${Btn} small kind="ghost" icon="merge" onClick=${mergeNext} disabled=${!selLine} title="Seçili satırı sonrakiyle birleştir">Birleştir</${Btn}>
-              <${Btn} small kind="ghost" icon="trash" onClick=${delLine} disabled=${!selLine} title="Seçili satırı sil">Sil</${Btn}>
+              <${Btn} small kind="ghost" icon="plus" onClick=${addLine} title=${t('Oynatma çizgisinin olduğu yere yeni satır')}>${t('Satır ekle')}</${Btn}>
+              <${Btn} small kind="ghost" icon="cut" onClick=${split} disabled=${!selLine} title=${t('Seçili satırı oynatma çizgisinden ikiye böl')}>${t('Böl')}</${Btn}>
+              <${Btn} small kind="ghost" icon="merge" onClick=${mergeNext} disabled=${!selLine} title=${t('Seçili satırı sonrakiyle birleştir')}>${t('Birleştir')}</${Btn}>
+              <${Btn} small kind="ghost" icon="trash" onClick=${delLine} disabled=${!selLine} title=${t('Seçili satırı sil')}>${t('Sil')}</${Btn}>
             </div>
           </div>
         </section>
         <section class="pane cast-pane">
-          <div class="pane-head"><h3>Oyuncular</h3><span class="count">${p.characters.length}</span><span class="grow"></span>
-            <${Btn} small kind="ghost" icon="plus" onClick=${() => api.post(P(p.id, '/characters'), {}).catch(toastError)}>Karakter</${Btn}></div>
+          <div class="pane-head"><h3>${t('Oyuncular')}</h3><span class="count">${p.characters.length}</span><span class="grow"></span>
+            <${Btn} small kind="ghost" icon="plus" onClick=${() => api.post(P(p.id, '/characters'), {}).catch(toastError)}>${t('Karakter')}</${Btn}></div>
           <div class="pane-scroll cast">${p.characters.map((c, i) => html`<${CastRow} key=${c.id} p=${p} c=${c} count=${counts[c.id] || 0} i=${i} />`)}</div>
         </section>
       </div>
       <section class="pane lines-pane">
-        <div class="pane-head"><h3>Senaryo</h3><span class="count" title=${`${recorded} satırın kaydı var`}>${p.lines.length}</span><span class="grow"></span>
-          <${Btn} small kind="ghost" icon="sparkle" onClick=${() => setModal('translate')}>Çevir</${Btn}>
-          <${Btn} small kind="ghost" icon="copy" onClick=${() => setModal('share')} title="Senaryoyu WhatsApp'tan arkadaşına gönder">Gönder</${Btn}>
-          <${Btn} small kind="primary" icon="mic" onClick=${() => go(`p/${p.id}/record`)}>Kayda geç</${Btn}></div>
+        <div class="pane-head"><h3>${t('Senaryo')}</h3><span class="count" title=${t('{n} satırın kaydı var', { n: recorded })}>${p.lines.length}</span><span class="grow"></span>
+          <${Btn} small kind="ghost" icon="translate" onClick=${() => setModal('translate')}>${t('Çevir')}</${Btn}>
+          <${Btn} small kind="ghost" icon="copy" onClick=${() => setModal('share')} title=${t("Senaryoyu WhatsApp'tan arkadaşına gönder")}>${t('Gönder')}</${Btn}>
+          <${Btn} small kind="primary" icon="mic" onClick=${() => go(`p/${p.id}/record`)}>${t('Kayda geç')}</${Btn}></div>
         ${empty
           ? featureReady('speech')
-            ? html`<div class="empty"><h3>Bu sahnede konuşma bulunamadı</h3><p class="muted">“Satır ekle” ile kendin ekleyebilirsin.</p></div>`
-            : html`<div class="empty"><h3>Satırları sen yaz</h3><p class="muted">Bir replik başlayınca “Satır ekle”ye bas ve metni yaz.</p>
-                <${FeatureOffer} id="speech" text="İndirip sahneyi yeniden hazırlarsan satırlar kendiliğinden yazılır." class="empty-offer" /></div>`
+            ? html`<div class="empty"><h3>${t('Bu sahnede konuşma bulunamadı')}</h3><p class="muted">${t('“Satır ekle” ile kendin ekleyebilirsin.')}</p></div>`
+            : html`<div class="empty"><h3>${t('Satırları sen yaz')}</h3><p class="muted">${t('Bir replik başlayınca “Satır ekle”ye bas ve metni yaz.')}</p>
+                <${FeatureOffer} id="speech" text=${t('İndirip sahneyi yeniden hazırlarsan satırlar kendiliğinden yazılır.')} class="empty-offer" /></div>`
           : html`<div class="pane-scroll lines">${p.lines.map(
               (l, i) => html`<${LineRow} key=${l.id} p=${p} line=${l} idx=${i} selected=${l.id === sel} chars=${chars} onSelect=${select} onPlay=${playLine} />`
             )}</div>`}

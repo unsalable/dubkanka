@@ -1,5 +1,6 @@
 import { useLayoutEffect, useReducer } from '../vendor/preact-htm.js';
 import { api, P } from './api.js';
+import { getLang, setLang, t } from './i18n.js';
 import { LS, sleep } from './util.js';
 
 export const store = {
@@ -14,6 +15,7 @@ export const store = {
   toasts: [],
   dialog: null, // the open question of ask()
   online: true,
+  lang: getLang(), // the whole app is mounted again when it changes
 };
 
 const subs = new Set();
@@ -42,6 +44,7 @@ export function parseRoute() {
 }
 
 // Motion level (Ayarlar → Genel), applied as <html data-motion>: CSS scales durations and distances from it.
+// The labels are translated where they are shown (t()).
 export const MOTION_LEVELS = [['full', 'Tam'], ['reduced', 'Azaltılmış'], ['off', 'Kapalı']];
 export const motion = () => document.documentElement.dataset.motion || 'full';
 export function setMotion(level) {
@@ -130,7 +133,7 @@ export const toastError = (e) => toast(e && e.message ? e.message : String(e), '
 
 /** Ask inside the app instead of the browser's confirm()/prompt() windows (the Dialog component draws it).
  *  Resolves true or false; with `input` (the starting text) it resolves the typed text, or null when cancelled. */
-export function ask({ title, text = '', ok = 'Tamam', cancel = 'Vazgeç', danger = false, input = null }) {
+export function ask({ title, text = '', ok = t('Tamam'), cancel = t('Vazgeç'), danger = false, input = null }) {
   if (store.dialog) store.dialog.close(store.dialog.input != null ? null : false); // one question at a time
   return new Promise((resolve) => {
     const close = (answer) => {
@@ -141,6 +144,25 @@ export function ask({ title, text = '', ok = 'Tamam', cancel = 'Vazgeç', danger
     };
     setState({ dialog: { title, text, ok, cancel, danger, input, close } });
   });
+}
+
+/** Switch the interface language. The server is told first (its job messages, errors and feature names follow), the
+ *  desktop shell too (its start screen), then the whole window crossfades to the new language. */
+export async function changeLang(l) {
+  if (l === getLang()) return;
+  setLang(l);
+  let system = store.system;
+  if (store.role === 'host') {
+    try {
+      await api.post('/api/settings', { language: l });
+      system = await api.get('/api/system');
+    } catch (e) {
+      toastError(e);
+    }
+  }
+  const shell = window.dkDesktop;
+  if (shell && shell.setLanguage) shell.setLanguage(l).catch(() => {});
+  transition(() => setState({ lang: l, system }), 1, 'lang');
 }
 
 /** Apply a local change to the current project immediately (the server copy follows via watch). */
@@ -243,8 +265,8 @@ function featureJobsSettled(prev, next) {
     const was = prev.find((x) => x.id === j.id);
     if (!was || !live(was)) continue;
     refreshFeatures();
-    if (j.status === 'done') toast(j.message || 'Hazır', 'ok');
-    else if (j.status === 'error') toast(j.error || 'Eklenemedi', 'error', 8000);
+    if (j.status === 'done') toast(j.message || t('Hazır'), 'ok');
+    else if (j.status === 'error') toast(j.error || t('Eklenemedi'), 'error', 8000);
   }
 }
 

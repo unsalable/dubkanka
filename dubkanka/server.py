@@ -17,6 +17,7 @@ from . import __version__
 from .config import (DESKTOP, EXPORTS_DIR, HOME, LOGS_DIR, MODELS_DIR, PROJECTS_DIR, RUNTIME, WEB_DIR, load_settings,
                      public_settings, save_settings)
 from .gpu import gpu_info
+from .i18n import LangMiddleware, tx
 from .access import GUEST_COOKIE, body_json, host_only, is_remote, member, mutate, project_or_404, save_body, who
 from .jobs import bus, jobs
 from .projects import add_character, find_char, find_line, find_take, new_id, sort_lines, store
@@ -43,6 +44,7 @@ class _RevalidatedStatic(StaticFiles):
 
 
 app = FastAPI(title="DubKanka", lifespan=lifespan, docs_url=None, redoc_url=None)
+app.add_middleware(LangMiddleware)
 app.mount("/web", _RevalidatedStatic(directory=str(WEB_DIR)), name="web")
 
 
@@ -83,8 +85,8 @@ def system(request: Request):
         "settings": public_settings(), **translate.system_info(), **takes.system_info(), **export.system_info(),
         "desktop": DESKTOP, "dirs": {"home": str(HOME), "projects": str(PROJECTS_DIR), "exports": str(EXPORTS_DIR),
                                      "models": str(MODELS_DIR)},
-        "whisperModels": [["small", "Hızlı · 0.5 GB"], ["large-v3-turbo", "Dengeli · 1.6 GB (önerilen)"],
-                          ["large-v3", "En doğru · 3 GB, daha yavaş"]],
+        "whisperModels": [["small", tx("Hızlı · 0.5 GB")], ["large-v3-turbo", tx("Dengeli · 1.6 GB (önerilen)")],
+                          ["large-v3", tx("En doğru · 3 GB, daha yavaş")]],
         "features": features.all_status(),
         "exportsDir": str(EXPORTS_DIR),
     }
@@ -112,7 +114,7 @@ def features_action(fid: str, action: str, request: Request):
     host_only(request)
     from . import features
     if fid not in features.FEATURES or action not in ("remove", "keep", "cancel"):
-        raise HTTPException(404, "Böyle bir özellik yok.")
+        raise HTTPException(404, tx("Böyle bir özellik yok."))
     out = {}
     try:
         if action == "remove":
@@ -162,7 +164,7 @@ async def projects_upload(request: Request, filename: str = "video.mp4", name: s
         store.delete(p["id"])
         raise
     from .pipeline import run_import_file
-    job = jobs.submit("import", p["id"], "Video okunuyor", lambda j: run_import_file(j, p["id"], dst, filename),
+    job = jobs.submit("import", p["id"], tx("Video okunuyor"), lambda j: run_import_file(j, p["id"], dst, filename),
                       heavy=False)
     return {"project": store.get(p["id"]), "job": job.to_dict()}
 
@@ -173,10 +175,10 @@ async def projects_url(request: Request):
     body = await body_json(request)
     url = str(body.get("url") or "").strip()
     if not re.match(r"https?://", url):
-        raise HTTPException(400, "Geçerli bir bağlantı yapıştır (https://...).")
-    p = store.create(str(body.get("name") or "").strip() or "Yeni proje")
+        raise HTTPException(400, tx("Geçerli bir bağlantı yapıştır (https://...)."))
+    p = store.create(str(body.get("name") or "").strip() or tx("Yeni proje"))
     from .pipeline import run_import_url
-    job = jobs.submit("import", p["id"], "Video indiriliyor", lambda j: run_import_url(j, p["id"], url), heavy=False)
+    job = jobs.submit("import", p["id"], tx("Video indiriliyor"), lambda j: run_import_url(j, p["id"], url), heavy=False)
     return {"project": store.get(p["id"]), "job": job.to_dict()}
 
 
@@ -196,7 +198,10 @@ async def project_patch(pid: str, request: Request):
             p["name"] = body["name"].strip()[:80]
         for k in ("settings", "mix"):
             if isinstance(body.get(k), dict):
-                p[k].update({kk: vv for kk, vv in body[k].items() if kk != "sfx"})
+                p[k].update({kk: vv for kk, vv in body[k].items() if kk not in ("sfx", "mutes")})
+        if isinstance(body.get("mix"), dict) and "mutes" in body["mix"]:
+            from .mixer import clean_mutes
+            p["mix"]["mutes"] = clean_mutes(body["mix"]["mutes"], (p.get("clip") or {}).get("duration"))
         if isinstance(body.get("export"), dict):  # nested video/audio options: merge, do not replace
             from .export import EXPORT_DEFAULTS, merge, normalize_export
             merge(p["export"], {kk: vv for kk, vv in body["export"].items() if kk in EXPORT_DEFAULTS})
@@ -220,7 +225,7 @@ async def project_prepare(pid: str, request: Request):
     host_only(request)
     project_or_404(pid)
     if jobs.active(pid, "prepare"):
-        raise HTTPException(409, "Bu proje zaten hazırlanıyor.")
+        raise HTTPException(409, tx("Bu proje zaten hazırlanıyor."))
     opts = await body_json(request)
     # the next scene starts from the dub language and translator chosen here
     from . import translate
@@ -232,7 +237,7 @@ async def project_prepare(pid: str, request: Request):
     if remember:
         save_settings(remember)
     from .pipeline import PREP_STEPS, run_prepare
-    job = jobs.submit("prepare", pid, "Sahne hazırlanıyor", lambda j: run_prepare(j, pid, opts), steps=PREP_STEPS)
+    job = jobs.submit("prepare", pid, tx("Sahne hazırlanıyor"), lambda j: run_prepare(j, pid, opts), steps=PREP_STEPS)
     return job.to_dict()
 
 
@@ -241,9 +246,9 @@ async def project_separate(pid: str, request: Request):
     host_only(request)
     project_or_404(pid)
     if jobs.active(pid):
-        raise HTTPException(409, "Bu proje şu an işleniyor.")
+        raise HTTPException(409, tx("Bu proje şu an işleniyor."))
     from .pipeline import run_separate
-    job = jobs.submit("separate", pid, "Konuşmalar ayrılıyor", lambda j: run_separate(j, pid))
+    job = jobs.submit("separate", pid, tx("Konuşmalar ayrılıyor"), lambda j: run_separate(j, pid))
     return job.to_dict()
 
 
@@ -252,9 +257,9 @@ async def project_ambience(pid: str, request: Request):
     host_only(request)
     project_or_404(pid)
     if jobs.active(pid, "ambience") or jobs.active(pid, "prepare"):
-        raise HTTPException(409, "Bu proje şu an işleniyor.")
+        raise HTTPException(409, tx("Bu proje şu an işleniyor."))
     from .pipeline import run_ambience
-    job = jobs.submit("ambience", pid, "Ortam sesleri ayrılıyor", lambda j: run_ambience(j, pid))
+    job = jobs.submit("ambience", pid, tx("Ortam sesleri ayrılıyor"), lambda j: run_ambience(j, pid))
     return job.to_dict()
 
 
@@ -264,7 +269,7 @@ async def project_translate(pid: str, request: Request):
     project_or_404(pid)
     b = await body_json(request)
     from .pipeline import run_translate
-    job = jobs.submit("translate", pid, "Çeviri", lambda j: run_translate(
+    job = jobs.submit("translate", pid, tx("Çeviri"), lambda j: run_translate(
         j, pid, b.get("engine", "google"), b.get("style", "natural"), bool(b.get("onlyEmpty"))), heavy=False)
     return job.to_dict()
 
@@ -351,7 +356,7 @@ async def line_split(pid: str, lid: str, request: Request):
     def fn(p):
         line = find_line(p, lid)
         if not (line["start"] + 0.15 < at < line["end"] - 0.15):
-            raise ValueError("Bölmek için oynatma çizgisini satırın içine getir.")
+            raise ValueError(tx("Bölmek için oynatma çizgisini satırın içine getir."))
         words = line.get("words") or []
         w1 = [w for w in words if (w[0] + w[1]) / 2 < at]
         w2 = [w for w in words if (w[0] + w[1]) / 2 >= at]
@@ -380,7 +385,7 @@ def line_merge_next(pid: str, lid: str, request: Request):
         line = find_line(p, lid)
         i = p["lines"].index(line)
         if i + 1 >= len(p["lines"]):
-            raise ValueError("Birleştirilecek sonraki satır yok.")
+            raise ValueError(tx("Birleştirilecek sonraki satır yok."))
         nxt = p["lines"][i + 1]
         line["end"] = max(line["end"], nxt["end"])
         line["orig"] = (line.get("orig", "") + " " + nxt.get("orig", "")).strip()
@@ -427,7 +432,7 @@ async def char_patch(pid: str, cid: str, request: Request):
     def fn(p):
         c = find_char(p, cid)
         if not c:
-            raise KeyError("Karakter bulunamadı")
+            raise KeyError(tx("Karakter bulunamadı"))
         before = (c.get("effect"), c.get("pitch"))
         for k, typ in _CHAR_FIELDS.items():
             if k in b and b[k] is not None:
@@ -441,12 +446,12 @@ async def char_patch(pid: str, cid: str, request: Request):
 @app.post("/api/projects/{pid}/characters/{cid}/claim")
 async def char_claim(pid: str, cid: str, request: Request):
     role, g = member(request, pid)
-    name = g["name"] if g else (str((await body_json(request)).get("name") or "").strip()[:30] or "Ben")
+    name = g["name"] if g else (str((await body_json(request)).get("name") or "").strip()[:30] or tx("Ben"))
 
     def fn(p):
         c = find_char(p, cid)
         if not c:
-            raise KeyError("Karakter bulunamadı")
+            raise KeyError(tx("Karakter bulunamadı"))
         names = [n.strip() for n in (c.get("actor") or "").split(",") if n.strip()]
         if name not in names:
             names.append(name)
@@ -454,7 +459,7 @@ async def char_claim(pid: str, cid: str, request: Request):
         return c["name"]
     cname = mutate(pid, fn)
     if g or room.project_id == pid:
-        room.log(f"{name}, {cname} rolünü aldı")
+        room.log("{name}, {char} rolünü aldı", name=name, char=cname)
     return {"ok": True}
 
 
@@ -462,7 +467,7 @@ async def char_claim(pid: str, cid: str, request: Request):
 async def char_unclaim(pid: str, cid: str, request: Request):
     """Give a role back: picking another one in the booth takes this name off the previous character."""
     role, g = member(request, pid)
-    name = g["name"] if g else (str((await body_json(request)).get("name") or "").strip()[:30] or "Ben")
+    name = g["name"] if g else (str((await body_json(request)).get("name") or "").strip()[:30] or tx("Ben"))
 
     def fn(p):
         c = find_char(p, cid)
@@ -480,7 +485,7 @@ async def char_merge(pid: str, cid: str, request: Request):
 
     def fn(p):
         if cid == into or not find_char(p, cid) or not find_char(p, into):
-            raise ValueError("Birleştirilecek karakteri seç.")
+            raise ValueError(tx("Birleştirilecek karakteri seç."))
         for l in p["lines"]:
             if l["char"] == cid:
                 l["char"] = into
@@ -495,14 +500,14 @@ def char_delete(pid: str, cid: str, request: Request):
 
     def fn(p):
         if any(l["char"] == cid for l in p["lines"]):
-            raise ValueError("Bu karakterin satırları var. Önce başka bir karakterle birleştir.")
+            raise ValueError(tx("Bu karakterin satırları var. Önce başka bir karakterle birleştir."))
         p["characters"] = [c for c in p["characters"] if c["id"] != cid]
     mutate(pid, fn)
     return store.get(pid)
 
 
 # ---------------------------------------------------------------- takes
-def _submit_process(pid, lid, tid, title="Kayıt işleniyor"):
+def _submit_process(pid, lid, tid, title=None):
     from .takes import mark_take_error, process_take
 
     def run(job):
@@ -511,7 +516,7 @@ def _submit_process(pid, lid, tid, title="Kayıt işleniyor"):
         except Exception as e:
             mark_take_error(pid, lid, tid, str(e)[:200])
             raise
-    return jobs.submit("take", pid, title, run, heavy=False)
+    return jobs.submit("take", pid, title or tx("Kayıt işleniyor"), run, heavy=False)
 
 
 def _reprocess_where(pid, pred):
@@ -531,7 +536,7 @@ async def take_upload(pid: str, lid: str, request: Request, recStart: float = No
     try:
         line = find_line(p, lid)
     except KeyError:
-        raise HTTPException(404, "Satır bulunamadı")
+        raise HTTPException(404, tx("Satır bulunamadı"))
     ext = (Path(filename).suffix or ".wav").lower()
     if not re.fullmatch(r"\.[a-z0-9]{1,5}", ext):
         ext = ".wav"
@@ -541,7 +546,7 @@ async def take_upload(pid: str, lid: str, request: Request, recStart: float = No
     try:
         await save_body(request, tmp, limit_mb=200)
         from .takes import add_take
-        name = g["name"] if g else (by.strip() or "Ben")
+        name = g["name"] if g else (by.strip() or tx("Ben"))
         tid = await asyncio.to_thread(add_take, pid, lid, tmp, name, source if source in ("booth", "upload") else "upload",
                                       recStart, fit, align if align in ("auto", "recorded") else "auto", bool(denoise),
                                       None if hpf < 0 else bool(hpf))
@@ -550,7 +555,7 @@ async def take_upload(pid: str, lid: str, request: Request, recStart: float = No
     _submit_process(pid, lid, tid)
     if g:
         n = next((i + 1 for i, l in enumerate(p["lines"]) if l["id"] == lid), "?")
-        room.log(f"{g['name']}, {n}. satırı kaydetti")
+        room.log("{name}, {n}. satırı kaydetti", name=g["name"], n=n)
     return {"takeId": tid, "lineId": line["id"]}
 
 
@@ -567,7 +572,7 @@ async def take_patch(pid: str, lid: str, tid: str, request: Request):
     def fn(p):
         t = find_take(find_line(p, lid), tid)
         if g and t.get("by") != g["name"]:
-            raise ValueError("Sadece kendi kayıtlarını değiştirebilirsin.")
+            raise ValueError(tx("Sadece kendi kayıtlarını değiştirebilirsin."))
         changed = False
         for k, conv in _TAKE_REPROCESS.items():
             if k in b:
@@ -599,14 +604,14 @@ def take_delete(pid: str, lid: str, tid: str, request: Request):
     try:
         t = find_take(find_line(p, lid), tid)
     except KeyError:
-        raise HTTPException(404, "Kayıt bulunamadı")
+        raise HTTPException(404, tx("Kayıt bulunamadı"))
     if g and t.get("by") != g["name"]:
-        raise HTTPException(403, "Sadece kendi kayıtlarını silebilirsin.")
+        raise HTTPException(403, tx("Sadece kendi kayıtlarını silebilirsin."))
     from .takes import delete_take
     try:
         delete_take(pid, lid, tid)
     except KeyError:
-        raise HTTPException(404, "Kayıt bulunamadı")
+        raise HTTPException(404, tx("Kayıt bulunamadı"))
     return {"ok": True}
 
 
@@ -620,7 +625,7 @@ async def tts_lines(pid: str, request: Request):
     ids = b.get("lines")
     targets = [l for l in p["lines"] if (l["id"] in ids if ids else not l.get("take")) and l.get("text", "").strip()]
     if not targets:
-        raise HTTPException(400, "Yapay zeka sesi verilecek satır yok (dublaj metni boş olabilir).")
+        raise HTTPException(400, tx("Yapay zeka sesi verilecek satır yok (dublaj metni boş olabilir)."))
     from .takes import TTS_VOICES, process_take, tts_take
     lang = p["settings"].get("dstLang", "en")
     defaults = [v for v, _ in TTS_VOICES.get(lang, TTS_VOICES["en"])]
@@ -629,13 +634,13 @@ async def tts_lines(pid: str, request: Request):
 
     def run(job):
         for i, l in enumerate(targets):
-            job.update(i / len(targets), f"Yapay zeka sesi: {i + 1}/{len(targets)}")
+            job.update(i / len(targets), tx("Yapay zeka sesi: {a}/{b}", a=i + 1, b=len(targets)))
             voice = (voices.get(l["char"]) or char_voice.get(l["char"])
                      or defaults[char_index.get(l["char"], 0) % len(defaults)])
             tid = tts_take(pid, l["id"], voice)
             process_take(pid, l["id"], tid)
         return {"count": len(targets)}
-    return jobs.submit("tts", pid, "Yapay zeka sesleri", run, heavy=False).to_dict()
+    return jobs.submit("tts", pid, tx("Yapay zeka sesleri"), run, heavy=False).to_dict()
 
 
 # ---------------------------------------------------------------- sound effects
@@ -674,7 +679,7 @@ async def sfx_patch(pid: str, sid: str, request: Request):
                     if k in b:
                         s[k] = conv(b[k])
                 return s
-        raise KeyError("Efekt bulunamadı")
+        raise KeyError(tx("Efekt bulunamadı"))
     return mutate(pid, fn)
 
 
@@ -698,11 +703,11 @@ _GUEST_FILES = re.compile(r"^(media/(preview\.mp4|thumb\.jpg|(voices|background|
 def project_file(pid: str, path: str, request: Request):
     role, _ = member(request, pid)
     if role != "host" and not _GUEST_FILES.match(path):
-        raise HTTPException(403, "Bu dosyaya erişim yok.")
+        raise HTTPException(403, tx("Bu dosyaya erişim yok."))
     base = store.dir(pid).resolve()
     f = (base / path).resolve()
     if base not in f.parents or not f.is_file() or f.name == "project.json":
-        raise HTTPException(404, "Dosya bulunamadı")
+        raise HTTPException(404, tx("Dosya bulunamadı"))
     return FileResponse(f, headers={"Cache-Control": "private, max-age=3600"})
 
 
@@ -712,22 +717,22 @@ async def project_export(pid: str, request: Request):
     host_only(request)
     project_or_404(pid)
     if jobs.active(pid, "export"):
-        raise HTTPException(409, "Video zaten oluşturuluyor.")
+        raise HTTPException(409, tx("Video zaten oluşturuluyor."))
     opts = await body_json(request)
     from .export import run_export
-    return jobs.submit("export", pid, "Video oluşturuluyor", lambda j: run_export(j, pid, opts)).to_dict()
+    return jobs.submit("export", pid, tx("Video oluşturuluyor"), lambda j: run_export(j, pid, opts)).to_dict()
 
 
 @app.get("/api/exports/{name}")
 def export_file(name: str, request: Request, dl: int = 0):
     role, _ = who(request)
     if role == "anon":
-        raise HTTPException(403, "Odaya katılman gerekiyor.")
+        raise HTTPException(403, tx("Odaya katılman gerekiyor."))
     from .export import export_path, media_type
     try:
         f = export_path(name)
     except FileNotFoundError:
-        raise HTTPException(404, "Video bulunamadı")
+        raise HTTPException(404, tx("Video bulunamadı"))
     if dl:
         return FileResponse(f, filename=name, media_type=media_type(name))
     return FileResponse(f, media_type=media_type(name))
@@ -776,7 +781,7 @@ def job_get(jid: str, request: Request):
     role, _ = who(request)
     j = jobs.jobs.get(jid)
     if not j or (role != "host" and j.project_id != room.project_id):
-        raise HTTPException(404, "İş bulunamadı")
+        raise HTTPException(404, tx("İş bulunamadı"))
     return j.to_dict()
 
 
@@ -791,7 +796,7 @@ def job_cancel(jid: str, request: Request):
 async def watch(request: Request, project: str = "", v: int = -1):
     role, g = who(request)
     if role == "anon":
-        raise HTTPException(403, "Odaya katılman gerekiyor.")
+        raise HTTPException(403, tx("Odaya katılman gerekiyor."))
     if role == "guest":
         project = room.project_id or ""
     await bus.wait(v, timeout=20.0)
@@ -846,7 +851,7 @@ def room_cloudflared(request: Request):
 def room_qr(request: Request):
     host_only(request)
     if not room.url:
-        raise HTTPException(404, "Oda kapalı")
+        raise HTTPException(404, tx("Oda kapalı"))
     import io
     import segno
     buf = io.BytesIO()
@@ -873,7 +878,7 @@ async def guest_heartbeat(request: Request):
     b = await body_json(request)
     g = room.heartbeat(request.cookies.get(GUEST_COOKIE), b.get("view"), b.get("line"), b.get("char"))
     if not g:
-        raise HTTPException(403, "Oda kapandı ya da oturum süresi doldu.")
+        raise HTTPException(403, tx("Oda kapandı ya da oturum süresi doldu."))
     return {"ok": True}
 
 
@@ -882,7 +887,7 @@ def guest_leave(request: Request):
     token = request.cookies.get(GUEST_COOKIE)
     g = room.guests.pop(token, None) if token else None
     if g:
-        room.log(f"{g['name']} odadan ayrıldı")
+        room.log("{name} odadan ayrıldı", name=g["name"])
     resp = JSONResponse({"ok": True})
     resp.delete_cookie(GUEST_COOKIE)
     return resp

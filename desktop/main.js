@@ -11,6 +11,7 @@ if (!app.requestSingleInstanceLock()) {
 app.setAppUserModelId('com.unsalable.dubkanka');
 
 const P = require('./lib/paths');
+const i18n = require('./lib/i18n');
 const runtime = require('./lib/runtime');
 const updater = require('./lib/updater');
 const { Server, freePort } = require('./lib/server');
@@ -124,11 +125,14 @@ server.onExit((code) => {
   if (quitting || !win || win.isDestroyed() || !win.webContents.getURL().startsWith('http')) return;
   const tail = server.tail.slice(-40);
   win.loadFile(path.join(__dirname, 'setup', 'index.html')).then(() =>
-    send({ type: 'error', message: `DubKanka sunucusu kapandı (kod ${code}).`, tail }));
+    send({ type: 'error', message: i18n.t('DubKanka sunucusu kapandı (kod {code}).', { code }), tail }));
 });
 
 // ---------------------------------------------------------------- bridge
 ipcMain.on('dk:version', (e) => (e.returnValue = app.getVersion()));
+// the studio's language: the start screen asks for it, the studio sets it when the user picks another one
+ipcMain.on('dk:lang', (e) => (e.returnValue = i18n.get()));
+ipcMain.handle('dk:lang:set', (_e, l) => i18n.setLang(l));
 ipcMain.handle('dk:setup:replay', () => lastSetup);
 ipcMain.handle('dk:setup:retry', () => {
   server.stop();
@@ -146,7 +150,7 @@ updater.onState((s) => win && !win.isDestroyed() && win.webContents.send('dk:upd
 ipcMain.handle('dk:open-external', (_e, url) => /^https?:\/\//i.test(String(url)) && shell.openExternal(String(url)));
 ipcMain.handle('dk:show-item', (_e, p) => p && shell.showItemInFolder(String(p)));
 ipcMain.handle('dk:pick-folder', async (_e, o = {}) => {
-  const r = await dialog.showOpenDialog(win, { title: o.title || 'Klasör seç', defaultPath: o.defaultPath, properties: ['openDirectory', 'createDirectory'] });
+  const r = await dialog.showOpenDialog(win, { title: o.title || i18n.t('Klasör seç'), defaultPath: o.defaultPath, properties: ['openDirectory', 'createDirectory'] });
   return r.canceled || !r.filePaths.length ? null : r.filePaths[0];
 });
 ipcMain.handle('dk:relaunch', () => {

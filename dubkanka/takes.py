@@ -9,6 +9,7 @@ import numpy as np
 
 from . import media
 from .config import SAMPLE_RATE
+from .i18n import tx
 from .projects import find_char, find_line, find_take, new_id, store
 
 EFFECTS = {
@@ -113,7 +114,7 @@ def add_take(pid, lid, upload_path, by="Ben", source="booth", rec_start=None, fi
         media.to_wav(upload_path, d / raw, SAMPLE_RATE, 1)
     except media.MediaError as e:
         (d / raw).unlink(missing_ok=True)
-        raise media.MediaError("Bu dosyada okunabilir bir ses yok. Ses kaydı ya da sesli bir video seç.") from e
+        raise media.MediaError(tx("Bu dosyada okunabilir bir ses yok. Ses kaydı ya da sesli bir video seç.")) from e
     take = {
         "id": tid, "by": (by or "Ben")[:40], "created": time.time(), "source": source, "raw": raw,
         "file": None, "ver": 0, "recStart": rec_start, "align": align if rec_start is not None else "auto",
@@ -253,16 +254,18 @@ def tts_take(pid, lid, voice):
     line = find_line(p, lid)
     text = (line.get("text") or "").strip()
     if not text:
-        raise ValueError("Bu satırın dublaj metni boş.")
+        raise ValueError(tx("Bu satırın dublaj metni boş."))
     with tempfile.TemporaryDirectory() as td:
         mp3 = Path(td) / "tts.mp3"
         try:
             asyncio.run(_edge_tts(text, voice, mp3))
         except Exception as e:
-            raise RuntimeError("Yapay zeka sesi oluşturulamadı (internet bağlantısı gerekli).") from e
-        tid = add_take(pid, lid, mp3, by="Yapay zeka", source="tts", fit=True)
+            raise RuntimeError(tx("Yapay zeka sesi oluşturulamadı (internet bağlantısı gerekli).")) from e
+        tid = add_take(pid, lid, mp3, by=tx("Yapay zeka"), source="tts", fit=True)
     return tid
 
 
 def system_info():
-    return {"effects": EFFECTS, "ttsVoices": TTS_VOICES}
+    """Effect and voice names in the request's language."""
+    return {"effects": {k: tx(v) for k, v in EFFECTS.items()},
+            "ttsVoices": {lang: [(v, tx(label)) for v, label in voices] for lang, voices in TTS_VOICES.items()}}

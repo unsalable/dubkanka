@@ -2,12 +2,78 @@
 
 The browser preview (web/js/engine.js) follows exactly the same rules, keep them in sync.
 """
+import secrets
+
 import numpy as np
 
 from . import media
+from .i18n import tx
 
 FILL_PRE, FILL_POST, FILL_FADE = 0.15, 0.25, 0.03
 TRIM_FADE = 0.004
+MUTE_FADE = 0.03  # the ramps around a muted stretch (engine.js MUTE_FADE)
+MUTE_TRACKS = ("bg", "amb")
+
+
+def clean_mutes(items, duration=None):
+    """The Mikser's muted stretches of the background and the ambience, as the page sent them: typed, inside the
+    scene, at most 300."""
+    out = []
+    for m in items if isinstance(items, list) else []:
+        if not isinstance(m, dict) or m.get("track") not in MUTE_TRACKS:
+            continue
+        try:
+            a, b = max(0.0, float(m.get("start"))), float(m.get("end"))
+        except (TypeError, ValueError):
+            continue
+        if duration:
+            b = min(b, float(duration))
+        if b - a < 0.02:
+            continue
+        item = {"id": str(m.get("id") or "")[:16] or "m" + secrets.token_hex(4), "track": m["track"],
+                "start": round(a, 3), "end": round(b, 3)}
+        if m.get("line"):
+            item["line"] = str(m["line"])[:16]
+        out.append(item)
+    return out[:300]
+
+
+def mute_windows(p, track):
+    """[start, end] stretches of a track to silence, sorted and joined where their ramps would touch."""
+    ws = sorted((float(m["start"]), float(m["end"])) for m in (p.get("mix") or {}).get("mutes") or []
+                if m.get("track") == track and float(m["end"]) > float(m["start"]))
+    out = []
+    for a, b in ws:
+        if out and a - MUTE_FADE <= out[-1][1] + MUTE_FADE:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return out
+
+
+def mute_envelope(n, sr, windows):
+    """Gain over n samples: 1, ramping to 0 in the MUTE_FADE before each window, 0 inside it, back up after."""
+    g = np.ones(n, np.float32)
+    f = max(1, int(MUTE_FADE * sr))
+    down = np.linspace(1.0, 0.0, f, endpoint=False, dtype=np.float32)
+    up = np.linspace(0.0, 1.0, f, endpoint=False, dtype=np.float32)
+
+    def put(at, ramp):
+        lo, hi = max(0, at), min(n, at + len(ramp))
+        if hi > lo:
+            g[lo:hi] = np.minimum(g[lo:hi], ramp[lo - at:hi - at])
+    for a, b in windows:
+        ia, ib = int(round(a * sr)), int(round(b * sr))
+        put(ia - f, down)
+        g[max(0, ia):max(0, min(n, ib))] = 0.0
+        put(ib, up)
+    return g
+
+
+def _muted(x, sr, p, track):
+    """A whole-scene track with its muted stretches silenced."""
+    ws = mute_windows(p, track)
+    return x * mute_envelope(len(x), sr, ws)[:, None] if ws else x
 
 
 def _add(out, x, pos):
@@ -80,8 +146,9 @@ def render(p, d, mode="dub"):
         x, _ = media.read_audio(d / p["stems"]["original"])
         return x
     if mode == "clean" and p["stems"].get("separated") is False:
-        raise media.MediaError("Bu sahnede konuşmalar fondan ayrılmadı, konuşmasız ses yok. Mikser'den konuşmaları ayırabilirsin.")
+        raise media.MediaError(tx("Bu sahnede konuşmalar fondan ayrılmadı, konuşmasız ses yok. Mikser'den konuşmaları ayırabilirsin."))
     bg, sr = media.read_audio(d / p["stems"]["background"])
+    bg = _muted(bg, sr, p, "bg")
     n = len(bg)
     mix = p["mix"]
     out = np.zeros((n, 2), dtype=np.float32)
@@ -89,7 +156,8 @@ def render(p, d, mode="dub"):
         if not mix.get("bgMute"):
             out += bg * media.db_to_gain(mix.get("bgGain", 0.0))
         if p["stems"].get("ambience") and not mix.get("ambMute"):
-            _add(out, media.read_audio(d / p["stems"]["ambience"])[0][:n] * media.db_to_gain(mix.get("ambGain", 0.0)), 0)
+            amb = _muted(media.read_audio(d / p["stems"]["ambience"])[0][:n], sr, p, "amb")
+            _add(out, amb * media.db_to_gain(mix.get("ambGain", 0.0)), 0)
         return out
     voices, _ = media.read_audio(d / dialog_stem(p))
     chars = {c["id"]: c for c in p["characters"]}
@@ -104,7 +172,7 @@ def render(p, d, mode="dub"):
     if not mix.get("bgMute"):
         out += bg * (media.db_to_gain(mix.get("bgGain", 0.0)) * duck)
     if p["stems"].get("ambience") and not mix.get("ambMute"):
-        amb = media.read_audio(d / p["stems"]["ambience"])[0][:n]
+        amb = _muted(media.read_audio(d / p["stems"]["ambience"])[0][:n], sr, p, "amb")
         _add(out, amb * (media.db_to_gain(mix.get("ambGain", 0.0)) * (duck[: len(amb)] if np.ndim(duck) else duck)), 0)
     if not mix.get("origMute", True) and mix.get("origGain", -60) > -59:
         out += voices * media.db_to_gain(mix["origGain"])

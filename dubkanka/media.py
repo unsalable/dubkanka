@@ -13,6 +13,7 @@ import numpy as np
 import soundfile as sf
 
 from .config import BIN_DIR, SAMPLE_RATE
+from .i18n import tx
 
 NO_WINDOW = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
@@ -45,14 +46,14 @@ def _find_bin(name):
 def ffmpeg_path():
     p = _find_bin("ffmpeg")
     if not p:
-        raise MediaError("ffmpeg bulunamadı. Lütfen 'Kurulum.bat' dosyasını çalıştır.")
+        raise MediaError(tx("ffmpeg bulunamadı. Ayarlar → Sistem → Kurulumu onar ile düzelt."))
     return p
 
 
 def ffprobe_path():
     p = _find_bin("ffprobe")
     if not p:
-        raise MediaError("ffprobe bulunamadı. Lütfen 'Kurulum.bat' dosyasını çalıştır.")
+        raise MediaError(tx("ffprobe bulunamadı. Ayarlar → Sistem → Kurulumu onar ile düzelt."))
     return p
 
 
@@ -149,7 +150,7 @@ def probe(path):
                           "-show_streams", str(path)], capture_output=True, text=True,
                          encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
     if out.returncode != 0:
-        raise MediaError("Dosya okunamadı: " + (out.stderr.strip()[-300:] or "bilinmeyen biçim"))
+        raise MediaError(tx("Dosya okunamadı: {e}", e=out.stderr.strip()[-300:] or tx("bilinmeyen biçim")))
     info = json.loads(out.stdout or "{}")
     streams = info.get("streams", [])
     v = next((s for s in streams if s.get("codec_type") == "video"
@@ -218,7 +219,7 @@ def measure_loudness(path, target=-14.0, peak=-1.0):
     r = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8", errors="replace", creationflags=NO_WINDOW)
     m = re.search(r"\{[^{}]*\"input_i\"[^{}]*\}", r.stderr)
     if not m:
-        raise MediaError("Ses seviyesi ölçülemedi.")
+        raise MediaError(tx("Ses seviyesi ölçülemedi."))
     return json.loads(m.group(0))
 
 

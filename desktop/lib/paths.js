@@ -18,6 +18,7 @@ module.exports = {
   MODELS: path.join(HOME, 'models'),
   LOGS: path.join(HOME, 'logs'),
   PREFS: path.join(HOME, 'desktop.json'),
+  LANG: path.join(HOME, 'lang.json'),
   WINDOW: path.join(HOME, 'window.json'),
   // the Python package and the web UI: inside the installed app, or the repository when run with `npm start`
   APP_DIR: app.isPackaged ? path.join(process.resourcesPath, 'app') : path.resolve(__dirname, '..', '..'),

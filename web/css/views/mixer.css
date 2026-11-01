@@ -20,7 +20,8 @@
 .nudges .btn { min-width: 44px; font-family: var(--mono); font-variant-numeric: tabular-nums; }
 .charfx { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
 .charfx .hl { font-size: 13px; }
-.charfx select { width: 170px; }
+.charfx .select { width: 170px; }
+.mute-acts { margin-top: 12px; }
 .master { display: flex; flex-direction: column; gap: 3px; width: 76px; margin-left: 4px; }
 .master .label { font-size: 10px; }
 .master .vu.h { flex: none; height: 5px; width: 100%; }

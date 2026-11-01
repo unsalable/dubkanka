@@ -3,6 +3,7 @@
 import { html, useEffect, useLayoutEffect, useRef, useState } from '../vendor/preact-htm.js';
 import { Icon } from './components.js';
 import { player } from './engine.js';
+import { t } from './i18n.js';
 import { clamp, cls, drawWave, fmtTime } from './util.js';
 
 const TICKS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120];
@@ -137,13 +138,49 @@ function Clip({ clip, zoom, height, selected, onSelect, onMove, onResize, onTrim
     onPointerDown=${(e) => down(e, 'move')} title=${clip.title || ''}>
     ${clip.buffer && html`<canvas ref=${cv}></canvas>`}
     <span class="tl-clip-label">${clip.label}</span>
-    ${edges && html`<i class="tl-h l" title=${clip.trim ? 'Baştan kırp' : 'Başlangıç'} onPointerDown=${(e) => down(e, 'l')}></i>
-      <i class="tl-h r" title=${clip.trim ? 'Sondan kırp' : 'Bitiş'} onPointerDown=${(e) => down(e, 'r')}></i>`}
+    ${edges && html`<i class="tl-h l" title=${clip.trim ? t('Baştan kırp') : t('Başlangıç')} onPointerDown=${(e) => down(e, 'l')}></i>
+      <i class="tl-h r" title=${clip.trim ? t('Sondan kırp') : t('Bitiş')} onPointerDown=${(e) => down(e, 'r')}></i>`}
   </div>`;
 }
 
+/** A lane that takes a range (`track.onRange`): dragging across its empty part marks a stretch of time; a plain click
+ *  still moves the playhead. The marked stretch (`track.range`) waits with its actions (`track.rangeActions`). */
 function Lane({ track, zoom, scrollLeft, viewW, selectedId, onSelect, onMove, onResize, onTrim, onSeek, snap, duration }) {
   const cv = useRef(null);
+  const live = useRef(null);
+  const down = (e) => {
+    if (!(e.target === e.currentTarget || e.target === cv.current)) return;
+    if (!track.onRange || e.button !== 0) return onSeek(e);
+    const lane = e.currentTarget;
+    const r = lane.getBoundingClientRect();
+    const at = (x) => clamp((x - r.left) / zoom, 0, duration);
+    const x0 = e.clientX;
+    const t0 = snap(at(x0), null) ?? at(x0);
+    let t1 = t0;
+    let moved = false;
+    try {
+      lane.setPointerCapture(e.pointerId);
+    } catch {}
+    const band = live.current;
+    const move = (ev) => {
+      if (!moved && Math.abs(ev.clientX - x0) < 4) return;
+      moved = true;
+      t1 = snap(at(ev.clientX), null) ?? at(ev.clientX);
+      band.hidden = false;
+      band.style.left = Math.min(t0, t1) * zoom + 'px';
+      band.style.width = Math.abs(t1 - t0) * zoom + 'px';
+    };
+    const up = () => {
+      lane.removeEventListener('pointermove', move);
+      band.hidden = true;
+      snap(null);
+      if (moved && Math.abs(t1 - t0) >= 0.05) track.onRange(Math.min(t0, t1), Math.max(t0, t1));
+      else onSeek(e);
+    };
+    lane.addEventListener('pointermove', move);
+    lane.addEventListener('pointerup', up, { once: true });
+    lane.addEventListener('pointercancel', up, { once: true });
+  };
   useEffect(() => {
     const c = cv.current;
     if (!c || !track.buffer) return;
@@ -154,13 +191,16 @@ function Lane({ track, zoom, scrollLeft, viewW, selectedId, onSelect, onMove, on
     c.style.height = track.height + 'px';
     drawWave(c, track.buffer, track.waveAt || 0, scrollLeft / zoom, (scrollLeft + viewW) / zoom, track.waveColor || 'rgba(180,177,167,0.5)', track.waveGain || 1);
   }, [track.buffer, zoom, scrollLeft, viewW, track.height, track.waveColor]);
-  return html`<div class=${cls('tl-lane', track.muted && 'muted')} style=${{ height: track.height + 'px' }}
-    onPointerDown=${(e) => (e.target === e.currentTarget || e.target === cv.current) && onSeek(e)}>
+  const rg = track.range;
+  return html`<div class=${cls('tl-lane', track.muted && 'muted', track.onRange && 'ranged')} style=${{ height: track.height + 'px' }} onPointerDown=${down}>
     ${track.buffer && html`<canvas class="tl-wave" ref=${cv} style=${{ left: scrollLeft + 'px' }}></canvas>`}
     ${(track.clips || []).map(
       (c) => html`<${Clip} key=${c.id} clip=${c} zoom=${zoom} height=${track.height} selected=${selectedId === c.id} duration=${duration}
         onSelect=${onSelect} onMove=${onMove} onResize=${onResize} onTrim=${onTrim} snap=${snap} />`
     )}
+    ${track.onRange && html`<div class="tl-range live" ref=${live} hidden></div>`}
+    ${rg && html`<div class="tl-range" key=${rg.start + ':' + rg.end} style=${{ left: rg.start * zoom + 'px', width: Math.max(2, (rg.end - rg.start) * zoom) + 'px' }}>
+      <div class="tl-range-acts">${track.rangeActions}</div></div>`}
   </div>`;
 }
 
@@ -246,9 +286,9 @@ export function Timeline({ duration, tracks, zoom, onZoom, onSeek, selectedId, o
     <div class="tl-heads">
       <div class="tl-corner" style=${{ height: rulerH + 'px' }}>
         ${onZoom && html`
-          <button class="iconbtn" title="Uzaklaş (Ctrl + tekerlek)" onClick=${() => onZoom(clamp(zoom * 0.7, minZoom(), 600))}><${Icon} name="zoomout" size=${15} /></button>
-          <button class="iconbtn" title="Tümünü sığdır" onClick=${() => onZoom(minZoom())}><${Icon} name="fit" size=${15} /></button>
-          <button class="iconbtn" title="Yakınlaş (Ctrl + tekerlek)" onClick=${() => onZoom(clamp(zoom * 1.4, minZoom(), 600))}><${Icon} name="zoomin" size=${15} /></button>`}
+          <button class="iconbtn" title=${t('Uzaklaş (Ctrl + tekerlek)')} onClick=${() => onZoom(clamp(zoom * 0.7, minZoom(), 600))}><${Icon} name="zoomout" size=${15} /></button>
+          <button class="iconbtn" title=${t('Tümünü sığdır')} onClick=${() => onZoom(minZoom())}><${Icon} name="fit" size=${15} /></button>
+          <button class="iconbtn" title=${t('Yakınlaş (Ctrl + tekerlek)')} onClick=${() => onZoom(clamp(zoom * 1.4, minZoom(), 600))}><${Icon} name="zoomin" size=${15} /></button>`}
       </div>
       ${tracks.map((t) => html`<div key=${t.id} class=${cls('tl-head', t.muted && 'muted')} style=${{ height: t.height + 'px', '--c': t.color || 'transparent' }}>
         <div class="tl-head-title">${t.label}</div>${t.controls}

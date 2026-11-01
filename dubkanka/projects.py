@@ -10,6 +10,7 @@ import time
 from pathlib import Path
 
 from .config import PROJECTS_DIR, load_settings
+from .i18n import tx
 from .jobs import bus
 
 # Clip colours for characters: even brightness on the editor's graphite, none close to the blue accent or REC red.
@@ -48,8 +49,7 @@ def default_project(pid, name):
         "mix": {"bgGain": 0.0, "bgMute": False, "ambGain": 0.0, "ambMute": False, "dubGain": 0.0, "dubMute": False,
                 "origGain": -6.0,
                 "origMute": True, "fillMissing": True, "fillGain": 0.0, "duck": 0.0, "sfx": []},
-        "export": {"format": "vertical_blur", "subs": "dub", "subFont": "Arial Black", "subSize": 1.0,
-                   "subPos": None, "subColor": "white", "credits": True, "creditsText": "", "quality": "high"},
+        "export": {},  # export.EXPORT_DEFAULTS until something is chosen on the Paylaş screen
         "exports": [],
     }
 
@@ -79,6 +79,11 @@ class ProjectStore:
         p = json.loads(f.read_text(encoding="utf-8"))
         for c in p.get("characters", []):
             c["color"] = _OLD_COLORS.get(c.get("color"), c.get("color"))
+        # 1.4: sharing starts from a copy of the source picture. A project whose share settings were never touched
+        # (only the first version's defaults saved, no "video" yet) takes the new defaults.
+        ex = p.get("export") or {}
+        if "video" not in ex and ex.get("quality") != "normal":
+            p["export"] = {}
         self._cache[pid] = p
         return p
 
@@ -91,7 +96,7 @@ class ProjectStore:
 
     def create(self, name):
         pid = new_id()
-        p = default_project(pid, name or "Yeni proje")
+        p = default_project(pid, name or tx("Yeni proje"))
         app = load_settings()  # a new scene starts from the dub language and translator used last
         p["settings"].update(dstLang=app.get("defaultDstLang") or "en", translator=app.get("translator") or "google")
         with self.lock(pid):
@@ -160,14 +165,14 @@ def find_line(p, lid):
     for l in p["lines"]:
         if l["id"] == lid:
             return l
-    raise KeyError("Satır bulunamadı")
+    raise KeyError(tx("Satır bulunamadı"))
 
 
 def find_take(line, tid):
     for t in line.get("takes", []):
         if t["id"] == tid:
             return t
-    raise KeyError("Kayıt bulunamadı")
+    raise KeyError(tx("Kayıt bulunamadı"))
 
 
 def find_char(p, cid):
@@ -196,7 +201,7 @@ def add_character(p, name=None):
     while cid in existing:
         n += 1
         cid = f"c{n}"
-    c = {"id": cid, "name": name or f"Kişi {len(p['characters']) + 1}", "color": next_color(p),
+    c = {"id": cid, "name": name or tx("Kişi {n}", n=len(p["characters"]) + 1), "color": next_color(p),
          "actor": "", "gain": 0.0, "effect": "none", "voice": ""}
     p["characters"].append(c)
     return c

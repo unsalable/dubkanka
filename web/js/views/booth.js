@@ -3,9 +3,10 @@
 import { html, useEffect, useRef, useState } from '../../vendor/preact-htm.js';
 import { api, fileUrl, P, upload } from '../api.js';
 import { Btn, Field, Icon, Lamp, LevelMeter, Modal, PlayButton, Range, Segmented, Select, Toggle, VideoPane, VolumeControl } from '../components.js';
-import { buildMix, engine, loadMixBuffers, player, stemUrls, takeUrl } from '../engine.js';
+import { bedItems, buildMix, engine, loadMixBuffers, player, stemUrls, takeUrl } from '../engine.js';
 import { listMics, micPrefs, NOISE_ENGINES, onMicPrefs, recorder, setMicPref } from '../recorder.js';
 import { FeatureOffer } from '../feature-ui.js';
+import { t } from '../i18n.js';
 import { ask, featureReady, toast, toastError, useStore } from '../state.js';
 import { clamp, cls, db2gain, drawWave, encodeWav, LS, revealInList, selectedTake, sleep, syllables, timeAgo } from '../util.js';
 
@@ -18,7 +19,7 @@ const RING = 2 * Math.PI * 60;
 /** Dub text as words that light up in turn: each word gets a share of the line in proportion to its syllables. */
 function CueText({ line }) {
   const words = (line.text || '').split(/\s+/).filter(Boolean);
-  if (!words.length) return html`<em class="dim">Dublaj metni boş.</em>`;
+  if (!words.length) return html`<em class="dim">${t('Dublaj metni boş.')}</em>`;
   const weights = words.map((w) => Math.max(1, syllables(w)));
   const total = weights.reduce((a, b) => a + b, 0);
   const dur = line.end - line.start;
@@ -58,32 +59,32 @@ function RhythmLane({ line, buffer, t0, t1, color }) {
       ? words.map((w, i) => html`<span key=${i} class="rw" data-s=${w[0]} data-e=${w[1]}
           style=${{ left: pct(w[0]), width: `max(${((w[1] - w[0]) / (t1 - t0)) * 100}%, 4px)` }}><b>${w[2].trim()}</b></span>`)
       : html`<span class="rw solo" data-s=${line.start} data-e=${line.end} style=${{ left: pct(line.start), width: ((line.end - line.start) / (t1 - t0)) * 100 + '%' }}><b>${line.orig}</b></span>`}
-    <i class="rh-in" style=${{ left: pct(line.start) }}><span>GİRİŞ</span></i>
+    <i class="rh-in" style=${{ left: pct(line.start) }}><span>${t('GİRİŞ')}</span></i>
     <i class="rh-out" style=${{ left: pct(line.end) }}></i>
     <i class="rh-head"></i>
   </div>`;
 }
 
 function TakeList({ p, line, me, guest, onPlay }) {
-  if (!line.takes || !line.takes.length) return html`<div class="takes-empty dim">Henüz kayıt yok.</div>`;
+  if (!line.takes || !line.takes.length) return html`<div class="takes-empty dim">${t('Henüz kayıt yok.')}</div>`;
   const sel = (tid) => api.post(P(p.id, `/lines/${line.id}/select`), { take: tid }).catch(toastError);
-  const del = async (t, n) => {
-    if (await ask({ title: `${n}. kayıt silinsin mi?`, text: `${t.by} · ${timeAgo(t.created)}`, ok: 'Sil', danger: true }))
-      api.del(P(p.id, `/lines/${line.id}/takes/${t.id}`)).catch(toastError);
+  const del = async (tk, n) => {
+    if (await ask({ title: t('{n}. kayıt silinsin mi?', { n }), text: `${tk.by} · ${timeAgo(tk.created)}`, ok: t('Sil'), danger: true }))
+      api.del(P(p.id, `/lines/${line.id}/takes/${tk.id}`)).catch(toastError);
   };
-  return html`<div class="takes">${[...line.takes].reverse().map((t, i) => {
+  return html`<div class="takes">${[...line.takes].reverse().map((tk, i) => {
     const n = line.takes.length - i;
-    const mine = !guest || t.by === me;
-    const [tone, label] = STATUS[t.status] || (t.silent ? ['warn', 'ses yok'] : ['', '']);
+    const mine = !guest || tk.by === me;
+    const [tone, label] = STATUS[tk.status] || (tk.silent ? ['warn', 'ses yok'] : ['', '']);
     // only a take that just arrived drops into the list; the ones already there do not move when the page opens
-    const fresh = Date.now() / 1000 - t.created < 12;
-    return html`<div key=${t.id} class=${cls('take', line.take === t.id && 'sel', t.status, fresh && 'fresh')}>
-      <button class="iconbtn" disabled=${t.status !== 'ready'} title="Dinle" onClick=${() => onPlay(t)}><${Icon} name="play" size=${14} /></button>
+    const fresh = Date.now() / 1000 - tk.created < 12;
+    return html`<div key=${tk.id} class=${cls('take', line.take === tk.id && 'sel', tk.status, fresh && 'fresh')}>
+      <button class="iconbtn" disabled=${tk.status !== 'ready'} title=${t('Dinle')} onClick=${() => onPlay(tk)}><${Icon} name="play" size=${14} /></button>
       <span class="take-n tc">${String(n).padStart(2, '0')}</span>
-      <div class="take-info"><strong>${t.by}</strong><span class="dim small">${timeAgo(t.created)}${t.source === 'tts' ? ' · yapay zeka' : t.source === 'upload' ? ' · dosya' : ''}${t.denoise ? ' · temizlendi' : ''}</span></div>
-      ${label && html`<${Lamp} tone=${tone}>${label}</${Lamp}>`}
-      ${line.take === t.id ? html`<${Lamp} tone="ok">seçili</${Lamp}>` : html`<${Btn} small kind="ghost" onClick=${() => sel(t.id)} disabled=${t.status !== 'ready'}>Kullan</${Btn}>`}
-      ${mine && html`<button class="iconbtn" title="Sil" onClick=${() => del(t, n)}><${Icon} name="trash" size=${15} /></button>`}
+      <div class="take-info"><strong>${tk.by}</strong><span class="dim small">${timeAgo(tk.created)}${tk.source === 'tts' ? ' · ' + t('yapay zeka') : tk.source === 'upload' ? ' · ' + t('dosya') : ''}${tk.denoise ? ' · ' + t('temizlendi') : ''}</span></div>
+      ${label && html`<${Lamp} tone=${tone}>${t(label)}</${Lamp}>`}
+      ${line.take === tk.id ? html`<${Lamp} tone="ok">${t('seçili')}</${Lamp}>` : html`<${Btn} small kind="ghost" onClick=${() => sel(tk.id)} disabled=${tk.status !== 'ready'}>${t('Kullan')}</${Btn}>`}
+      ${mine && html`<button class="iconbtn" title=${t('Sil')} onClick=${() => del(tk, n)}><${Icon} name="trash" size=${15} /></button>`}
     </div>`;
   })}</div>`;
 }
@@ -96,17 +97,17 @@ function Roles({ p, filter, setFilter, room, guest }) {
     if (room.host && room.host.online && room.host.char) (live[room.host.char] = live[room.host.char] || []).push(room.host.name);
   }
   return html`<div class="roles">
-    <button class=${cls('role', !filter.length && 'on')} onClick=${() => setFilter([])}><span class="role-name">Hepsi</span>
-      <span class="dim small">${p.lines.length} satır</span></button>
+    <button class=${cls('role', !filter.length && 'on')} onClick=${() => setFilter([])}><span class="role-name">${t('Hepsi')}</span>
+      <span class="dim small">${t('{n} satır', { n: p.lines.length })}</span></button>
     ${p.characters.map((ch) => {
       const n = p.lines.filter((l) => l.char === ch.id).length;
       const done = p.lines.filter((l) => l.char === ch.id && l.take).length;
       const names = [...new Set([...(live[ch.id] || []), ...(ch.actor || '').split(',').map((x) => x.trim()).filter(Boolean)])];
       return html`<button key=${ch.id} class=${cls('role', filter.includes(ch.id) && 'on')} style=${{ '--c': ch.color }}
         onClick=${() => setFilter(filter.length === 1 && filter[0] === ch.id ? [] : [ch.id])}
-        title=${guest ? 'Bu rolü al' : 'Bu rolü seslendiriyorum'}>
+        title=${guest ? t('Bu rolü al') : t('Bu rolü seslendiriyorum')}>
         <span class="role-name"><span class="hl" style=${{ '--c': ch.color }}>${ch.name}</span></span>
-        <span class="role-who">${live[ch.id] ? html`<span class="lamp ok"></span>` : ''}${names.join(', ') || html`<span class="dim">boş</span>`}</span>
+        <span class="role-who">${live[ch.id] ? html`<span class="lamp ok"></span>` : ''}${names.join(', ') || html`<span class="dim">${t('boş')}</span>`}</span>
         <span class="tc dim small">${done}/${n}</span></button>`;
     })}
   </div>`;
@@ -124,7 +125,7 @@ function useMics() {
       navigator.mediaDevices && navigator.mediaDevices.removeEventListener('devicechange', refresh);
     };
   }, []);
-  return mics.some((m) => m.id === '') ? mics.map((m) => [m.id, m.label]) : [['', 'Varsayılan mikrofon'], ...mics.map((m) => [m.id, m.label])];
+  return mics.some((m) => m.id === '') ? mics.map((m) => [m.id, m.label]) : [['', t('Varsayılan mikrofon')], ...mics.map((m) => [m.id, m.label])];
 }
 
 /** The microphone, right where you record: switching reopens it at once. */
@@ -136,20 +137,23 @@ function MicSelect() {
     setMicPref('device', v);
     if (recorder.ready) await recorder.open(true).catch(toastError);
   };
-  return html`<${Select} class="mon-mic" value=${dev} onChange=${pick} options=${options} />`;
+  return html`<${Select} class="mon-mic" value=${dev} onChange=${pick} options=${options} label=${t('Mikrofon')} />`;
 }
 
-/** What you hear in the booth: the listening volume, the background and the original dialogue while recording. */
-function Listening({ settings, setLevel }) {
+/** What you hear in the booth: the listening volume, the background and the original dialogue while recording. The
+ *  microphone row ends in the way to its settings, where people look for them. */
+function Listening({ settings, setLevel, onMicSettings, micOpen }) {
   return html`<div class="booth-mon">
-    <div class="mon mon-mic-row" title="Mikrofon">
+    <div class="mon mon-mic-row">
       <${Icon} name="mic" size=${15} /><${MicSelect} /><${LevelMeter} />
+      <button class=${cls('btn btn-sm btn-ghost mon-set', micOpen && 'active')} onClick=${onMicSettings} aria-pressed=${!!micOpen}>
+        <${Icon} name="gear" size=${14} /><span>${t('Mikrofon ayarları')}</span></button>
     </div>
     <div class="mon mon-levels">
       <${VolumeControl} />
-      <label class="mon-lvl" title="Fon müziği, efektler ve ortam sesleri: dinlerken ve kayıtta"><span>Fon</span>
+      <label class="mon-lvl" title=${t('Fon müziği, efektler ve ortam sesleri: dinlerken ve kayıtta')}><span>${t('Fon')}</span>
         <${Range} min=${0} max=${1} step=${0.05} value=${settings.bed} onInput=${(v) => setLevel('bed', v)} /></label>
-      <label class="mon-lvl" title="Kayıt sırasında kulağına gelen orijinal konuşma (rehber ses)"><span>Orijinal</span>
+      <label class="mon-lvl" title=${t('Kayıt sırasında kulağına gelen orijinal konuşma (rehber ses)')}><span>${t('Orijinal')}</span>
         <${Range} min=${0} max=${1} step=${0.05} value=${settings.guide} onInput=${(v) => setLevel('guide', v)} /></label>
     </div>
   </div>`;
@@ -184,49 +188,50 @@ function BoothSettings({ settings, set, guest, name, setName, onTestRec, testing
   const headset = info ? info.headset : (mics.find((m) => m.id === pr.deviceId) || {}).headset;
   const cleanOk = canClean(guest);
   return html`<div class="boothsettings">
-    <div class="seclabel">Mikrofon</div>
-    ${!guest && html`<${Field} label="Kaydı yapan"><input class="input" value=${name} onInput=${(e) => setName(e.target.value)} /></${Field}>`}
+    <div class="seclabel">${t('Mikrofon')}</div>
+    ${!guest && html`<${Field} label=${t('Kaydı yapan')}><input class="input" value=${name} onInput=${(e) => setName(e.target.value)} /></${Field}>`}
     <div class="row nowrap mic-pick">
-      <${Select} class="grow" value=${pr.deviceId} onChange=${(v) => change('device', v)} options=${options} />
-      <button class="iconbtn" title="Listeyi yenile" onClick=${() => navigator.mediaDevices && navigator.mediaDevices.dispatchEvent(new Event('devicechange'))}><${Icon} name="refresh" size=${15} /></button>
+      <${Select} class="grow" value=${pr.deviceId} onChange=${(v) => change('device', v)} options=${options} label=${t('Mikrofon')} />
+      <button class="iconbtn" title=${t('Listeyi yenile')} onClick=${() => navigator.mediaDevices && navigator.mediaDevices.dispatchEvent(new Event('devicechange'))}><${Icon} name="refresh" size=${15} /></button>
     </div>
     <div class="mic-test">
-      <${Btn} small kind=${open ? 'primary' : ''} icon=${open ? 'stop' : 'mic'} onClick=${toggleTest}>${open ? 'Testi durdur' : 'Mikrofonu test et'}</${Btn}>
+      <${Btn} small kind=${open ? 'primary' : ''} icon=${open ? 'stop' : 'mic'} onClick=${toggleTest}>${open ? t('Testi durdur') : t('Mikrofonu test et')}</${Btn}>
       <${LevelMeter} />
     </div>
-    ${headset && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />Bluetooth kulaklık mikrofonu sesi boğuk kaydeder. Kablolu ya da USB mikrofon seç.</div>`}
+    ${headset && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />${t('Bluetooth kulaklık mikrofonu sesi boğuk kaydeder. Kablolu ya da USB mikrofon seç.')}</div>`}
     <${Toggle} checked=${pr.monitor} onChange=${(v) => { setMicPref('monitor', v); setPr(micPrefs()); recorder.setMonitor(v); if (v && !recorder.ready) recorder.open().catch(toastError); }}
-      label=${html`<span class="toggle-text">Kendimi duy<small>Sadece kulaklıkla.</small></span>`} />
-    ${pr.monitor && html`<${Field} label=${`Dinleme seviyesi: %${Math.round(pr.monitorGain * 100)}`}>
+      label=${html`<span class="toggle-text">${t('Kendimi duy')}<small>${t('Sadece kulaklıkla.')}</small></span>`} />
+    ${pr.monitor && html`<${Field} label=${t('Dinleme seviyesi: %{n}', { n: Math.round(pr.monitorGain * 100) })}>
       <${Range} min=${0} max=${1.5} step=${0.05} value=${pr.monitorGain} onInput=${(v) => { setMicPref('monitorGain', v); setPr(micPrefs()); recorder.setMonitor(true, v); }} />
     </${Field}>`}
-    <${Btn} small icon=${testing ? 'stop' : 'rec'} kind=${testing ? 'rec' : ''} onClick=${onTestRec} disabled=${testing}>${testing ? 'Kaydediliyor… 5 sn' : '5 sn deneme kaydı al ve dinle'}</${Btn}>
+    <${Btn} small icon=${testing ? 'stop' : 'rec'} kind=${testing ? 'rec' : ''} onClick=${onTestRec} disabled=${testing}>${testing ? t('Kaydediliyor… 5 sn') : t('5 sn deneme kaydı al ve dinle')}</${Btn}>
 
-    <div class="seclabel">Gürültü engelleme</div>
-    <div class="noise-pick"><${Segmented} value=${pr.noise} onChange=${(v) => change('ns', v)} options=${NOISE_ENGINES} /></div>
-    <p class="noise-note">${NOISE_NOTE[pr.noise]}</p>
-    ${pr.noise === 'dpdfnet' && !cleanOk && html`<${FeatureOffer} id="cleanup" text="DPDFNet için bunu indirmen gerekiyor. O zamana kadar Standart kullanılır." />`}
+    <div class="seclabel">${t('Gürültü engelleme')}</div>
+    <div class="noise-pick"><${Segmented} value=${pr.noise} onChange=${(v) => change('ns', v)} options=${NOISE_ENGINES.map(([k, l]) => [k, t(l)])} /></div>
+    <p class="noise-note">${t(NOISE_NOTE[pr.noise])}</p>
+    ${pr.noise === 'dpdfnet' && !cleanOk && html`<${FeatureOffer} id="cleanup" text=${t('DPDFNet için bunu indirmen gerekiyor. O zamana kadar Standart kullanılır.')} />`}
     ${pr.noise === 'rnnoise' && open && info && info.noise !== 'rnnoise' && html`<div class="alert warn small"><${Icon} name="alert" size=${16} />
-      RNNoise açılamadı; ${info.noise === 'standard' ? 'Standart kullanılıyor.' : 'ses işlenmeden kaydediliyor.'}</div>`}
-    <${Toggle} checked=${pr.echoCancellation} onChange=${(v) => change('ec', v)} label="Yankı engelleme" />
-    <${Toggle} checked=${pr.autoGainControl} onChange=${(v) => change('agc', v)} label="Otomatik kazanç" />
-    <${Toggle} checked=${pr.hpf} onChange=${(v) => change('hpf', v, false)} label="Alçak kesme 80 Hz" />
+      ${info.noise === 'standard' ? t('RNNoise açılamadı; Standart kullanılıyor.') : t('RNNoise açılamadı; ses işlenmeden kaydediliyor.')}</div>`}
+    <${Toggle} checked=${pr.echoCancellation} onChange=${(v) => change('ec', v)} label=${t('Yankı engelleme')} />
+    <${Toggle} checked=${pr.autoGainControl} onChange=${(v) => change('agc', v)} label=${t('Otomatik kazanç')} />
+    <${Toggle} checked=${pr.hpf} onChange=${(v) => change('hpf', v, false)} label=${t('Alçak kesme 80 Hz')} />
 
-    <div class="seclabel">Kayıt</div>
-    <${Field} label="Geri sayım">
-      <${Select} value=${String(settings.preroll)} onChange=${(v) => set('preroll', Number(v))} options=${[['1', '1 sn'], ['2', '2 sn'], ['3', '3 sn'], ['4', '4 sn']]} />
+    <div class="seclabel">${t('rec|Kayıt')}</div>
+    <${Field} label=${t('Geri sayım')}>
+      <${Select} value=${String(settings.preroll)} onChange=${(v) => set('preroll', Number(v))} options=${[1, 2, 3, 4].map((n) => [String(n), t('{n} sn', { n })])} />
     </${Field}>
-    <${Toggle} checked=${settings.streamer} onChange=${(v) => set('streamer', v)} label="Akış çizgisi" />
-    <${Toggle} checked=${settings.beeps} onChange=${(v) => set('beeps', v)} label="3 bip" />
-    <${Toggle} checked=${settings.autoStop} onChange=${(v) => set('autoStop', v)} label="Satır bitince kaydı durdur" />
-    <${Toggle} checked=${settings.autoReview} onChange=${(v) => set('autoReview', v)} label="Kayıttan sonra dinlet" />
-    <${Toggle} checked=${settings.align === 'auto'} onChange=${(v) => set('align', v ? 'auto' : 'recorded')} label="Konuşmayı orijinal girişe hizala" />
-    <${Field} label=${html`Gecikme düzeltme <span class="tc">${pr.latencyMs} ms</span>`} hint="Kayıtlar hep geç oturuyorsa artır.">
+    <${Toggle} checked=${settings.streamer} onChange=${(v) => set('streamer', v)} label=${t('Akış çizgisi')} />
+    <${Toggle} checked=${settings.beeps} onChange=${(v) => set('beeps', v)} label=${t('3 bip')} />
+    <${Toggle} checked=${settings.autoStop} onChange=${(v) => set('autoStop', v)} label=${t('Satır bitince kaydı durdur')} />
+    <${Toggle} checked=${settings.autoReview} onChange=${(v) => set('autoReview', v)} label=${t('Kayıttan sonra dinlet')} />
+    <${Toggle} checked=${settings.align === 'auto'} onChange=${(v) => set('align', v ? 'auto' : 'recorded')} label=${t('Konuşmayı orijinal girişe hizala')} />
+    <${Field} label=${html`${t('Gecikme düzeltme')} <span class="tc">${pr.latencyMs} ms</span>`} hint=${t('Kayıtlar hep geç oturuyorsa artır.')}>
       <${Range} min=${-200} max=${400} step=${10} value=${pr.latencyMs} onInput=${(v) => change('latency', v, false)} />
     </${Field}>
   </div>`;
 }
 
+// the notes are translated where they are shown (t())
 const NOISE_NOTE = {
   standard: 'Tarayıcının kendi gürültü bastırması.',
   rnnoise: 'Canlı yapay zeka: fan ve uğultu kayıt sırasında silinir.',
@@ -264,7 +269,7 @@ function BulkDialog({ p, files, name, onClose }) {
       const l = p.lines[x.line - 1];
       setPlan((pl) => pl.map((y, j) => (j === i ? { ...y, state: 'up' } : y)));
       try {
-        await upload(P(p.id, `/lines/${l.id}/takes?source=upload&by=${encodeURIComponent(name || 'Ben')}&filename=${encodeURIComponent(x.file.name)}`), x.file);
+        await upload(P(p.id, `/lines/${l.id}/takes?source=upload&by=${encodeURIComponent(name || t('Ben'))}&filename=${encodeURIComponent(x.file.name)}`), x.file);
         ok++;
         setPlan((pl) => pl.map((y, j) => (j === i ? { ...y, state: 'ok' } : y)));
       } catch (e) {
@@ -272,20 +277,20 @@ function BulkDialog({ p, files, name, onClose }) {
       }
     }
     setBusy(false);
-    if (ok) toast(`${ok} kayıt eklendi`, 'ok');
+    if (ok) toast(t('{n} kayıt eklendi', { n: ok }), 'ok');
   };
-  const opts = [['', 'Atla'], ...p.lines.map((l, i) => [String(i + 1), `${i + 1}. ${(p.characters.find((c) => c.id === l.char) || {}).name || ''} · ${(l.text || l.orig || '').slice(0, 40)}`])];
+  const opts = [['', t('Atla')], ...p.lines.map((l, i) => [String(i + 1), `${i + 1}. ${(p.characters.find((c) => c.id === l.char) || {}).name || ''} · ${(l.text || l.orig || '').slice(0, 40)}`])];
   const assigned = plan.filter((x) => x.line).length;
-  return html`<${Modal} title="Toplu ses yükle" onClose=${busy ? null : onClose} wide>
-    <p class="muted small">Dosya adındaki sayı satır numarası sayılır (ör. <span class="mono">3.m4a</span>). WhatsApp sesli mesajlarında numara olmadığı için satırı elle seç ya da boş satırlara sırayla dağıt.</p>
+  return html`<${Modal} title=${t('Toplu ses yükle')} onClose=${busy ? null : onClose} wide>
+    <p class="muted small">${t('Dosya adındaki sayı satır numarası sayılır (ör. 3.m4a). WhatsApp sesli mesajlarında numara olmadığı için satırı elle seç ya da boş satırlara sırayla dağıt.')}</p>
     <div class="bulk">${plan.map((x, i) => html`<div class="bulk-row" key=${i}>
       <span class="mono small ellipsis" title=${x.file.name}>${x.file.name}</span>
       <${Select} value=${x.line ? String(x.line) : ''} onChange=${(v) => setLine(i, v)} options=${opts} disabled=${busy} />
-      <span class="bulk-state">${x.state === 'up' ? html`<${Lamp} tone="busy">yükleniyor</${Lamp}>` : x.state === 'ok' ? html`<${Lamp} tone="ok">eklendi</${Lamp}>` : x.state === 'err' ? html`<${Lamp} tone="bad" title=${x.error}>hata</${Lamp}>` : ''}</span>
+      <span class="bulk-state">${x.state === 'up' ? html`<${Lamp} tone="busy">${t('yükleniyor')}</${Lamp}>` : x.state === 'ok' ? html`<${Lamp} tone="ok">${t('eklendi')}</${Lamp}>` : x.state === 'err' ? html`<${Lamp} tone="bad" title=${x.error}>${t('hata')}</${Lamp}>` : ''}</span>
     </div>`)}</div>
-    <div class="modal-actions"><${Btn} kind="ghost" onClick=${fillEmpty} disabled=${busy}>Boş satırlara sırayla dağıt</${Btn}><span class="grow"></span>
-      <${Btn} onClick=${onClose} disabled=${busy}>Kapat</${Btn}>
-      <${Btn} kind="primary" icon="upload" onClick=${go_} disabled=${busy || !assigned}>${assigned} dosyayı yükle</${Btn}></div>
+    <div class="modal-actions"><${Btn} kind="ghost" onClick=${fillEmpty} disabled=${busy}>${t('Boş satırlara sırayla dağıt')}</${Btn}><span class="grow"></span>
+      <${Btn} onClick=${onClose} disabled=${busy}>${t('Kapat')}</${Btn}>
+      <${Btn} kind="primary" icon="upload" onClick=${go_} disabled=${busy || !assigned}>${t('{n} dosyayı yükle', { n: assigned })}</${Btn}></div>
   </${Modal}>`;
 }
 
@@ -304,7 +309,7 @@ export function BoothView({ p, guest = false }) {
     setSettings(n);
     LS.set('booth.settings', n);
   };
-  const [name, setNameState] = useState(() => (guest ? s.guestName : LS.get('booth.name', 'Ben')));
+  const [name, setNameState] = useState(() => (guest ? s.guestName : LS.get('booth.name', t('Ben'))));
   const setName = (v) => {
     setNameState(v);
     LS.set('booth.name', v);
@@ -319,6 +324,10 @@ export function BoothView({ p, guest = false }) {
   const [phase, setPhase] = useState('idle');
   const [bufs, setBufs] = useState(null);
   const [side, setSide] = useState(() => LS.get('booth.side', 'lines'));
+  const showSide = (v) => {
+    setSide(v);
+    LS.set('booth.side', v);
+  };
   const [bulkFiles, setBulkFiles] = useState(null);
   const [testing, setTesting] = useState(false);
   const recInfo = useRef(null);
@@ -363,7 +372,7 @@ export function BoothView({ p, guest = false }) {
     setFilter(f);
     LS.set(fkey, f);
     const want = f.length === 1 ? f[0] : null;
-    const body = guest ? {} : { name: name || 'Ben' };
+    const body = guest ? {} : { name: name || t('Ben') };
     if (claimed.current && claimed.current !== want) api.post(P(p.id, `/characters/${claimed.current}/unclaim`), body).catch(() => {});
     if (want && want !== claimed.current) api.post(P(p.id, `/characters/${want}/claim`), body).catch(() => {});
     claimed.current = want;
@@ -376,14 +385,15 @@ export function BoothView({ p, guest = false }) {
     if (!roomOpen) return;
     const beat = () => (guest
       ? api.post('/api/guest/heartbeat', { view: 'record', line: globalIdx + 1, char: myChar })
-      : api.post('/api/room/presence', { projectId: p.id, name: name || 'Ben', char: myChar, line: globalIdx + 1, view: 'record' })).catch(() => {});
+      : api.post('/api/room/presence', { projectId: p.id, name: name || t('Ben'), char: myChar, line: globalIdx + 1, view: 'record' })).catch(() => {});
     beat();
     const t = setInterval(beat, 10000);
     return () => clearInterval(t);
   }, [roomOpen, line && line.id, myChar, name]);
 
-  // what plays under a line: background + ambience (birds, wind...); guests' lite background already holds both
-  const bed = (bus) => [{ buffer: bufs.bg, at: 0, bus }, { buffer: bufs.amb, at: 0, bus }];
+  // what plays under a line: background + ambience (birds, wind...), their muted stretches silent; guests' lite
+  // background already holds both
+  const bed = (bus) => bedItems(p, bufs, bus, bus);
 
   const stopAll = () => {
     if (recInfo.current) return finish(true);
@@ -413,17 +423,17 @@ export function BoothView({ p, guest = false }) {
       onEnd: () => setPhase('idle') });
   };
 
-  const review = async (l = line, t = selectedTake(l)) => {
-    if (!bufs || !l || !t || t.status !== 'ready' || recInfo.current) return;
-    const buf = await engine.load(takeUrl(p, t)).catch(toastError);
+  const review = async (l = line, tk = selectedTake(l)) => {
+    if (!bufs || !l || !tk || tk.status !== 'ready' || recInfo.current) return;
+    const buf = await engine.load(takeUrl(p, tk)).catch(toastError);
     if (!buf) return;
-    const at = t.start + (t.nudge || 0);
-    const a = at + (t.trimIn || 0);
-    const b = at + t.duration - (t.trimOut || 0);
+    const at = tk.start + (tk.nudge || 0);
+    const a = at + (tk.trimIn || 0);
+    const b = at + tk.duration - (tk.trimOut || 0);
     setPhase('review');
     player.play({
       from: Math.max(0, Math.min(l.start, a) - 0.6), to: Math.min(dur, Math.max(l.end, b) + 0.5),
-      items: [...bed('bg'), { buffer: buf, at, region: [a, b], gain: db2gain(t.gain || 0) }], buses: { bg: settings.bed },
+      items: [...bed('bg'), { buffer: buf, at, region: [a, b], gain: db2gain(tk.gain || 0) }], buses: { bg: settings.bed },
       onEnd: () => setPhase('idle'),
     });
   };
@@ -488,7 +498,7 @@ export function BoothView({ p, guest = false }) {
     const pr = micPrefs();
     setPhase('upload');
     try {
-      const q = `?recStart=${recStart.toFixed(4)}&source=booth&align=${settings.align}&by=${encodeURIComponent(name || 'Ben')}` +
+      const q = `?recStart=${recStart.toFixed(4)}&source=booth&align=${settings.align}&by=${encodeURIComponent(name || t('Ben'))}` +
         `&hpf=${pr.hpf ? 1 : 0}&denoise=${recorder.noiseEngine(pr) === 'dpdfnet' ? 1 : 0}`;
       const r = await upload(P(p.id, `/lines/${info.lineId}/takes${q}`), encodeWav(rec.samples, rec.sampleRate));
       pending.current = { takeId: r.takeId, lineId: info.lineId };
@@ -522,23 +532,23 @@ export function BoothView({ p, guest = false }) {
     src.buffer = b;
     src.connect(engine.master);
     src.start();
-    toast('Deneme kaydı çalıyor', 'info', 5000);
+    toast(t('Deneme kaydı çalıyor'), 'info', 5000);
   };
 
   useEffect(() => {
     const pd = pending.current;
     if (!pd) return;
     const l = p.lines.find((x) => x.id === pd.lineId);
-    const t = l && (l.takes || []).find((x) => x.id === pd.takeId);
-    if (!t) return;
-    if (t.status === 'ready') {
+    const tk = l && (l.takes || []).find((x) => x.id === pd.takeId);
+    if (!tk) return;
+    if (tk.status === 'ready') {
       pending.current = null;
-      if (t.silent) toast('Kayıtta ses duyulmadı. Mikrofonun açık mı?', 'error');
-      if (settings.autoReview && l.id === (line && line.id)) review(l, t);
+      if (tk.silent) toast(t('Kayıtta ses duyulmadı. Mikrofonun açık mı?'), 'error');
+      if (settings.autoReview && l.id === (line && line.id)) review(l, tk);
       else setPhase('idle');
-    } else if (t.status === 'error') {
+    } else if (tk.status === 'error') {
       pending.current = null;
-      toast('Kayıt işlenemedi: ' + (t.error || ''), 'error');
+      toast(t('Kayıt işlenemedi: {e}', { e: tk.error || '' }), 'error');
       setPhase('idle');
     }
   }, [p]);
@@ -608,13 +618,13 @@ export function BoothView({ p, guest = false }) {
         let txt = '';
         if (rec && left > 0) {
           const n = Math.ceil(left / 0.5 - 1e-6);
-          txt = n <= 3 ? String(n) : 'Hazır';
+          txt = n <= 3 ? String(n) : t('Hazır');
           ring.style.strokeDashoffset = RING * (1 - clamp(left / Math.max(0.5, settings.preroll), 0, 1));
         }
         cd.classList.toggle('show', !!txt);
         if (txt !== shown) {
           shown = txt;
-          num.classList.toggle('word', txt === 'Hazır');
+          num.classList.toggle('word', !!txt && !/^\d$/.test(txt));
           num.querySelector('.cd-txt').textContent = txt;
           if (txt && document.documentElement.dataset.motion !== 'off')
             num.animate([{ transform: 'scale(1.3)', opacity: 0.2 }, { transform: 'scale(1)', opacity: 1 }], { duration: 240, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
@@ -645,14 +655,14 @@ export function BoothView({ p, guest = false }) {
   const uploadFile = async (file, l = line) => {
     if (!file || !l) return;
     try {
-      await upload(P(p.id, `/lines/${l.id}/takes?source=upload&by=${encodeURIComponent(name || 'Ben')}&filename=${encodeURIComponent(file.name)}`), file);
-      toast(`${file.name}, ${p.lines.indexOf(l) + 1}. satıra eklendi`, 'ok');
+      await upload(P(p.id, `/lines/${l.id}/takes?source=upload&by=${encodeURIComponent(name || t('Ben'))}&filename=${encodeURIComponent(file.name)}`), file);
+      toast(t('{file}, {n}. satıra eklendi', { file: file.name, n: p.lines.indexOf(l) + 1 }), 'ok');
     } catch (e) {
       toastError(e);
     }
   };
 
-  if (!p.lines.length) return html`<div class="page narrow"><div class="empty"><${Icon} name="text" size=${32} /><h3>Kaydedilecek satır yok</h3><p class="muted">Önce Senaryo ekranında satır ekle.</p></div></div>`;
+  if (!p.lines.length) return html`<div class="page narrow"><div class="empty"><${Icon} name="text" size=${32} /><h3>${t('Kaydedilecek satır yok')}</h3><p class="muted">${t('Önce Senaryo ekranında satır ekle.')}</p></div></div>`;
 
   const take = line ? selectedTake(line) : null;
   const recording = phase === 'rec';
@@ -663,11 +673,11 @@ export function BoothView({ p, guest = false }) {
     <div class="booth-main" ref=${stage}>
       <section class="pane booth-stage">
         <${VideoPane} src=${fileUrl(p.id, p.clip.preview, p.clip.ver)} poster=${fileUrl(p.id, p.clip.thumb, p.clip.ver)} class="booth-video"
-          onClick=${clickVideo} title=${playing ? 'Durdur' : 'Bu satırdan oynat'}>
+          onClick=${clickVideo} title=${playing ? t('Durdur') : t('Bu satırdan oynat')}>
           <i class="streamer"></i>
           <div class="countdown"><div class="cd-num"><svg class="cd-ring" viewBox="0 0 132 132"><circle cx="66" cy="66" r="60"
             style=${{ strokeDasharray: RING, strokeDashoffset: 0 }} /></svg><span class="cd-txt"></span></div></div>
-          <div class="cue-go" hidden>Konuş</div>
+          <div class="cue-go" hidden>${t('Konuş')}</div>
           <span class=${cls('tally booth-tally', recording && 'on')}>Rec</span>
         </${VideoPane}>
         ${line && html`<div class="cue" style=${{ '--c': c ? c.color : '#8c897f' }}>
@@ -675,7 +685,7 @@ export function BoothView({ p, guest = false }) {
             <span class="hl" key=${line.id} style=${{ '--c': c ? c.color : '#8c897f' }}>${c ? c.name : ''}</span>
             <span class="tc dim">${globalIdx + 1}/${p.lines.length}</span>
             <span class="grow"></span>
-            <span class="tc-lcd" title="Satırın süresi">${(line.end - line.start).toFixed(1)} sn</span>
+            <span class="tc-lcd" title=${t('Satırın süresi')}>${t('{n} sn', { n: (line.end - line.start).toFixed(1) })}</span>
           </div>
           <div class="cue-text" key=${line.id}><${CueText} line=${line} /></div>
           <div class="cue-orig dim small">${line.orig}</div>
@@ -683,54 +693,56 @@ export function BoothView({ p, guest = false }) {
         ${line && lane && html`<${RhythmLane} line=${line} buffer=${bufs && bufs.voices} t0=${lane.t0} t1=${lane.t1} color=${c ? c.color : null} />`}
         <div class="booth-controls">
           <div class="bc-side">
-            <${Btn} kind="ghost" icon="prev" onClick=${prev} disabled=${idx <= 0 || recording} title="Önceki satır (↑)" />
+            <${Btn} kind="ghost" icon="prev" onClick=${prev} disabled=${idx <= 0 || recording} title=${t('Önceki satır (↑)')} />
             <${PlayButton} playing=${phase === 'scene'} onClick=${() => playScene(fromLine())} disabled=${!bufs || recording || busy}
-              title=${phase === 'scene' ? 'Durdur (K)' : 'Sahneyi bu satırdan dublajla oynat (K)'} />
+              title=${phase === 'scene' ? t('Durdur (K)') : t('Sahneyi bu satırdan dublajla oynat (K)')} />
             <${Btn} icon=${phase === 'orig' ? 'stop' : 'headphones'} active=${phase === 'orig'} onClick=${listen} disabled=${!bufs || recording}
-              title=${phase === 'orig' ? 'Durdur (P)' : 'Orijinali dinle (P)'}>${phase === 'orig' ? 'Durdur' : 'Orijinal'}</${Btn}>
+              title=${phase === 'orig' ? t('Durdur (P)') : t('Orijinali dinle (P)')}>${phase === 'orig' ? t('Durdur') : t('Orijinal')}</${Btn}>
           </div>
           <div class="recwrap">
             <button class=${cls('recbtn', recording && 'on', busy && 'busy')} onClick=${record} disabled=${!bufs || busy || testing}
-              title="Kaydet / durdur (Boşluk)" aria-label=${recording ? 'Kaydı durdur' : 'Kaydet'}><span class="recbtn-core"></span></button>
-            <span class="reclabel">${recording ? 'Durdur' : phase === 'upload' ? 'Gönderiliyor' : phase === 'process' ? 'İşleniyor' : take ? 'Tekrar kaydet' : 'Kaydet'}</span>
+              title=${t('Kaydet / durdur (Boşluk)')} aria-label=${recording ? t('Kaydı durdur') : t('rec|Kaydet')}><span class="recbtn-core"></span></button>
+            <span class="reclabel">${recording ? t('Durdur') : phase === 'upload' ? t('Gönderiliyor') : phase === 'process' ? t('İşleniyor') : take ? t('Tekrar kaydet') : t('rec|Kaydet')}</span>
           </div>
           <div class="bc-side right">
             <${Btn} icon=${phase === 'review' ? 'stop' : 'play'} active=${phase === 'review'} onClick=${toggleReview}
-              disabled=${!take || take.status !== 'ready' || recording} title=${phase === 'review' ? 'Durdur (L)' : 'Kaydımı dinle (L)'}>${phase === 'review' ? 'Durdur' : 'Kaydım'}</${Btn}>
-            <${Btn} kind="ghost" icon="next" onClick=${next} disabled=${idx >= lines.length - 1 || recording} title="Sonraki satır (Enter)" />
+              disabled=${!take || take.status !== 'ready' || recording} title=${phase === 'review' ? t('Durdur (L)') : t('Kaydımı dinle (L)')}>${phase === 'review' ? t('Durdur') : t('Kaydım')}</${Btn}>
+            <${Btn} kind="ghost" icon="next" onClick=${next} disabled=${idx >= lines.length - 1 || recording} title=${t('Sonraki satır (Enter)')} />
           </div>
         </div>
-        <${Listening} settings=${settings} setLevel=${setLevel} />
+        <${Listening} settings=${settings} setLevel=${setLevel} micOpen=${side === 'booth'} onMicSettings=${() => showSide(side === 'booth' ? 'lines' : 'booth')} />
       </section>
       ${line && html`<section class="pane takes-pane">
-        <div class="pane-head"><h3>Kayıtlar</h3><span class="count">${(line.takes || []).length}</span><span class="grow"></span>
+        <div class="pane-head"><h3>${t('Kayıtlar')}</h3><span class="count">${(line.takes || []).length}</span><span class="grow"></span>
           <input type="file" hidden ref=${fileIn} accept="audio/*,video/*,.m4a,.opus,.ogg,.mp3,.wav,.aac,.amr,.webm,.flac"
             onChange=${(e) => { uploadFile(e.target.files[0]); e.target.value = ''; }} />
-          <${Btn} small kind="ghost" icon="upload" onClick=${() => fileIn.current.click()} title="WhatsApp sesli mesajı ya da ses dosyası">Dosyadan</${Btn}>
+          <${Btn} small kind="ghost" icon="upload" onClick=${() => fileIn.current.click()} title=${t('WhatsApp sesli mesajı ya da ses dosyası')}>${t('Dosyadan')}</${Btn}>
         </div>
         <div class="pane-scroll"><${TakeList} p=${p} line=${line} me=${name} guest=${guest} onPlay=${(t) => (phase === 'review' ? stopAll() : review(line, t))} /></div>
       </section>`}
     </div>
     <aside class="booth-side pane">
-      <div class="pane-head"><h3>Roller</h3><span class="grow"></span>${roomOpen && html`<${Lamp} tone="ok">oda açık</${Lamp}>`}</div>
+      <div class="pane-head"><h3>${t('Roller')}</h3><span class="grow"></span>${roomOpen && html`<${Lamp} tone="ok">${t('oda açık')}</${Lamp}>`}</div>
       <${Roles} p=${p} filter=${filter} setFilter=${pickRoles} room=${s.room} guest=${guest} />
-      <div class="side-tabs"><${Segmented} value=${side} onChange=${(v) => { setSide(v); LS.set('booth.side', v); }}
-        options=${[['lines', `Satırlar ${doneCount}/${lines.length}`], ['booth', 'Kabin']]} /></div>
+      <div class="side-tabs"><${Segmented} value=${side} onChange=${showSide}
+        options=${[['lines', t('Satırlar {a}/{b}', { a: doneCount, b: lines.length })], ['booth', t('Mikrofon ayarları')]]} /></div>
       ${side === 'lines'
         ? html`<div class="pane-scroll lineslist">${lines.map((l) => {
             const lc = chars[l.char];
-            return html`<button key=${l.id} id=${'bl-' + l.id} class=${cls('lineitem', l.id === (line && line.id) && 'sel', l.take && 'done')} onClick=${() => goTo(l)}>
-              <span class="lineitem-n tc">${p.lines.indexOf(l) + 1}</span><span class="swatch" style=${{ '--c': lc ? lc.color : '#8c897f' }}></span>
+            // the line number carries its speaker's colour (a separate dot beside it read as clutter)
+            return html`<button key=${l.id} id=${'bl-' + l.id} class=${cls('lineitem', l.id === (line && line.id) && 'sel', l.take && 'done')} onClick=${() => goTo(l)}
+              style=${{ '--c': lc ? lc.color : '#8c897f' }} title=${lc ? lc.name : null}>
+              <span class="lineitem-n tc">${p.lines.indexOf(l) + 1}</span>
               <span class="lineitem-t">${l.text || l.orig}</span>
               ${l.take ? html`<${Icon} name="check" size=${14} />` : ''}
             </button>`;
           })}</div>`
         : html`<div class="pane-scroll"><${BoothSettings} settings=${settings} set=${set} guest=${guest} name=${name} setName=${setName} onTestRec=${testRec} testing=${testing} /></div>`}
       <div class="side-foot">
-        <${Btn} small icon=${phase === 'scene' ? 'stop' : 'play'} active=${phase === 'scene'} onClick=${() => playScene(0)}>${phase === 'scene' ? 'Durdur' : 'Sahneyi baştan dinle'}</${Btn}>
+        <${Btn} small icon=${phase === 'scene' ? 'stop' : 'play'} active=${phase === 'scene'} onClick=${() => playScene(0)}>${phase === 'scene' ? t('Durdur') : t('Sahneyi baştan dinle')}</${Btn}>
         ${!guest && html`<input type="file" hidden multiple ref=${bulkIn} accept="audio/*,video/*,.m4a,.opus,.ogg,.mp3,.wav,.aac,.amr,.webm,.flac"
             onChange=${(e) => { setBulkFiles([...e.target.files]); e.target.value = ''; }} />
-          <${Btn} small icon="upload" onClick=${() => bulkIn.current.click()} title="Arkadaşlarının gönderdiği ses dosyalarını satırlara dağıt">Toplu yükle</${Btn}>`}
+          <${Btn} small icon="upload" onClick=${() => bulkIn.current.click()} title=${t('Arkadaşlarının gönderdiği ses dosyalarını satırlara dağıt')}>${t('Toplu yükle')}</${Btn}>`}
       </div>
     </aside>
     ${bulkFiles && html`<${BulkDialog} p=${p} files=${bulkFiles} name=${name} onClose=${() => setBulkFiles(null)} />`}

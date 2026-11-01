@@ -9,6 +9,7 @@ import time
 import urllib.request
 
 from .config import BIN_DIR
+from .i18n import tx
 from .jobs import bus
 from .media import NO_WINDOW
 
@@ -122,7 +123,7 @@ class Room:
                 threading.Thread(target=self._wait_reachable, args=(proc, self.url), daemon=True).start()
         if proc is self._proc and self.status != "off":
             self.status = "error"
-            self.error = "Bağlantı koptu: " + " ".join(tail[-3:])[-300:]
+            self.error = tx("Bağlantı koptu: {e}", e=" ".join(tail[-3:])[-300:])
             self.url = None
             bus.notify()
 
@@ -160,20 +161,20 @@ class Room:
     # ---- guests ----------------------------------------------------------
     def join(self, name, pin, client="?"):
         if self.status not in ("on", "starting") or not self.project_id:
-            raise PermissionError("Oda şu an kapalı.")
+            raise PermissionError(tx("Oda şu an kapalı."))
         now = time.time()
         # The link is public, so slow down PIN guessing: 5 misses per client / 30 overall per 10 minutes.
         self._fails = [(t, c) for t, c in getattr(self, "_fails", []) if now - t < 600]
         if sum(1 for _, c in self._fails if c == client) >= 5 or len(self._fails) >= 30:
-            raise PermissionError("Çok fazla hatalı deneme. Birkaç dakika sonra tekrar dene.")
+            raise PermissionError(tx("Çok fazla hatalı deneme. Birkaç dakika sonra tekrar dene."))
         if str(pin).strip() != self.pin:
             self._fails.append((now, client))
-            raise PermissionError("PIN yanlış.")
-        name = re.sub(r"\s+", " ", (name or "").strip())[:30] or "Misafir"
+            raise PermissionError(tx("PIN yanlış."))
+        name = re.sub(r"\s+", " ", (name or "").strip())[:30] or tx("Misafir")
         token = secrets.token_urlsafe(24)
         now = time.time()
         self.guests[token] = {"name": name, "joined": now, "seen": now, "view": "", "line": None, "char": None}
-        self.log(f"{name} odaya katıldı")
+        self.log("{name} odaya katıldı", name=name)
         return token
 
     def guest(self, token):
@@ -196,15 +197,16 @@ class Room:
         """The host records too: friends see which role the room's owner took and where they are."""
         if project_id != self.project_id:
             return
-        h = {"name": re.sub(r"\s+", " ", (name or "").strip())[:30] or "Oda sahibi", "char": char, "line": line,
+        h = {"name": re.sub(r"\s+", " ", (name or "").strip())[:30] or tx("Oda sahibi"), "char": char, "line": line,
              "view": view}
         changed = not self.host or any(self.host.get(k) != v for k, v in h.items())
         self.host = {**h, "seen": time.time()}
         if changed:
             bus.notify()
 
-    def log(self, text):
-        self.activity.insert(0, {"t": time.time(), "text": text})
+    def log(self, text, **kw):
+        """Something that happened in the room: kept as Turkish text and values, said in the reader's language."""
+        self.activity.insert(0, {"t": time.time(), "key": text, "vars": kw})
         del self.activity[60:]
         bus.notify()
 
@@ -217,7 +219,7 @@ class Room:
                         "line": g.get("line"), "char": g.get("char")} for g in self.guests.values()],
             "host": {k: v for k, v in self.host.items() if k != "seen"} | {"online": now - self.host["seen"] < 20}
             if self.host else None,
-            "activity": self.activity[:30],
+            "activity": [{"t": a["t"], "text": tx(a["key"], **a["vars"])} for a in self.activity[:30]],
         }
 
 

@@ -1,5 +1,7 @@
 /* ---------- first run: one question and a checklist of what to download ---------- */
-.onboard { min-height: var(--page-h); display: grid; place-items: center; padding: 12px 24px 64px; }
+.onboard { position: relative; min-height: var(--page-h); display: grid; place-items: center; padding: 12px 24px 64px; }
+/* the language, answered before anything else: top right, out of the question's way */
+.onboard-lang { position: absolute; top: 12px; right: 20px; }
 .onboard-inner { width: min(640px, 100%); }
 .onboard-mark { display: block; width: 58px; height: 58px; margin: 0 0 26px; filter: drop-shadow(0 14px 30px rgba(0, 0, 0, 0.55));
   animation: modal-in calc(600ms * var(--m)) var(--ease-out) both; }

@@ -1,10 +1,13 @@
 """Change notifications (long-poll) and background jobs with progress."""
 import asyncio
+import contextvars
 import threading
 import time
 import traceback
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+
+from .i18n import tx
 
 
 class Bus:
@@ -55,12 +58,12 @@ class Job:
         self.title = title
         self.status = "queued"
         self.progress = 0.0
-        self.message = "Sırada bekliyor..."
+        self.message = tx("Sırada bekliyor...")
         self.error = None
         self.result = None
         self.created = time.time()
         self.finished = None
-        self.steps = [{"key": k, "label": l, "status": "pending"} for k, l in (steps or [])]
+        self.steps = [{"key": k, "label": tx(l), "status": "pending"} for k, l in (steps or [])]
         self.meta = meta or {}
         self.cancel_requested = False
         self._last_notify = 0.0
@@ -107,28 +110,29 @@ class JobManager:
 
         def run():
             job.status = "running"
-            job.update(message="Başladı...", force=True)
+            job.update(message=tx("Başladı..."), force=True)
             try:
                 job.result = fn(job)
                 job.status = "done"
                 job.progress = 1.0
                 final = job.result.get("message") if isinstance(job.result, dict) else None
-                job.message = final or "Tamamlandı"
+                job.message = final or tx("Tamamlandı")
             except JobCancelled:
                 job.status = "cancelled"
-                job.message = "İptal edildi"
+                job.message = tx("İptal edildi")
             except Exception as e:  # surface every failure to the UI
                 traceback.print_exc()
                 job.status = "error"
                 job.error = str(e) or e.__class__.__name__
-                job.message = "Hata: " + job.error
+                job.message = tx("Hata: {e}", e=job.error)
                 for s in job.steps:
                     if s["status"] == "running":
                         s["status"] = "error"
             job.finished = time.time()
             bus.notify()
 
-        {"setup": self._setup}.get(pool, self._heavy if heavy else self._light).submit(run)
+        # the job runs in a copy of this context: it speaks the language of the request that started it
+        {"setup": self._setup}.get(pool, self._heavy if heavy else self._light).submit(contextvars.copy_context().run, run)
         bus.notify()
         return job
 

@@ -28,6 +28,8 @@
 .iconbtn:disabled { opacity: 0.35; cursor: not-allowed; }
 .iconbtn.on { color: var(--accent-ink); background: var(--accent); }
 .iconbtn.sm { width: var(--ctl-sm); height: var(--ctl-sm); border-radius: 8px; }
+a, img, svg { -webkit-user-drag: none; }
+a { user-select: none; }
 .linkbtn { background: none; border: 0; color: var(--accent-text); cursor: pointer; font: inherit; padding: 4px 0; display: inline-flex; gap: 6px; align-items: center; }
 .linkbtn:hover { text-decoration: underline; }
 
@@ -40,10 +42,23 @@
 .input:disabled { opacity: 0.5; cursor: not-allowed; }
 .input.mono { font-family: var(--mono); font-size: 12px; }
 textarea.input { height: auto; padding: 8px 11px; resize: vertical; line-height: 1.5; }
-select.input { appearance: none; -webkit-appearance: none; cursor: pointer; padding-right: 30px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23b4b1a7' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
-  background-repeat: no-repeat; background-position: right 11px center; }
-select.input option, select.input optgroup { background: var(--raised); color: var(--text); }
+/* a choice from a list (Select): a field like the others, its chevron turns when the list is open */
+.select { display: flex; align-items: center; gap: 8px; padding: 0 9px 0 11px; text-align: left; cursor: pointer; user-select: none; color: var(--text);
+  background: var(--raised); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04); }
+.select:hover:not(:disabled) { background: var(--raised-2); }
+.select.open { border-color: var(--accent-line); box-shadow: var(--focus); }
+.select-value { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-chev { color: var(--text-3); transition: transform var(--t) var(--ease-out), color var(--t-fast); }
+.select:hover .select-chev, .select.open .select-chev { color: var(--text); }
+.select.open .select-chev { transform: rotate(180deg); }
+.select:disabled .select-chev { opacity: 0.6; }
+/* its list: the menu surface, the chosen row ticked, the row under the pointer or the keys lit */
+.listbox { min-width: 0; padding: 4px; outline: none; overscroll-behavior: contain; animation: list-in calc(180ms * var(--m)) var(--ease-out) both; }
+.listopt { min-height: 30px; padding: 6px 10px; border-radius: 8px; font-size: 13px; color: var(--text-2); }
+.listopt .grow { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.listopt.on { color: var(--text); font-weight: 500; }
+.listopt.on .icon { color: var(--accent); }
+.listopt:hover, .listopt.active { background: var(--raised-2); color: var(--text); }
 .bare { background: transparent; border: 1px solid transparent; color: var(--text); font: inherit; padding: 2px 6px; border-radius: 6px; outline: none; min-width: 0;
   transition: background-color var(--t-fast), border-color var(--t-fast); }
 .bare:hover { background: var(--raised); }
@@ -138,12 +153,11 @@ details[open] > :not(summary) { animation: drop var(--t) var(--ease-out); }
 .tally::before { content: ''; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .tally.on { background: var(--rec); border-color: #ff6a61; color: #fff; box-shadow: 0 0 16px rgba(255, 59, 48, 0.45); }
 .tally.on::before { animation: blink 1s steps(2, jump-none) infinite; }
-/* a character's name tag: its colour as a round dot with a soft ring, the name in plain text next to it */
-.hl { display: inline-flex; align-items: center; gap: 7px; min-width: 0; font-weight: 600; color: var(--text); white-space: nowrap; }
-.hl::before { content: ''; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c, var(--accent));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--c, var(--accent)) 24%, transparent); }
-.swatch { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex: none; background: var(--c); }
-.chardot { display: inline-block; border-radius: 50%; flex: none; }
+/* a character's name tag: the name on a soft tint of the character's colour, in a lighter tone of it (no dot) */
+.hl { display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%; height: 22px; padding: 0 8px; border-radius: 7px;
+  font-weight: 600; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: none;
+  color: color-mix(in oklab, var(--c, var(--accent)) 62%, #fff); background: color-mix(in srgb, var(--c, var(--accent)) 17%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c, var(--accent)) 26%, transparent); }
 
 /* LED level meter: green to -18 dB, yellow to -6 dB, red above; segments come from a mask */
 .meter { position: relative; flex: 1; min-width: 80px; height: 8px; background: #121210; border-radius: 99px; overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); }
@@ -264,6 +278,23 @@ details[open] > :not(summary) { animation: drop var(--t) var(--ease-out); }
 .popitem .grow { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .popitem .dim { margin-left: auto; font-size: 12px; }
 
+/* "?": why something is locked or what it means; a small round button, its answer on the menu surface */
+.helptip { display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; flex: none; border-radius: 50%; border: 0; cursor: pointer;
+  background: rgba(255, 250, 235, 0.07); color: var(--text-2); transition: background-color var(--t-fast), color var(--t-fast), transform calc(160ms * var(--m)) var(--ease-out); }
+.helptip .icon { stroke-width: 2.2; }
+.helptip:hover, .helptip.on { background: var(--raised-2); color: var(--text); }
+.helptip:active { transform: scale(0.92); }
+.helppop { min-width: 0; width: max-content; max-width: min(300px, calc(100vw - 16px)); padding: 12px 14px 13px; }
+.helppop-title { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.helppop-text { color: var(--text-2); font-size: 12.5px; line-height: 1.5; }
+.helppop-act { margin-top: 11px; }
+/* every title of the app: a small dark label that fades in under (or above) the element */
+.tooltip { position: fixed; z-index: 260; max-width: 300px; padding: 5px 9px; border-radius: 8px; background: #2c2c29; color: var(--text); border: 1px solid var(--line-2);
+  font: 500 12px/1.4 var(--font); white-space: pre-line; pointer-events: none; box-shadow: 0 10px 24px -8px rgba(0, 0, 0, 0.7); opacity: 0; visibility: hidden;
+  transform: translateY(calc(-3px * var(--mv))); transition: opacity calc(120ms * var(--m)) var(--ease-out), transform calc(120ms * var(--m)) var(--ease-out), visibility 0s linear calc(120ms * var(--m)); }
+.tooltip[data-side='above'] { transform: translateY(calc(3px * var(--mv))); }
+.tooltip.show { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+
 /* ---------- jobs ---------- */
 .jobpanel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; margin-bottom: 8px; }
 .jobpanel.is-error { border-color: rgba(255, 90, 82, 0.28); }
@@ -272,22 +303,36 @@ details[open] > :not(summary) { animation: drop var(--t) var(--ease-out); }
 .jobpanel-pct { font: 500 13px var(--mono); font-variant-numeric: tabular-nums; color: var(--text-2); }
 .jobpanel-msg { color: var(--text-2); margin-top: 8px; font-size: 12px; white-space: pre-wrap; min-height: 17px; font-family: var(--mono); }
 .jobpanel.is-error .jobpanel-msg, .is-error > .jobpanel-msg { color: #ffa29b; font-family: var(--font); }
-.steps { list-style: none; padding: 0; margin: 12px 0 2px; display: flex; flex-direction: column; }
-.step { display: flex; align-items: center; gap: 11px; color: var(--text-3); padding: 6px 0; transition: color var(--t-slow); }
-.step-ico { width: 18px; height: 18px; display: grid; place-items: center; flex: none; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line-2);
-  transition: background-color var(--t-slow), box-shadow var(--t-slow); position: relative; }
-.step-ico svg { width: 10px; height: 10px; stroke-dasharray: 24; stroke-dashoffset: 24; }
+/* The steps hang on one rail. A finished step fills the rail down to the next one (the same curve and time every
+   time), and only then does the next one light up: a turning arc around a softly breathing core, like the system's
+   own activity rings. Nothing blinks. */
+.steps { list-style: none; padding: 0; margin: 14px 0 2px; display: flex; flex-direction: column; --rail: calc(520ms * var(--m)); }
+.step { position: relative; display: flex; align-items: center; gap: 12px; color: var(--text-3); padding: 7px 0; transition: color var(--t-slow) var(--ease-out); }
+.step:not(:last-child)::before, .step:not(:last-child)::after { content: ''; position: absolute; left: 9px; top: 29px; bottom: -3px; width: 2px; margin-left: -1px;
+  border-radius: 1px; background: var(--line-2); }
+.step:not(:last-child)::after { background: var(--ok); transform: scaleY(0); transform-origin: top; transition: transform var(--rail) var(--ease-io); }
+.step-done:not(:last-child)::after { transform: scaleY(1); }
+.step-ico { position: relative; width: 20px; height: 20px; display: grid; place-items: center; flex: none; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--line-2);
+  transition: background-color var(--t-slow) var(--ease-out), box-shadow var(--t-slow) var(--ease-out); }
+.step-ico svg { width: 11px; height: 11px; stroke-dasharray: 24; stroke-dashoffset: 24; }
+.step-label { min-width: 0; }
+/* working: the rail has just reached it, so it waits that long before it starts to turn */
 .step-running { color: var(--text); font-weight: 500; }
-.step-running .step-ico::after { content: ''; position: absolute; inset: 5px; border-radius: 50%; background: var(--accent); animation: blink 0.9s steps(2, jump-none) infinite; }
+.step-running .step-ico { box-shadow: inset 0 0 0 1.5px rgba(255, 210, 63, 0.22); animation: fade var(--t-slow) var(--ease-out) var(--rail) both; }
+.step-running .step-ico::before { content: ''; position: absolute; inset: 6px; border-radius: 50%; background: var(--accent);
+  animation: core 1.8s var(--ease-io) var(--rail) infinite both; }
+.step-running .step-ico::after { content: ''; position: absolute; inset: 0; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--accent);
+  border-right-color: rgba(255, 210, 63, 0.35); animation: spin 1.05s linear infinite; }
 .step-done { color: var(--text-2); }
-.step-done .step-ico { background: var(--ok); box-shadow: none; color: #062413; }
-.step-done .step-ico svg { animation: draw calc(420ms * var(--m)) var(--ease-out) calc(60ms * var(--m)) forwards; }
+.step-done .step-ico { background: var(--ok); box-shadow: none; color: #062413; animation: settle calc(460ms * var(--m)) var(--spring) both; }
+.step-done .step-ico svg { animation: draw calc(380ms * var(--m)) var(--ease-out) calc(120ms * var(--m)) forwards; }
 .step-error .step-ico { background: var(--warn); box-shadow: none; color: #2a1d02; }
 .step-error .step-ico svg { stroke-dashoffset: 0; }
-/* a step the scene went without (its feature is not installed): struck through, not failed */
+/* a step the scene went without (its feature is not installed): struck through, not failed; the rail goes on past it */
 .step-skipped { color: var(--text-3); text-decoration: line-through; text-decoration-color: rgba(140, 137, 127, 0.5); }
 .step-skipped .step-ico { box-shadow: inset 0 0 0 1.5px var(--line); }
 .step-skipped .step-ico::after { content: ''; width: 8px; height: 1.5px; border-radius: 1px; background: var(--text-3); }
+.step-skipped:not(:last-child)::after { background: var(--line-3); transform: scaleY(1); }
 
 /* ---------- viewer & transport ---------- */
 .videopane { position: relative; background: #000; overflow: hidden; aspect-ratio: 16 / 9; display: grid; place-items: center; view-transition-name: viewer; }
@@ -300,8 +345,8 @@ details[open] > :not(summary) { animation: drop var(--t) var(--ease-out); }
 .playbtn:hover:not(:disabled) { background: #fff; transform: scale(1.04); }
 .playbtn:active:not(:disabled) { transform: scale(0.94); }
 .playbtn:disabled { opacity: 0.35; cursor: not-allowed; }
-.playbtn[aria-label='Durdur'] { background: var(--accent); color: var(--accent-ink); }
-.playbtn[aria-label='Durdur'] .icon { margin-left: 0; }
+.playbtn.on { background: var(--accent); color: var(--accent-ink); }
+.playbtn.on .icon { margin-left: 0; }
 .videopane.clickable { cursor: pointer; }
 /* listening volume: a speaker that mutes, a short slider */
 .vol { display: inline-flex; align-items: center; gap: 2px; flex: none; }

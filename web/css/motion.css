@@ -35,6 +35,11 @@
 @keyframes vt-in { from { opacity: 0; transform: translateX(calc(var(--vt-dir, 1) * 36px * var(--mv))); } }
 @keyframes vs-out { to { opacity: 0; transform: translateY(calc(var(--vt-dir, 1) * -12px * var(--mv))); } }
 @keyframes vs-in { from { opacity: 0; transform: translateY(calc(var(--vt-dir, 1) * 22px * var(--mv))); } }
+/* a step at work: its core breathes while the arc around it turns; a finished step settles in on a spring */
+@keyframes core { 0%, 100% { transform: scale(calc(1 - 0.3 * var(--mv))); opacity: 0.7; } 50% { transform: scale(1); opacity: 1; } }
+@keyframes settle { from { transform: scale(calc(1 - 0.35 * var(--mv))); } }
+/* a list grows out of its field (the transform origin is the side the field is on) */
+@keyframes list-in { from { opacity: 0; transform: scale(calc(1 - 0.04 * var(--mv))); } }
 
 /* Page changes. Old and new page run on the same clock and curve, so their opacities always add up to one: whatever
    both pages share (a pane's edge) stays solid and the window never shows through. The curve is gentler than the
@@ -54,6 +59,10 @@ html[data-vt='settings'] .set-body { view-transition-name: setbody; }
 ::view-transition-old(setbody) { animation: vs-out var(--t-page) var(--ease-page) both; }
 ::view-transition-new(setbody) { animation: vs-in var(--t-page) var(--ease-page) both; }
 ::view-transition-group(setbody) { animation-duration: 0s; }
+/* Another language: the whole window, top bar included, crossfades in place (every word changes, nothing moves). */
+html[data-vt='lang'] .main, html[data-vt='lang'] .topbar { view-transition-name: none; }
+html[data-vt='lang']::view-transition-old(root) { animation: fade-out var(--t-page) var(--ease-page) both; }
+html[data-vt='lang']::view-transition-new(root) { animation: fade var(--t-page) var(--ease-page) both; }
 
 /* "Kapalı": nothing moves except what reports live work (spinners, recording) */
 html[data-motion='off'] *, html[data-motion='off'] *::before, html[data-motion='off'] *::after {

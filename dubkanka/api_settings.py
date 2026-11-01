@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Request
 from . import translate
 from .access import body_json, host_only
 from .config import load_settings, public_settings, save_settings
+from .i18n import tx
 
 router = APIRouter()
 
@@ -13,7 +14,7 @@ router = APIRouter()
 def _provider_or_404(pid):
     pid = translate.ALIASES.get(pid, pid)
     if pid not in translate.REGISTRY:
-        raise HTTPException(404, "Böyle bir çeviri servisi yok.")
+        raise HTTPException(404, tx("Böyle bir çeviri servisi yok."))
     return pid
 
 
@@ -70,10 +71,10 @@ async def translator_test(pid: str, request: Request):
     except translate.TranslateError as e:
         return {"ok": False, "message": str(e), "sample": ""}
     except Exception as e:  # an unexpected answer shape is still a failed test, not a server error
-        return {"ok": False, "message": f"Beklenmeyen hata: {str(e)[:160]}", "sample": ""}
+        return {"ok": False, "message": tx("Beklenmeyen hata: {e}", e=str(e)[:160]), "sample": ""}
     if not sample.strip():
-        return {"ok": False, "message": "Servis boş yanıt verdi.", "sample": ""}
-    return {"ok": True, "message": "Çalışıyor.", "sample": sample}
+        return {"ok": False, "message": tx("Servis boş yanıt verdi."), "sample": ""}
+    return {"ok": True, "message": tx("Çalışıyor."), "sample": sample}
 
 
 @router.post("/api/translators/detect")

@@ -13,7 +13,7 @@
 .castrow .tc { text-align: right; font-size: 12px; }
 .castname { font-size: 13px; }
 .castactor { color: var(--text-2); font-size: 12px; }
-.colorpick { position: relative; width: 16px; height: 16px; border-radius: 50%; background: var(--c); cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
+.colorpick { position: relative; width: 16px; height: 16px; border-radius: 5px; background: var(--c); cursor: pointer; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.35);
   transition: transform var(--t-fast) var(--ease-out); }
 .colorpick:hover { transform: scale(1.12); }
 .colorpick input { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
@@ -28,12 +28,12 @@
 .linerow.sel .linerow-num { color: var(--accent); }
 .linerow-main { min-width: 0; display: flex; flex-direction: column; gap: 4px; }
 .linerow-meta { display: flex; align-items: center; gap: 8px; min-width: 0; height: 26px; }
-.chartag { display: inline-flex; align-items: center; gap: 4px; min-width: 0; height: 26px; padding: 0 6px 0 4px; margin-left: -4px; border: 0; border-radius: 8px;
-  background: transparent; color: var(--text); font: 600 13px var(--font); cursor: pointer; transition: background-color var(--t-fast); }
-.chartag:hover, .chartag[aria-expanded='true'] { background: var(--raised); }
-.chartag .chev { color: var(--text-3); transform: rotate(90deg); transition: transform var(--t) var(--ease-out), color var(--t-fast); }
-.chartag:hover .chev { color: var(--text); }
-.chartag[aria-expanded='true'] .chev { transform: rotate(-90deg); }
+.chartag { height: 24px; padding: 0 6px 0 9px; border: 0; font-family: var(--font); cursor: pointer;
+  transition: background-color var(--t-fast), box-shadow var(--t-fast), filter var(--t-fast); }
+.chartag:hover, .chartag[aria-expanded='true'] { filter: brightness(1.15); background: color-mix(in srgb, var(--c) 24%, transparent); }
+.chartag .chev { opacity: 0.7; transition: transform var(--t) var(--ease-out), opacity var(--t-fast); }
+.chartag:hover .chev { opacity: 1; }
+.chartag[aria-expanded='true'] .chev { transform: rotate(180deg); }
 .toolong { font-size: 12px; font-weight: 500; color: var(--warn); cursor: help; }
 .linerow-acts { display: flex; gap: 2px; opacity: 0; transition: opacity var(--t); }
 .linerow:hover .linerow-acts, .linerow.sel .linerow-acts, .linerow:focus-within .linerow-acts { opacity: 1; }
