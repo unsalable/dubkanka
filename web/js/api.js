@@ -49,8 +49,9 @@ export const api = {
   del: (u) => req('DELETE', u),
 };
 
-/** POST a raw file body with upload progress (0..1). Resolves with parsed JSON. */
-export function upload(url, blob, onProgress) {
+/** POST a raw file body with upload progress (0..1). Resolves with parsed JSON. `timeoutMs`: give up after that long
+ *  (a recorded take is small; a stuck upload must not keep the booth waiting). */
+export function upload(url, blob, onProgress, timeoutMs = 0) {
   return new Promise((resolve, reject) => {
     const x = new XMLHttpRequest();
     x.open('POST', url);
@@ -66,6 +67,10 @@ export function upload(url, blob, onProgress) {
       else reject(new ApiError(detailText(data && data.detail) || t('Yükleme başarısız ({status})', { status: x.status }), x.status));
     };
     x.onerror = () => reject(new ApiError(t('Yükleme sırasında bağlantı koptu.'), 0));
+    if (timeoutMs) {
+      x.timeout = timeoutMs;
+      x.ontimeout = () => reject(new ApiError(t('Yükleme sırasında bağlantı koptu.'), 0));
+    }
     x.send(blob);
   });
 }

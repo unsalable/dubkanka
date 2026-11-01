@@ -5,12 +5,12 @@ export const db2gain = (db) => Math.pow(10, (db || 0) / 20);
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const cls = (...a) => a.filter(Boolean).join(' ');
 
-export function fmtTime(t, decimals = 1) {
-  if (t == null || isNaN(t)) return '--:--';
-  const neg = t < 0;
-  t = Math.abs(t);
-  const m = Math.floor(t / 60);
-  const s = t - m * 60;
+export function fmtTime(secs, decimals = 1) {
+  if (secs == null || isNaN(secs)) return '--:--';
+  const neg = secs < 0;
+  secs = Math.abs(secs);
+  const m = Math.floor(secs / 60);
+  const s = secs - m * 60;
   const ss = decimals ? s.toFixed(decimals).padStart(3 + decimals, '0') : String(Math.floor(s)).padStart(2, '0');
   return (neg ? '-' : '') + String(m).padStart(2, '0') + ':' + ss;
 }
@@ -18,13 +18,13 @@ export function fmtTime(t, decimals = 1) {
 export function parseTime(str) {
   const parts = String(str).trim().replace(',', '.').split(':');
   if (!parts.length || parts.length > 3) return null;
-  let t = 0;
+  let secs = 0;
   for (const p of parts) {
     const n = Number(p);
     if (p === '' || isNaN(n)) return null;
-    t = t * 60 + n;
+    secs = secs * 60 + n;
   }
-  return t;
+  return secs;
 }
 
 export function fmtBytes(n) {
@@ -48,13 +48,13 @@ export function timeAgo(ts) {
 }
 
 export function debounce(fn, ms) {
-  let t;
+  let timer;
   const d = (...a) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...a), ms);
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...a), ms);
   };
   d.flush = (...a) => {
-    clearTimeout(t);
+    clearTimeout(timer);
     fn(...a);
   };
   return d;
@@ -75,12 +75,12 @@ export function syllables(text) {
 
 export function selectedTake(line) {
   if (!line || !line.take) return null;
-  return (line.takes || []).find((t) => t.id === line.take) || null;
+  return (line.takes || []).find((x) => x.id === line.take) || null;
 }
 
 export function readyTake(line) {
-  const t = selectedTake(line);
-  return t && t.status === 'ready' && t.file ? t : null;
+  const take = selectedTake(line);
+  return take && take.status === 'ready' && take.file ? take : null;
 }
 
 export function encodeWav(samples, sampleRate) {

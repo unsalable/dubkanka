@@ -11,12 +11,14 @@
   background: linear-gradient(90deg, transparent, rgba(255, 210, 63, 0.95)); box-shadow: 0 0 18px rgba(255, 210, 63, 0.6); }
 .countdown { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; opacity: 0; transition: opacity var(--t); z-index: 3; }
 .countdown.show { opacity: 1; }
-.cd-num { position: relative; width: 132px; height: 132px; display: grid; place-items: center; font: 600 64px/1 var(--mono); color: #fff; font-variant-numeric: tabular-nums;
+/* the count: a big number on a dark disc, its ring running out with the lead-in (3, 2, 1 with the beeps) */
+.cd-num { position: relative; width: 152px; height: 152px; display: grid; place-items: center; font: 600 76px/1 var(--mono); color: #fff; font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 16px rgba(0, 0, 0, 0.6); }
 .cd-num.word { font: 600 16px var(--font); font-stretch: var(--cond); letter-spacing: 0.08em; text-transform: uppercase; width: auto; height: auto; padding: 8px 18px;
   border-radius: var(--r-pill); background: rgba(0, 0, 0, 0.7); }
 .cd-ring { position: absolute; inset: 0; transform: rotate(-90deg); overflow: visible; }
-.cd-ring circle { fill: rgba(0, 0, 0, 0.5); stroke: var(--accent); stroke-width: 4; stroke-linecap: butt; }
+.cd-ring .cd-track { fill: rgba(0, 0, 0, 0.55); stroke: rgba(255, 255, 255, 0.16); stroke-width: 4; }
+.cd-ring .cd-fill { fill: none; stroke: var(--accent); stroke-width: 4; stroke-linecap: round; }
 .cd-num.word .cd-ring { display: none; }
 .cue-go { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); z-index: 3; padding: 5px 16px; border-radius: var(--r-pill); background: var(--rec); color: #fff;
   font: 600 13px var(--font); font-stretch: var(--cond); letter-spacing: 0.08em; text-transform: uppercase; pointer-events: none; animation: cue var(--t) var(--ease-out); }

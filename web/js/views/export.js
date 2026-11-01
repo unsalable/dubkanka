@@ -26,11 +26,11 @@ function merged(def, ex) {
 export function subtitleEvents(p) {
   const dur = p.clip.duration;
   const out = p.lines.map((l) => {
-    const t = readyTake(l);
+    const take = readyTake(l);
     let s, e;
-    if (t) {
-      const [, a, b] = takeSpan(t);
-      s = a + (t.voiceOffset || 0) - 0.05;
+    if (take) {
+      const [, a, b] = takeSpan(take);
+      s = a + (take.voiceOffset || 0) - 0.05;
       e = b + 0.15;
     } else {
       s = l.start - 0.05;
@@ -47,8 +47,8 @@ function credits(p, ex) {
   if ((ex.creditsText || '').trim()) return ex.creditsText.trim();
   const names = {};
   for (const l of p.lines) {
-    const t = readyTake(l);
-    if (t && t.source !== 'tts' && t.by) (names[l.char] = names[l.char] || new Set()).add(t.by);
+    const take = readyTake(l);
+    if (take && take.source !== 'tts' && take.by) (names[l.char] = names[l.char] || new Set()).add(take.by);
   }
   const parts = p.characters.filter((c) => names[c.id]).map((c) => `${c.name}: ${[...names[c.id]].join(', ')}`);
   return parts.length ? t('Seslendirenler — ') + parts.join('  •  ') : '';
@@ -150,8 +150,8 @@ function FramePlayer({ p, ex }) {
           ctx.drawImage(v, g.box[0] * k, g.box[1] * k, g.box[2] * k, g.box[3] * k);
         } else ctx.drawImage(v, ...fit(ex.format === 'vertical_crop'));
       }
-      const t = Math.max(0, player.time);
-      const ev = events.find(([s, e]) => t >= s && t <= e);
+      const now = Math.max(0, player.time);
+      const ev = events.find(([s, e]) => now >= s && now <= e);
       if (sub.current) {
         const l = ev && ev[2];
         const dub = l && (ex.subs === 'orig' ? l.orig : l.text);
@@ -164,7 +164,7 @@ function FramePlayer({ p, ex }) {
           sub.current.style.color = ex.subColor === 'character' && chars[l.char] ? chars[l.char].color : '#fff';
         }
       }
-      if (cred.current) cred.current.hidden = !(creditText && t >= dur - 3.5 && ex.subMode === 'burn' && !copying);
+      if (cred.current) cred.current.hidden = !(creditText && now >= dur - 3.5 && ex.subMode === 'burn' && !copying);
     };
     draw();
     const off = player.on(draw);
@@ -200,7 +200,7 @@ function FramePlayer({ p, ex }) {
     : { bottom: Math.max(10, g.H * (1 - pos)) * scale + 'px', fontFamily: `'${ex.subFont}'`, fontSize: fontPx * scale + 'px',
         WebkitTextStroke: `${Math.max(1, fontPx * 0.09 * scale)}px #000` };
 
-  const seek = (t) => player.playing ? player.play({ from: t, to: dur, ...buildMix(p, bufs, ex.mix) }) : player.seek(t);
+  const seek = (at) => player.playing ? player.play({ from: at, to: dur, ...buildMix(p, bufs, ex.mix) }) : player.seek(at);
   return html`<div class="fp">
     <div class="fp-stage" ref=${stage}>
       <div class="frame" style=${{ width: size.w + 'px', height: size.h + 'px' }} onClick=${toggle} title=${playing ? t('Durdur') : t('Oynat')}>

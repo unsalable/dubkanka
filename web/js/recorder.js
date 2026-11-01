@@ -180,7 +180,7 @@ class Recorder {
     }
   }
   start() {
-    if (!this.ready) throw new Error(t('Mikrofon hazır değil'));
+    if (!this.ready || !this.node) throw new Error(t('Mikrofon hazır değil'));
     this.chunks = [];
     this.firstTime = null;
     this.recording = true;
@@ -188,9 +188,11 @@ class Recorder {
   }
   async stop() {
     if (!this.recording) return null;
+    // the microphone can close under a take (unplugged, another device picked): what was captured still counts
     const done = new Promise((r) => (this.stopResolve = r));
-    this.node.port.postMessage('stop');
-    await Promise.race([done, new Promise((r) => setTimeout(r, 500))]);
+    if (this.node) this.node.port.postMessage('stop');
+    await Promise.race([done, new Promise((r) => setTimeout(r, this.node ? 500 : 0))]);
+    this.stopResolve = null;
     this.recording = false;
     const n = this.chunks.reduce((a, c) => a + c.length, 0);
     const samples = new Float32Array(n);
@@ -200,7 +202,7 @@ class Recorder {
       o += c.length;
     }
     this.chunks = [];
-    return { samples, sampleRate: engine.ctx.sampleRate, firstTime: this.firstTime };
+    return { samples, sampleRate: engine.ctx ? engine.ctx.sampleRate : 48000, firstTime: this.firstTime };
   }
   /** Seconds between "heard at" and "captured at" that must be removed from a take's position. */
   roundTrip() {
@@ -208,7 +210,7 @@ class Recorder {
     return engine.outLatency + (this.inputLatency || 0) + rnn + micPrefs().latencyMs / 1000;
   }
   close(notify = true) {
-    if (this.stream) this.stream.getTracks().forEach((t) => t.stop());
+    if (this.stream) this.stream.getTracks().forEach((track) => track.stop());
     for (const n of [this.source, this.rnnoise, this.node, this.sink, this.monitorNode]) {
       try {
         n && n.disconnect();

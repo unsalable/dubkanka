@@ -82,10 +82,10 @@ const TOAST_ICON = { error: 'alert', ok: 'check', info: 'info' };
 export function Toasts() {
   const s = useStore();
   return html`<div class="toasts" role="status" aria-live="polite">${s.toasts.map(
-    (t) => html`<div key=${t.id} class=${cls('toast', 'toast-' + t.type, t.leaving && 'leaving')} onClick=${() => dismissToast(t.id)}>
-      <${Icon} name=${TOAST_ICON[t.type] || 'info'} size=${16} /><span class="grow">${t.text}</span>
-      ${t.action && html`<button class="btn btn-sm toast-action" onClick=${(e) => { e.stopPropagation(); dismissToast(t.id); t.action.onClick(); }}>${t.action.label}</button>`}
-      <i class="toast-life" style=${{ animationDuration: t.ms + 'ms' }}></i>
+    (n) => html`<div key=${n.id} class=${cls('toast', 'toast-' + n.type, n.leaving && 'leaving')} onClick=${() => dismissToast(n.id)}>
+      <${Icon} name=${TOAST_ICON[n.type] || 'info'} size=${16} /><span class="grow">${n.text}</span>
+      ${n.action && html`<button class="btn btn-sm toast-action" onClick=${(e) => { e.stopPropagation(); dismissToast(n.id); n.action.onClick(); }}>${n.action.label}</button>`}
+      <i class="toast-life" style=${{ animationDuration: n.ms + 'ms' }}></i>
     </div>`
   )}</div>`;
 }

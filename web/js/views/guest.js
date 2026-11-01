@@ -73,8 +73,8 @@ export function GuestApp() {
       const f = key ? LS.get(key, []) || [] : [];
       api.post('/api/guest/heartbeat', { view: 'record', char: f.length === 1 ? f[0] : null }).catch(() => {});
     };
-    const t = setInterval(beat, 10000);
-    return () => clearInterval(t);
+    const timer = setInterval(beat, 10000);
+    return () => clearInterval(timer);
   }, [s.role, key]);
   if (s.role === 'anon') return html`<${Join} />`;
   if (!p) return html`<div class="boot"><img class="boot-mark" src="/web/icon.svg" alt="" />${t('Proje yükleniyor…')}</div>`;

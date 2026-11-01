@@ -39,8 +39,18 @@ export const engine = {
       this.out.connect(this.ctx.destination);
       this.masterTap = tap(this.ctx, this.master);
     }
-    if (this.ctx.state === 'suspended') this.ctx.resume();
+    // suspended by the browser until a click, or interrupted by the system (a headset switching to its microphone)
+    if (this.ctx.state !== 'running' && this.ctx.state !== 'closed') this.ctx.resume().catch(() => {});
     return this.ctx;
+  },
+  /** The audio clock, running. A take must not start on a clock that stands still: resume it, and say so when it
+   *  will not run. */
+  async running(ms = 3000) {
+    const ctx = this.ensure();
+    if (ctx.state === 'running') return ctx;
+    await Promise.race([ctx.resume().catch(() => {}), new Promise((r) => setTimeout(r, ms))]);
+    if (ctx.state !== 'running') throw new Error(t('Ses çıkışı başlatılamadı. Hoparlörünü ya da kulaklığını kontrol edip tekrar dene.'));
+    return ctx;
   },
   load(url) {
     if (!url) return Promise.resolve(null);
@@ -94,7 +104,7 @@ export function stemUrls(p, lite) {
     original: lite ? null : fileUrl(p.id, s.original, s.ver),
   };
 }
-export const takeUrl = (p, t) => (t && t.file ? fileUrl(p.id, t.file) : null);
+export const takeUrl = (p, take) => (take && take.file ? fileUrl(p.id, take.file) : null);
 export const sfxUrl = (p, s) => fileUrl(p.id, s.file);
 
 export async function loadMixBuffers(p, { lite = false, original = false } = {}) {
@@ -107,8 +117,8 @@ export async function loadMixBuffers(p, { lite = false, original = false } = {})
   ];
   if (original && u.original) jobs.push(engine.load(u.original).then((b) => (out.original = b)));
   for (const line of p.lines) {
-    const t = readyTake(line);
-    if (t) jobs.push(engine.load(takeUrl(p, t)).then((b) => (out.takes[t.id] = b)).catch(() => {}));
+    const take = readyTake(line);
+    if (take) jobs.push(engine.load(takeUrl(p, take)).then((b) => (out.takes[take.id] = b)).catch(() => {}));
   }
   for (const s of p.mix.sfx || []) jobs.push(engine.load(sfxUrl(p, s)).then((b) => (out.sfx[s.id] = b)).catch(() => {}));
   await Promise.all(jobs);
@@ -116,9 +126,9 @@ export async function loadMixBuffers(p, { lite = false, original = false } = {})
 }
 
 /** [position, audible start, audible end] of a take in project time: nudged, minus what was trimmed off. */
-export function takeSpan(t) {
-  const at = t.start + (t.nudge || 0);
-  return [at, at + (t.trimIn || 0), at + t.duration - (t.trimOut || 0)];
+export function takeSpan(take) {
+  const at = take.start + (take.nudge || 0);
+  return [at, at + (take.trimIn || 0), at + take.duration - (take.trimOut || 0)];
 }
 
 export const FILL_PRE = 0.15;
@@ -176,15 +186,15 @@ export function buildMix(p, bufs, mode = 'dub') {
   if (!mix.origMute) items.push({ buffer: bufs.voices, at: 0, bus: 'orig' });
   const windows = [];
   for (const line of p.lines) {
-    const t = readyTake(line);
+    const take = readyTake(line);
     const c = chars[line.char] || {};
     const bus = 'char:' + line.char;
     if (!(bus in buses)) buses[bus] = c.mute || mix.dubMute ? 0 : db2gain((c.gain || 0) + (mix.dubGain || 0));
-    if (t && bufs.takes[t.id]) {
-      const [at, a, b] = takeSpan(t);
+    if (take && bufs.takes[take.id]) {
+      const [at, a, b] = takeSpan(take);
       windows.push([a, b]);
-      const trimmed = (t.trimIn || 0) > 0 || (t.trimOut || 0) > 0;
-      items.push({ buffer: bufs.takes[t.id], at, region: [a, b], gain: db2gain(t.gain || 0), bus, fade: trimmed ? 0.006 : 0.003 });
+      const trimmed = (take.trimIn || 0) > 0 || (take.trimOut || 0) > 0;
+      items.push({ buffer: bufs.takes[take.id], at, region: [a, b], gain: db2gain(take.gain || 0), bus, fade: trimmed ? 0.006 : 0.003 });
     } else if (mix.fillMissing !== false) {
       items.push({ buffer: bufs.voices, at: 0, region: [line.start - FILL_PRE, line.end + FILL_POST], fade: 0.03, bus: 'fill' });
     }
@@ -232,15 +242,22 @@ class Player {
     return () => this.listeners.delete(fn);
   }
   emit(type) {
-    for (const f of this.listeners) f(type, this);
+    // one broken view must never stop the clock: a listener that throws is reported and the others still run
+    for (const f of this.listeners) {
+      try {
+        f(type, this);
+      } catch (e) {
+        console.error(e);
+      }
+    }
   }
   get time() {
     if (!this.playing) return this.pausedAt;
     return Math.min(this.to, this.from + (engine.ctx.currentTime - this.t0) - engine.outLatency);
   }
-  /** Context time at which project time `t` will be heard. */
-  ctxTimeOf(t) {
-    return this.t0 + (t - this.from);
+  /** Context time at which project time `at` will be heard. */
+  ctxTimeOf(at) {
+    return this.t0 + (at - this.from);
   }
   attachVideo(v) {
     this.video = v;
@@ -333,6 +350,8 @@ class Player {
       this.nodes.push(o);
     }
     this.playing = true;
+    this.clockAt = ctx.currentTime;
+    this.clockMoved = performance.now();
     if (this.video) {
       this.video.playbackRate = 1;
       try {
@@ -378,6 +397,16 @@ class Player {
   step(fromTimer) {
     if (!this.playing) return;
     this.lastTick = performance.now();
+    // Everything follows the audio clock. If it stops (a sound device that went away, a context the system
+    // suspended), wake it; after a few seconds give up and stop, so nothing waits on a clock that never moves.
+    const ct = engine.ctx.currentTime;
+    if (ct !== this.clockAt) {
+      this.clockAt = ct;
+      this.clockMoved = this.lastTick;
+    } else if (this.lastTick - this.clockMoved > 1000) {
+      if (engine.ctx.state !== 'running' && engine.ctx.state !== 'closed') engine.ctx.resume().catch(() => {});
+      if (this.lastTick - this.clockMoved > 3000) return this.stop(false, 'stall');
+    }
     const now = this.time;
     const v = this.video;
     if (v && v.readyState >= 2) {
@@ -404,7 +433,8 @@ class Player {
     }
     if (!fromTimer) this.raf = requestAnimationFrame(this.tick);
   }
-  stop(ended = false) {
+  /** Stop; `reason` ('stall' when the audio clock stopped) goes to the listeners and to onEnd(ended, reason). */
+  stop(ended = false, reason = null) {
     const wasPlaying = this.playing;
     if (wasPlaying) this.pausedAt = clamp(this.time, Math.min(0, this.from || 0), this.to);
     this.playing = false;
@@ -433,16 +463,16 @@ class Player {
     if (wasPlaying) {
       const cb = this.onEnd;
       this.onEnd = null;
-      this.emit(ended ? 'end' : 'stop');
-      if (cb) cb(ended);
+      this.emit(ended ? 'end' : reason || 'stop');
+      if (cb) cb(ended, reason);
     }
   }
-  seek(t) {
+  seek(at) {
     this.stop(false);
-    this.pausedAt = t;
+    this.pausedAt = at;
     if (this.video) {
       try {
-        this.video.currentTime = Math.max(0, t);
+        this.video.currentTime = Math.max(0, at);
       } catch {}
     }
     this.emit('seek');

@@ -60,8 +60,8 @@ function LineRow({ p, line, idx, selected, onSelect, onPlay, chars }) {
     setText(line.text || '');
     // a new translation landed: let the row light up once
     setFlash(true);
-    const t = setTimeout(() => setFlash(false), 900);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setFlash(false), 900);
+    return () => clearTimeout(timer);
   }, [line.text]);
   useEffect(() => {
     const a = area.current;
@@ -72,7 +72,7 @@ function LineRow({ p, line, idx, selected, onSelect, onPlay, chars }) {
   }, [text]);
   const save = useMemo(() => debounce((v) => api.patch(P(p.id, `/lines/${line.id}`), { text: v }).catch(toastError), 600), [line.id]);
   const c = chars[line.char];
-  const recorded = line.take && (line.takes || []).some((t) => t.id === line.take);
+  const recorded = line.take && (line.takes || []).some((x) => x.id === line.take);
   const setChar = (cid) => {
     patchLocal((pp) => (pp.lines.find((l) => l.id === line.id).char = cid));
     api.patch(P(p.id, `/lines/${line.id}`), { char: cid }).catch(toastError);
@@ -141,7 +141,7 @@ function CastRow({ p, c, count, i }) {
   </div>`;
 }
 
-const ENGINE_KIND = (sys, id) => ((sys.translators || []).find((t) => t.id === id) || {}).kind;
+const ENGINE_KIND = (sys, id) => ((sys.translators || []).find((x) => x.id === id) || {}).kind;
 
 function TranslatePanel({ p, onClose }) {
   const s = useStore();
@@ -151,7 +151,7 @@ function TranslatePanel({ p, onClose }) {
   const [style, setStyle] = useState(p.settings.style || 'natural');
   const [onlyEmpty, setOnlyEmpty] = useState(false);
   const job = jobOf('translate');
-  const tr = translators.find((t) => t.id === engineName) || {};
+  const tr = translators.find((x) => x.id === engineName) || {};
   const go_ = () => api.post(P(p.id, '/translate'), { engine: engineName, style, onlyEmpty }).catch(toastError);
   const runningJob = job && (job.status === 'running' || job.status === 'queued');
   const options = translators.map((x) => [x.id, x.name + (x.configured ? '' : ' ' + t('(ayarlanmadı)'))]);
@@ -224,8 +224,8 @@ export function ScriptView({ p }) {
     api.patch(P(p.id, `/lines/${lid}`), body).catch(toastError);
   };
   const addLine = async () => {
-    const t = Math.max(0, player.time);
-    const l = await api.post(P(p.id, '/lines'), { start: t, end: Math.min(dur, t + 2), char: selLine ? selLine.char : undefined }).catch(toastError);
+    const at = Math.max(0, player.time);
+    const l = await api.post(P(p.id, '/lines'), { start: at, end: Math.min(dur, at + 2), char: selLine ? selLine.char : undefined }).catch(toastError);
     if (l) setSel(l.id);
   };
   const split = () => selLine && api.post(P(p.id, `/lines/${selLine.id}/split`), { at: player.time }).catch(toastError);
@@ -304,9 +304,9 @@ export function ScriptView({ p }) {
             )}</div>`}
       </section>
       ${zoom != null && html`<${Timeline} duration=${dur} tracks=${[track]} zoom=${zoom} onZoom=${setZoom} selectedId=${sel}
-        onSeek=${(t) => player.seek(t)} onSelect=${(c) => select(p.lines.find((l) => l.id === c.id))}
+        onSeek=${(at) => player.seek(at)} onSelect=${(c) => select(p.lines.find((l) => l.id === c.id))}
         onMove=${(c, dt) => { const l = p.lines.find((x) => x.id === c.id); const d = Math.max(-l.start, Math.min(dur - l.end, dt)); patchLine(c.id, { start: +(l.start + d).toFixed(3), end: +(l.end + d).toFixed(3) }); }}
-        onResize=${(c, edge, t) => patchLine(c.id, { [edge]: +t.toFixed(3) })} />`}
+        onResize=${(c, edge, at) => patchLine(c.id, { [edge]: +at.toFixed(3) })} />`}
     </div>
     ${modal === 'translate' && html`<${TranslatePanel} p=${p} onClose=${() => setModal(null)} />`}
     ${modal === 'share' && html`<${ShareScript} p=${p} onClose=${() => setModal(null)} />`}

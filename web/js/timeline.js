@@ -28,16 +28,16 @@ function Ruler({ zoom, duration, scrollLeft, viewW, height, onDown }) {
     const t0 = scrollLeft / zoom;
     const t1 = (scrollLeft + viewW) / zoom;
     g.fillStyle = 'rgba(242,240,234,0.2)';
-    for (let t = Math.floor(t0 / minor) * minor; t <= Math.min(t1, duration); t += minor) {
-      const x = Math.round(t * zoom - scrollLeft) + 0.5;
+    for (let at = Math.floor(t0 / minor) * minor; at <= Math.min(t1, duration); at += minor) {
+      const x = Math.round(at * zoom - scrollLeft) + 0.5;
       g.fillRect(x, height - 4, 1, 4);
     }
     g.fillStyle = 'rgba(242,240,234,0.62)';
     g.font = '10px "IBM Plex Mono", "Cascadia Mono", ui-monospace, Consolas, monospace';
-    for (let t = Math.floor(t0 / step) * step; t <= Math.min(t1, duration); t += step) {
-      const x = Math.round(t * zoom - scrollLeft) + 0.5;
+    for (let at = Math.floor(t0 / step) * step; at <= Math.min(t1, duration); at += step) {
+      const x = Math.round(at * zoom - scrollLeft) + 0.5;
       g.fillRect(x, height - 10, 1, 10);
-      g.fillText(fmtTime(t, step < 1 ? 1 : 0), x + 3, 11);
+      g.fillText(fmtTime(at, step < 1 ? 1 : 0), x + 3, 11);
     }
   }, [zoom, duration, scrollLeft, viewW, height]);
   return html`<div class="tl-ruler" style=${{ height: height + 'px' }} onPointerDown=${onDown}>
@@ -221,11 +221,11 @@ export function Timeline({ duration, tracks, zoom, onZoom, onSeek, selectedId, o
 
   useEffect(() => {
     const upd = () => {
-      const t = Math.max(0, player.time);
-      if (playhead.current) playhead.current.style.transform = `translateX(${t * zoom}px)`;
+      const now = Math.max(0, player.time);
+      if (playhead.current) playhead.current.style.transform = `translateX(${now * zoom}px)`;
       const sc = scroller.current;
       if (player.playing && sc) {
-        const x = t * zoom;
+        const x = now * zoom;
         if (x > sc.scrollLeft + sc.clientWidth - 30 || x < sc.scrollLeft) sc.scrollLeft = Math.max(0, x - 80);
       }
     };
@@ -246,10 +246,10 @@ export function Timeline({ duration, tracks, zoom, onZoom, onSeek, selectedId, o
 
   // magnetic edges: the playhead and every other clip's start and end pull a dragged edge within a few pixels
   const edges = [];
-  for (const t of tracks) for (const c of t.clips || []) edges.push([c.id, c.start], [c.id, c.end]);
-  const snap = (t, id) => {
+  for (const tr of tracks) for (const c of tr.clips || []) edges.push([c.id, c.start], [c.id, c.end]);
+  const snap = (at, id) => {
     const line = snapLine.current;
-    if (t == null) {
+    if (at == null) {
       if (line) line.hidden = true;
       return null;
     }
@@ -257,7 +257,7 @@ export function Timeline({ duration, tracks, zoom, onZoom, onSeek, selectedId, o
     let bestD = SNAP_PX / zoom;
     for (const [cid, x] of [...edges, ['playhead', Math.max(0, player.time)], ['0', 0]]) {
       if (cid === id) continue;
-      const d = Math.abs(x - t);
+      const d = Math.abs(x - at);
       if (d < bestD) {
         bestD = d;
         best = x;
@@ -290,15 +290,15 @@ export function Timeline({ duration, tracks, zoom, onZoom, onSeek, selectedId, o
           <button class="iconbtn" title=${t('Tümünü sığdır')} onClick=${() => onZoom(minZoom())}><${Icon} name="fit" size=${15} /></button>
           <button class="iconbtn" title=${t('Yakınlaş (Ctrl + tekerlek)')} onClick=${() => onZoom(clamp(zoom * 1.4, minZoom(), 600))}><${Icon} name="zoomin" size=${15} /></button>`}
       </div>
-      ${tracks.map((t) => html`<div key=${t.id} class=${cls('tl-head', t.muted && 'muted')} style=${{ height: t.height + 'px', '--c': t.color || 'transparent' }}>
-        <div class="tl-head-title">${t.label}</div>${t.controls}
+      ${tracks.map((tr) => html`<div key=${tr.id} class=${cls('tl-head', tr.muted && 'muted')} style=${{ height: tr.height + 'px', '--c': tr.color || 'transparent' }}>
+        <div class="tl-head-title">${tr.label}</div>${tr.controls}
       </div>`)}
     </div>
     <div class="tl-scroll" ref=${scroller} onScroll=${onScroll}>
       <div class="tl-inner" ref=${inner} style=${{ width: width + 'px' }}>
         <${Ruler} zoom=${zoom} duration=${duration} scrollLeft=${scrollLeft} viewW=${viewW} height=${rulerH} onDown=${seekAt} />
         ${tracks.map(
-          (t) => html`<${Lane} key=${t.id} track=${t} zoom=${zoom} scrollLeft=${scrollLeft} viewW=${viewW} selectedId=${selectedId} duration=${duration}
+          (tr) => html`<${Lane} key=${tr.id} track=${tr} zoom=${zoom} scrollLeft=${scrollLeft} viewW=${viewW} selectedId=${selectedId} duration=${duration}
             onSelect=${onSelect} onMove=${onMove} onResize=${onResize} onTrim=${onTrim} onSeek=${seekAt} snap=${snap} />`
         )}
         <div class="tl-end" style=${{ left: duration * zoom + 'px' }}></div>

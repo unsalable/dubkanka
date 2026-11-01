@@ -120,9 +120,9 @@ export const go = (path) => (location.hash = '#/' + path);
 
 let toastId = 0;
 export function dismissToast(id) {
-  if (!store.toasts.some((t) => t.id === id && !t.leaving)) return;
-  setState((s) => ({ toasts: s.toasts.map((t) => (t.id === id ? { ...t, leaving: true } : t)) }));
-  setTimeout(() => setState((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })), 200);
+  if (!store.toasts.some((n) => n.id === id && !n.leaving)) return;
+  setState((s) => ({ toasts: s.toasts.map((n) => (n.id === id ? { ...n, leaving: true } : n)) }));
+  setTimeout(() => setState((s) => ({ toasts: s.toasts.filter((n) => n.id !== id) })), 200);
 }
 export function toast(text, type = 'info', ms = 4200, action = null) {
   const id = ++toastId;

@@ -99,6 +99,25 @@ for f in files:
                 report('WEB TEXT   ', f'{rel}:{i}', txt[:90])
 web_count = (len(keys), len(EN))
 
+# `t` is the translation function: a local `t` (a time, a take) hides it, and t('…') then throws at run time. In 1.4.0
+# `const t = player.time` did exactly that in the booth's clock loop and froze every recording.
+SHADOW = [
+    re.compile(r'\b(?:const|let|var)\s+t\s*[=;,]'),
+    re.compile(r'\bfor\s*\(\s*(?:const|let|var)\s+t\b'),
+    re.compile(r'(?<![\w.$])t\s*=>'),
+    re.compile(r'\((?:[^()]*,\s*)?t\s*(?:=[^,()]*)?(?:,[^()]*)?\)\s*=>'),
+    re.compile(r'\bfunction\b[^(]*\((?:[^()]*,\s*)?t\s*(?:=[^,()]*)?(?:,[^()]*)?\)'),
+    re.compile(r'^\s*(?:static\s+)?(?:async\s+)?(?!(?:if|for|while|switch|catch|function|return)\b)[\w$]+\s*'
+               r'\((?:[^()]*,\s*)?t\s*(?:=[^,()]*)?(?:,[^()]*)?\)\s*\{'),  # a method: seek(t) {
+    re.compile(r'\bcatch\s*\(\s*t\s*\)'),
+    re.compile(r'\b(?:const|let|var)\s*\{[^}]*(?<![\w.$])t\s*[,}]'),
+]
+for f in files:
+    for i, line in enumerate(f.read_text(encoding='utf-8').split('\n'), 1):
+        code = re.sub(r"""(['"`])(?:\\.|(?!\1).)*?\1""", '""', line.split(' // ')[0])
+        if not line.lstrip().startswith(('/*', '*', '//')) and any(r.search(code) for r in SHADOW):
+            report('WEB SHADOW ', f'{f.relative_to(WEB).as_posix()}:{i}', line.strip()[:90])
+
 # ---------------------------------------------------------------- server
 PY_TABLES = {  # name: how to find its texts
     'FEATURES': ('keys', ('name', 'summary')), 'PRESETS': ('keys', ('label', 'summary')), 'PROVIDERS': ('keys', ('name', 'note')),
@@ -111,6 +130,10 @@ for f in sorted((ROOT / 'dubkanka').glob('*.py')):
     if f.name in ('lang_en.py', 'i18n.py'):
         continue
     for node in ast.walk(ast.parse(f.read_text(encoding='utf-8'))):
+        # `tx` is the translation function: nothing may take its name
+        if (isinstance(node, ast.Name) and node.id == 'tx' and isinstance(node.ctx, ast.Store)) or \
+                (isinstance(node, ast.arg) and node.arg == 'tx'):
+            report('PY SHADOW  ', f'{f.name}:{node.lineno}')
         if isinstance(node, ast.Call) and node.args:
             fn = node.func
             name = fn.id if isinstance(fn, ast.Name) else fn.attr if isinstance(fn, ast.Attribute) else None

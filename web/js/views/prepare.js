@@ -12,7 +12,7 @@ function TimeInput({ value, onChange, label }) {
   const [txt, setTxt] = useState(fmtTime(value, 1));
   useEffect(() => setTxt(fmtTime(value, 1)), [value]);
   return html`<input class="input timeinput" value=${txt} aria-label=${label} onInput=${(e) => setTxt(e.target.value)}
-    onBlur=${() => { const t = parseTime(txt); if (t != null) onChange(t); else setTxt(fmtTime(value, 1)); }}
+    onBlur=${() => { const secs = parseTime(txt); if (secs != null) onChange(secs); else setTxt(fmtTime(value, 1)); }}
     onKeyDown=${(e) => e.key === 'Enter' && e.target.blur()} />`;
 }
 
@@ -29,13 +29,13 @@ function RangeBar({ duration, range, setRange, current, onSeek }) {
       el.setPointerCapture(e.pointerId);
     } catch {}
     const move = (ev) => {
-      const t = toT(ev.clientX);
-      setRange((r) => (which === 0 ? [Math.min(t, r[1] - 1), r[1]] : [r[0], Math.max(t, r[0] + 1)]));
+      const at = toT(ev.clientX);
+      setRange((r) => (which === 0 ? [Math.min(at, r[1] - 1), r[1]] : [r[0], Math.max(at, r[0] + 1)]));
     };
     el.addEventListener('pointermove', move);
     el.addEventListener('pointerup', () => el.removeEventListener('pointermove', move), { once: true });
   };
-  const pct = (t) => (t / duration) * 100 + '%';
+  const pct = (at) => (at / duration) * 100 + '%';
   return html`<div class="rangebar" ref=${ref} onPointerDown=${(e) => onSeek(toT(e.clientX))}>
     <div class="rangebar-sel" style=${{ left: pct(range[0]), width: (100 * (range[1] - range[0])) / duration + '%' }}></div>
     <div class="rangebar-cur" style=${{ left: pct(current) }}></div>
@@ -100,9 +100,9 @@ export function PrepareView({ p }) {
 
   const src = fileUrl(p.id, p.source.proxy || p.source.file);
   const set = (k) => (v) => setOpts((o) => ({ ...o, [k]: v }));
-  const seek = (t) => {
-    if (video.current) video.current.currentTime = t;
-    setCur(t);
+  const seek = (at) => {
+    if (video.current) video.current.currentTime = at;
+    setCur(at);
   };
   const playSel = () => {
     const v = video.current;
@@ -122,7 +122,7 @@ export function PrepareView({ p }) {
   };
   const langs = sys.languages || [];
   const translators = sys.translators || [];
-  const tr = translators.find((t) => t.id === opts.translator) || {};
+  const tr = translators.find((x) => x.id === opts.translator) || {};
   const long = range[1] - range[0] > 300;
 
   return html`<div class="page prepare">

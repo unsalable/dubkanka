@@ -12,7 +12,8 @@ import { clamp, cls, db2gain, drawWave, encodeWav, LS, revealInList, selectedTak
 
 // bed: level of the background (music, effects, ambience) under everything the booth plays; guide: the original
 // dialogue in your ears while you record. Both 0..1, set from the listening strip under the controls.
-const DEFAULTS = { preroll: 2, beeps: true, streamer: true, bed: 1, guide: 0, autoStop: true, tail: 1.0, autoReview: true, align: 'auto' };
+// countdown: the big 3, 2, 1 on the picture, counted with the beeps
+const DEFAULTS = { preroll: 2, countdown: true, beeps: true, streamer: true, bed: 1, guide: 0, autoStop: true, tail: 1.0, autoReview: true, align: 'auto' };
 const STATUS = { processing: ['busy', 'işleniyor'], error: ['bad', 'hata'] };
 const RING = 2 * Math.PI * 60;
 
@@ -50,7 +51,7 @@ function RhythmLane({ line, buffer, t0, t1, color }) {
     ro.observe(b);
     return () => ro.disconnect();
   }, [buffer, t0, t1]);
-  const pct = (t) => ((t - t0) / (t1 - t0)) * 100 + '%';
+  const pct = (at) => ((at - t0) / (t1 - t0)) * 100 + '%';
   const words = line.words && line.words.length ? line.words : null;
   return html`<div class="rhythm" ref=${box} style=${{ '--c': color }}>
     <canvas ref=${cv}></canvas>
@@ -217,11 +218,12 @@ function BoothSettings({ settings, set, guest, name, setName, onTestRec, testing
     <${Toggle} checked=${pr.hpf} onChange=${(v) => change('hpf', v, false)} label=${t('Alçak kesme 80 Hz')} />
 
     <div class="seclabel">${t('rec|Kayıt')}</div>
-    <${Field} label=${t('Geri sayım')}>
+    <${Field} label=${t('Satırdan önce')}>
       <${Select} value=${String(settings.preroll)} onChange=${(v) => set('preroll', Number(v))} options=${[1, 2, 3, 4].map((n) => [String(n), t('{n} sn', { n })])} />
     </${Field}>
-    <${Toggle} checked=${settings.streamer} onChange=${(v) => set('streamer', v)} label=${t('Akış çizgisi')} />
+    <${Toggle} checked=${settings.countdown} onChange=${(v) => set('countdown', v)} label=${t('Ekranda 3, 2, 1 say')} />
     <${Toggle} checked=${settings.beeps} onChange=${(v) => set('beeps', v)} label=${t('3 bip')} />
+    <${Toggle} checked=${settings.streamer} onChange=${(v) => set('streamer', v)} label=${t('Akış çizgisi')} />
     <${Toggle} checked=${settings.autoStop} onChange=${(v) => set('autoStop', v)} label=${t('Satır bitince kaydı durdur')} />
     <${Toggle} checked=${settings.autoReview} onChange=${(v) => set('autoReview', v)} label=${t('Kayıttan sonra dinlet')} />
     <${Toggle} checked=${settings.align === 'auto'} onChange=${(v) => set('align', v ? 'auto' : 'recorded')} label=${t('Konuşmayı orijinal girişe hizala')} />
@@ -332,6 +334,7 @@ export function BoothView({ p, guest = false }) {
   const [testing, setTesting] = useState(false);
   const recInfo = useRef(null);
   const pending = useRef(null);
+  const starting = useRef(false); // a take is opening the microphone: a second press waits for it
   const stage = useRef(null);
   const fileIn = useRef(null);
   const bulkIn = useRef(null);
@@ -387,8 +390,8 @@ export function BoothView({ p, guest = false }) {
       ? api.post('/api/guest/heartbeat', { view: 'record', line: globalIdx + 1, char: myChar })
       : api.post('/api/room/presence', { projectId: p.id, name: name || t('Ben'), char: myChar, line: globalIdx + 1, view: 'record' })).catch(() => {});
     beat();
-    const t = setInterval(beat, 10000);
-    return () => clearInterval(t);
+    const timer = setInterval(beat, 10000);
+    return () => clearInterval(timer);
   }, [roomOpen, line && line.id, myChar, name]);
 
   // what plays under a line: background + ambience (birds, wind...), their muted stretches silent; guests' lite
@@ -461,35 +464,56 @@ export function BoothView({ p, guest = false }) {
     else playScene(fromLine());
   };
 
+  /** Start a take, or stop the one that is running. A take starts only on a running audio clock with an open
+   *  microphone, and every way out (stop, Esc, the end of the line, a stuck clock) leaves the booth ready again. */
   const record = async () => {
     if (!line || !bufs) return;
-    if (phase === 'rec') return finish(false);
-    if (phase === 'upload' || testing) return;
+    if (phase === 'rec' || recInfo.current) return finish(false);
+    if (phase === 'upload' || testing || starting.current) return;
+    starting.current = true;
+    engine.ensure(); // still inside the click: browsers start the audio clock only on a gesture
     player.stop();
     try {
       await recorder.open();
+      await engine.running();
+      recorder.start();
     } catch (e) {
       toastError(e);
       return;
+    } finally {
+      starting.current = false;
     }
     const from = line.start - settings.preroll;
     const to = settings.autoStop ? Math.min(dur + 1, line.end + settings.tail) : dur + 0.5;
     // both are always there, at their slider's level: moving a slider mid-take is heard right away
     const items = [...bed('bg'), { buffer: bufs.voices, at: 0, bus: 'guide' }];
     const beeps = settings.beeps ? [line.start - 1.5, line.start - 1.0, line.start - 0.5] : [];
-    recorder.start();
-    recInfo.current = { lineId: line.id, from };
+    recInfo.current = { lineId: line.id, from, lineStart: line.start };
     setPhase('rec');
-    player.play({ from, to, items, beeps, buses: { bg: settings.bed, guide: settings.guide }, onEnd: () => finish(false) });
+    player.play({ from, to, items, beeps, buses: { bg: settings.bed, guide: settings.guide },
+      onEnd: (ended, why) => (why === 'stall' ? stalled() : finish(false)) });
     recInfo.current.t0 = player.t0;
   };
 
   const finish = async (cancel) => {
     const info = recInfo.current;
-    if (!info) return;
+    const at = player.time;
     recInfo.current = null;
+    player.onEnd = null; // this is the end already: stopping the player must not call it again
     player.stop();
-    const rec = await recorder.stop();
+    // stopped during the count, before the line began: nothing of the line was said, so nothing is kept
+    if (info && at < info.lineStart) cancel = true;
+    if (!info) {
+      // nothing is being recorded (a state that went wrong): the booth is free again
+      if (phase === 'rec') setPhase('idle');
+      return;
+    }
+    let rec = null;
+    try {
+      rec = await recorder.stop();
+    } catch (e) {
+      console.error(e);
+    }
     if (cancel || !rec || rec.samples.length < rec.sampleRate * 0.3) {
       setPhase('idle');
       return;
@@ -500,7 +524,7 @@ export function BoothView({ p, guest = false }) {
     try {
       const q = `?recStart=${recStart.toFixed(4)}&source=booth&align=${settings.align}&by=${encodeURIComponent(name || t('Ben'))}` +
         `&hpf=${pr.hpf ? 1 : 0}&denoise=${recorder.noiseEngine(pr) === 'dpdfnet' ? 1 : 0}`;
-      const r = await upload(P(p.id, `/lines/${info.lineId}/takes${q}`), encodeWav(rec.samples, rec.sampleRate));
+      const r = await upload(P(p.id, `/lines/${info.lineId}/takes${q}`), encodeWav(rec.samples, rec.sampleRate), null, 60000);
       pending.current = { takeId: r.takeId, lineId: info.lineId };
       setPhase('process');
     } catch (e) {
@@ -508,6 +532,23 @@ export function BoothView({ p, guest = false }) {
       setPhase('idle');
     }
   };
+
+  // the audio clock stopped under a take (a headset that switched profiles, a sound device that went away): the
+  // take is dropped and the booth says so, instead of hanging with a playhead that never moves
+  const stalled = async () => {
+    await finish(true);
+    toast(t('Ses takıldı, kayıt durduruldu. Tekrar dene.'), 'error', 7000);
+  };
+
+  // a take whose upload or processing never answers (a lost connection) does not keep the record button locked
+  useEffect(() => {
+    if (phase !== 'upload' && phase !== 'process') return;
+    const timer = setTimeout(() => {
+      pending.current = null;
+      setPhase('idle');
+    }, 90000);
+    return () => clearTimeout(timer);
+  }, [phase]);
 
   // five seconds of raw microphone, played straight back: how will I sound?
   const testRec = async () => {
@@ -601,7 +642,7 @@ export function BoothView({ p, guest = false }) {
     const q = (sel) => root.querySelector(sel);
     const cd = q('.countdown');
     const num = cd && q('.cd-num');
-    const ring = q('.cd-ring circle');
+    const ring = q('.cd-fill');
     const cue = q('.cue-go');
     const streamer = q('.streamer');
     const head = q('.rh-head');
@@ -609,16 +650,18 @@ export function BoothView({ p, guest = false }) {
     const rws = [...root.querySelectorAll('.rw')];
     const cws = [...root.querySelectorAll('.cw')];
     let shown = '';
+    const ready = t('Hazır');
     const upd = () => {
-      const t = player.time;
+      const now = player.time;
       const playing = player.playing;
       const rec = phase === 'rec' && playing;
-      const left = line.start - t;
+      const left = line.start - now;
       if (cd) {
+        // 3, 2, 1 with the three beeps (half a second apart), "Hazır" before them; the ring runs out with the lead-in
         let txt = '';
-        if (rec && left > 0) {
+        if (rec && left > 0 && settings.countdown) {
           const n = Math.ceil(left / 0.5 - 1e-6);
-          txt = n <= 3 ? String(n) : t('Hazır');
+          txt = n <= 3 ? String(n) : ready;
           ring.style.strokeDashoffset = RING * (1 - clamp(left / Math.max(0.5, settings.preroll), 0, 1));
         }
         cd.classList.toggle('show', !!txt);
@@ -630,7 +673,7 @@ export function BoothView({ p, guest = false }) {
             num.animate([{ transform: 'scale(1.3)', opacity: 0.2 }, { transform: 'scale(1)', opacity: 1 }], { duration: 240, easing: 'cubic-bezier(0.16, 1, 0.3, 1)' });
         }
       }
-      if (cue) cue.hidden = !(rec && t >= line.start && t <= line.end);
+      if (cue) cue.hidden = !(rec && now >= line.start && now <= line.end);
       if (streamer) {
         const span = Math.max(1, settings.preroll);
         const on = rec && settings.streamer && left > 0 && left <= span;
@@ -638,19 +681,19 @@ export function BoothView({ p, guest = false }) {
         if (on) streamer.style.transform = `translateX(${(1 - left / span) * streamer.parentElement.clientWidth}px)`;
       }
       if (head && rhythm) {
-        const x = (t - lane.t0) / (lane.t1 - lane.t0);
-        head.style.opacity = x >= 0 && x <= 1 && (playing || t > lane.t0) ? '1' : '0';
+        const x = (now - lane.t0) / (lane.t1 - lane.t0);
+        head.style.opacity = x >= 0 && x <= 1 && (playing || now > lane.t0) ? '1' : '0';
         head.style.transform = `translateX(${clamp(x, 0, 1) * rhythm.clientWidth}px)`;
       }
-      for (const w of rws) w.classList.toggle('on', playing && t >= +w.dataset.s && t <= +w.dataset.e + 0.04);
+      for (const w of rws) w.classList.toggle('on', playing && now >= +w.dataset.s && now <= +w.dataset.e + 0.04);
       for (const w of cws) {
-        w.classList.toggle('on', playing && t >= +w.dataset.s && t < +w.dataset.e);
-        w.classList.toggle('past', playing && t >= +w.dataset.e);
+        w.classList.toggle('on', playing && now >= +w.dataset.s && now < +w.dataset.e);
+        w.classList.toggle('past', playing && now >= +w.dataset.e);
       }
     };
     upd();
     return player.on(upd);
-  }, [line && line.id, line && line.start, line && line.end, line && line.text, phase, settings.preroll, settings.streamer, bufs]);
+  }, [line && line.id, line && line.start, line && line.end, line && line.text, phase, settings.preroll, settings.streamer, settings.countdown, bufs]);
 
   const uploadFile = async (file, l = line) => {
     if (!file || !l) return;
@@ -675,8 +718,8 @@ export function BoothView({ p, guest = false }) {
         <${VideoPane} src=${fileUrl(p.id, p.clip.preview, p.clip.ver)} poster=${fileUrl(p.id, p.clip.thumb, p.clip.ver)} class="booth-video"
           onClick=${clickVideo} title=${playing ? t('Durdur') : t('Bu satırdan oynat')}>
           <i class="streamer"></i>
-          <div class="countdown"><div class="cd-num"><svg class="cd-ring" viewBox="0 0 132 132"><circle cx="66" cy="66" r="60"
-            style=${{ strokeDasharray: RING, strokeDashoffset: 0 }} /></svg><span class="cd-txt"></span></div></div>
+          <div class="countdown"><div class="cd-num"><svg class="cd-ring" viewBox="0 0 132 132"><circle class="cd-track" cx="66" cy="66" r="60" />
+            <circle class="cd-fill" cx="66" cy="66" r="60" style=${{ strokeDasharray: RING, strokeDashoffset: 0 }} /></svg><span class="cd-txt"></span></div></div>
           <div class="cue-go" hidden>${t('Konuş')}</div>
           <span class=${cls('tally booth-tally', recording && 'on')}>Rec</span>
         </${VideoPane}>
@@ -718,7 +761,7 @@ export function BoothView({ p, guest = false }) {
             onChange=${(e) => { uploadFile(e.target.files[0]); e.target.value = ''; }} />
           <${Btn} small kind="ghost" icon="upload" onClick=${() => fileIn.current.click()} title=${t('WhatsApp sesli mesajı ya da ses dosyası')}>${t('Dosyadan')}</${Btn}>
         </div>
-        <div class="pane-scroll"><${TakeList} p=${p} line=${line} me=${name} guest=${guest} onPlay=${(t) => (phase === 'review' ? stopAll() : review(line, t))} /></div>
+        <div class="pane-scroll"><${TakeList} p=${p} line=${line} me=${name} guest=${guest} onPlay=${(tk) => (phase === 'review' ? stopAll() : review(line, tk))} /></div>
       </section>`}
     </div>
     <aside class="booth-side pane">
